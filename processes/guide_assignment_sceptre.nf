@@ -4,7 +4,7 @@ process guide_assignment_sceptre {
     path mudata_input
 
     output:
-    path "guide_assignment.csv", emit: guide_assignment_matrix
+    path "guide_assignment.mtx", emit: guide_assignment_matrix
 
     script:
     """

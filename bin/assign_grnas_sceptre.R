@@ -1,4 +1,5 @@
 #!/usr/bin/env Rscript
+library(Matrix)
 
 assign_grnas_sceptre_v1 <- function(mudata) {
   # convert MuData object to sceptre object, removing multicollinear covariates
@@ -119,8 +120,11 @@ mudata_input <- args[1]
 
 mudata_in <- MuData::readH5MU(mudata_input)
 results <- assign_grnas_sceptre_v1(mudata = mudata_in)
-
 guide_assignment <- results$guide_assignment
-dense_matrix <- as.matrix(guide_assignment)
-guide_assignment_df <- as.data.frame(dense_matrix)
-write.csv(guide_assignment_df, "guide_assignment.csv", row.names = FALSE)
+
+print("Is guide_assignment NULL?")
+print(is.null(guide_assignment))
+
+print("Writing to Matrix Market format...")
+writeMM(guide_assignment, "guide_assignment.mtx")
+print("File written successfully")

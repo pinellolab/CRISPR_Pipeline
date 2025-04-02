@@ -11,7 +11,7 @@ process guide_assignment_mudata {
 
     script:
         """
-          add_guide_assignment.py --guide_assignment_csv ${guide_assignment_matrix} --mudata ${mudata} 
+          add_guide_assignment.py --guide_assignment ${guide_assignment_matrix} --mudata ${mudata} 
         """
 
 }
