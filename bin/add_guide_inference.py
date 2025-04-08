@@ -8,6 +8,12 @@ def add_guide_inference(test_results_csv, mudata_path):
     test_results = pd.read_csv(test_results_csv)
     mudata = mu.read_h5mu(mudata_path)
 
+    # RENAME 
+    test_results.rename(columns={
+        'log2_fc': 'sceptre_log2_fc',
+        'p_value': 'sceptre_p_value'
+    }, inplace=True)
+    
     # Update MuData with test results
     mudata.uns["test_results"] = test_results.to_dict(orient='list')
     mudata.write("inference_mudata.h5mu")

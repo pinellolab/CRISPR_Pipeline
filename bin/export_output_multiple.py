@@ -15,16 +15,13 @@ def merge_results(sceptre_result, perturbo_mudata):
     print("Loading and merging results...")
     
     # Load and rename SCEPTRE results
-    test_result = pd.read_csv(sceptre_result).rename(
-        columns={'log2_fc': 'sceptre_log2_fc', 'p_value': 'sceptre_p_value'}
-    )
+    test_result = pd.read_csv(sceptre_result)
+    test_result.rename(columns={'log2_fc': 'sceptre_log2_fc', 'p_value': 'sceptre_p_value'}, inplace=True)
 
     # Load and rename Perturbo results
     mudata = mu.read_h5mu(perturbo_mudata)
-    perturbo_result = pd.DataFrame(mudata.uns['test_results']).rename(
-        columns={'log2_fc': 'perturbo_log2_fc', 'p_value': 'perturbo_p_value'}
-    )
-
+    perturbo_result = pd.DataFrame(mudata.uns['test_results'])
+    
     # Merge results efficiently (only include necessary columns from perturbo_result)
     merged_result = pd.merge(
         test_result,

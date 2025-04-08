@@ -1,11 +1,13 @@
-
 process guide_assignment_cleanser {
-
+    cache 'lenient'
+    debug true
+    
     input:
-        path mudata_input
+        each mudata_input
         val threshold
+        
     output:
-        path "cleanser_mudata_output.h5mu", emit: guide_assignment_mudata_output
+        path "${mudata_input.simpleName}_output.h5mu", emit: guide_assignment_mudata_output
 
     script:
         def thresh_opt = threshold ? "-t ${threshold}" : ""
@@ -13,6 +15,6 @@ process guide_assignment_cleanser {
         export CMDSTAN=/root/.cmdstan/cmdstan-2.36.0
         export PATH=\$PATH:\$CMDSTAN/bin
         
-        cleanser -i ${mudata_input} --posteriors-output cleanser_mudata_output.h5mu --modality guide --capture-method capture_method --output-layer guide_assignment ${thresh_opt}
+        cleanser -i ${mudata_input} --posteriors-output ${mudata_input.simpleName}_output.h5mu --modality guide --capture-method capture_method --output-layer guide_assignment ${thresh_opt}
         """
 }

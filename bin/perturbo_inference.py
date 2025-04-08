@@ -102,6 +102,8 @@ def run_perturbo(mdata_input_fp, mdata_output_fp):
             "pair_type"
         ]
             ]
+
+    mdata.uns['test_results'].rename(columns={'log2_fc': 'perturbo_log2_fc', 'p_value': 'perturbo_p_value'}, inplace=True)
     
     mdata.write(mdata_output_fp)
     return mdata

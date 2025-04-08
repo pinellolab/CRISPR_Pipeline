@@ -6,9 +6,10 @@ include { CreateMuData_HASHING } from '../processes/CreateMuData_HASHING.nf'
 include { demultiplex } from '../processes/demultiplex.nf'
 include { filter_hashing } from '../processes/filter_hashing.nf'
 include { hashing_concat } from '../processes/hashing_concat.nf'
+include { prepare_assignment } from '../processes/prepare_assignment.nf'
+include { mudata_concat } from '../processes/mudata_concat.nf'
 include { guide_assignment_cleanser } from '../processes/guide_assignment_cleanser.nf'
 include { guide_assignment_sceptre } from '../processes/guide_assignment_sceptre.nf'
-include { guide_assignment_mudata } from '../processes/guide_assignment_mudata.nf'
 include { skipGTFDownload } from '../processes/skipGTFDownload.nf'
 include { downloadGTF } from '../processes/downloadGTF.nf'
 include { prepare_guide_inference } from '../processes/prepare_guide_inference.nf'
@@ -76,29 +77,35 @@ workflow process_mudata_pipeline_HASHING {
         params.capture_method
         )
         
+    Prepare_assignment = prepare_assignment{MuData.mudata}
+    prepare_assignment_collected = Prepare_assignment.prepare_assignment_mudata.collect()
+
     if (params.assignment_method == "cleanser") {
-    Guide_Assignment = guide_assignment_cleanser(MuData.mudata, params.THRESHOLD)}
+        Guide_Assignment = guide_assignment_cleanser(prepare_assignment_collected, params.THRESHOLD)
+        guide_assignment_collected =  Guide_Assignment.guide_assignment_mudata_output.collect()
+        Mudata_concat = mudata_concat(guide_assignment_collected)
+        }
+
     else if (params.assignment_method == "sceptre") {
-    Guide_Assignment_Matrix = guide_assignment_sceptre(MuData.mudata)
-    Guide_Assignment = guide_assignment_mudata(
-        Guide_Assignment_Matrix.guide_assignment_matrix, 
-        MuData.mudata)
-    }
+        Guide_Assignment = guide_assignment_sceptre(prepare_assignment_collected)
+        guide_assignment_collected =  Guide_Assignment.guide_assignment_mudata_output.collect()
+        Mudata_concat = mudata_concat(guide_assignment_collected)
+        }
 
     if (params.inference_option == 'predefined_pairs') {
         PrepareInference = prepare_user_guide_inference(
-            Guide_Assignment.guide_assignment_mudata_output,
+            Mudata_concat.concat_mudata, 
             file(params.user_inference)
         )}
     else if (params.inference_option == 'by_distance') {
         PrepareInference = prepare_guide_inference(
-            Guide_Assignment.guide_assignment_mudata_output,
+            Mudata_concat.concat_mudata,
             GTF_Reference.gencode_gtf,
             params.distance_from_center
         )}
     else if (params.inference_option == 'all_by_all') {
         PrepareInference = prepare_all_guide_inference(
-            Guide_Assignment.guide_assignment_mudata_output,
+            Mudata_concat.concat_mudata,
             GTF_Reference.gencode_gtf
         )}
 
