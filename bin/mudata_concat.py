@@ -22,7 +22,6 @@ def concat_mudatas(input_pattern, output_file):
     
     print(f"Found {len(files)} files to concatenate")
     
-    # First, load the first file to get the reference structure
     print(f"Loading reference file: {os.path.basename(files[0])}")
     reference_mdata = md.read(files[0])
     
@@ -38,42 +37,46 @@ def concat_mudatas(input_pattern, output_file):
     # Also keep global uns data
     global_uns = copy.deepcopy(reference_mdata.uns)
     
-    # Now, load and process all files
-    mudatas = [reference_mdata]  # Start with the reference
-    
-    for i, file in enumerate(files[1:], 1):  # Skip the first one as we already loaded it
-        print(f"Loading {i+1}/{len(files)}: {os.path.basename(file)}")
-        mdata = md.read(file)
+    # Check if there's only one file - handle specially
+    if len(files) == 1:
+        print("Only one file found, skipping concatenation but still processing metadata...")
+        combined_mdata = reference_mdata
+    else:
+        mudatas = [reference_mdata] 
         
-        # Collect var DataFrames from each modality
-        for mod_name in mdata.mod:
-            if mod_name in var_dataframes:
-                # Make a copy of the var DataFrame with index as a regular column
-                mod_var = mdata[mod_name].var.copy()
-                mod_var['_var_name'] = mod_var.index
-                var_dataframes[mod_name].append(mod_var)
-                
-                # Merge any new uns data
-                if hasattr(mdata[mod_name], 'uns') and mdata[mod_name].uns:
-                    for key, value in mdata[mod_name].uns.items():
-                        if key not in uns_data[mod_name]:
-                            uns_data[mod_name][key] = value
+        for i, file in enumerate(files[1:], 1): 
+            print(f"Loading {i+1}/{len(files)}: {os.path.basename(file)}")
+            mdata = md.read(file)
+            
+            # Collect var DataFrames from each modality
+            for mod_name in mdata.mod:
+                if mod_name in var_dataframes:
+                    # Make a copy of the var DataFrame with index as a regular column
+                    mod_var = mdata[mod_name].var.copy()
+                    mod_var['_var_name'] = mod_var.index
+                    var_dataframes[mod_name].append(mod_var)
+                    
+                    # Merge any new uns data
+                    if hasattr(mdata[mod_name], 'uns') and mdata[mod_name].uns:
+                        for key, value in mdata[mod_name].uns.items():
+                            if key not in uns_data[mod_name]:
+                                uns_data[mod_name][key] = value
+            
+            # Also merge global uns data
+            if hasattr(mdata, 'uns') and mdata.uns:
+                for key, value in mdata.uns.items():
+                    if key not in global_uns:
+                        global_uns[key] = value
+            
+            mudatas.append(mdata)
         
-        # Also merge global uns data
-        if hasattr(mdata, 'uns') and mdata.uns:
-            for key, value in mdata.uns.items():
-                if key not in global_uns:
-                    global_uns[key] = value
+        # Concatenate all MuData objects
+        print("Concatenating all MuData objects...")
+        combined_mdata = md.concat(mudatas)
         
-        mudatas.append(mdata)
-    
-    # Concatenate all MuData objects
-    print("Concatenating all MuData objects...")
-    combined_mdata = md.concat(mudatas)
-    
-    # Clean up individual MuData objects to free memory
-    del mudatas
-    gc.collect()
+        # Clean up individual MuData objects to free memory
+        del mudatas
+        gc.collect()
     
     # Apply preserved global uns data
     print("Restoring global uns data...")
@@ -94,18 +97,11 @@ def concat_mudatas(input_pattern, output_file):
         if var_dataframes[mod_name]:
             # Combine var DataFrames for this modality
             all_vars = pd.concat(var_dataframes[mod_name], axis=0)
-            
-            # Remove potential duplicates (keep first occurrence)
             all_vars = all_vars.drop_duplicates(subset=['_var_name'])
             
             # Set index back to var names
             all_vars = all_vars.set_index('_var_name')
-            
-            # Make sure all needed columns are in the combined var DataFrame
             current_vars = combined_mdata[mod_name].var
-            
-            # First, ensure all indices match (this is critical)
-            # We need to ensure the vars match exactly what's in combined_mdata
             matching_vars = all_vars.index.intersection(current_vars.index)
             
             if len(matching_vars) < len(current_vars.index):
@@ -117,13 +113,10 @@ def concat_mudatas(input_pattern, output_file):
                 empty_df = pd.DataFrame(index=missing_vars)
                 empty_df.index.name = '_var_name'
                 all_vars = pd.concat([all_vars, empty_df])
-            
-            # Now, filter to exactly what's in the combined object
+        
             all_vars = all_vars.loc[current_vars.index]
             
-            # Copy all columns from the comprehensive var DataFrame
             for col in all_vars.columns:
-                # Skip the index column if it somehow got included
                 if col == '_var_name':
                     continue
                 combined_mdata[mod_name].var[col] = all_vars[col]
