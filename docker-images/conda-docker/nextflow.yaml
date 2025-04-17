@@ -1,0 +1,30 @@
+name: nfenv
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - nextflow 
+  - numpy=1.26.4   
+  - pandas=2.2.2
+  - pip
+  - kallisto=0.50.1
+  - kb-python=0.28.2  
+  - anndata=0.10.9
+  - gmm-demux
+  - scanpy
+  - matplotlib
+  - ipykernel
+  - muon
+  - mudata
+  - seaborn
+  - scrublet
+  - networkx
+  - umap-learn
+  - scikit-learn
+  - cmdstanpy
+  - gtfparse
+  - pip:
+    - openpyxl
+    - seqspec
+    - igraph
