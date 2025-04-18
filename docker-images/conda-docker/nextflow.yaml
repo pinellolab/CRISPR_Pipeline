@@ -1,15 +1,13 @@
 name: nfenv
 channels:
-  - conda-forge
   - bioconda
-  - defaults
+  - conda-forge
 dependencies:
   - nextflow 
   - numpy=1.26.4   
   - pandas=2.2.2
   - pip
   - kallisto=0.50.1
-  - kb-python=0.28.2  
   - anndata=0.10.9
   - gmm-demux
   - scanpy
@@ -25,6 +23,8 @@ dependencies:
   - cmdstanpy
   - gtfparse
   - pip:
+#    - kb-python==0.28.2  
+#    - pyseq-align
     - openpyxl
     - seqspec
     - igraph
