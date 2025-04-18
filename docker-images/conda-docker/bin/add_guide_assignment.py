@@ -9,9 +9,11 @@ def add_guide_assignment(mudata_path, guide_assignment_mtx):
     # Load MuData object
     mudata = mu.read_h5mu(mudata_path)
     
+    # Load sparse matrix with assignments
     sparse_matrix = mmread(guide_assignment_mtx).T
     sparse_matrix_csr = csr_matrix(sparse_matrix)  # Convert to CSR format
-    
+    sparse_matrix_csr.resize(mudata['guide'].shape) # Resize sparse matrix to match the mudata guide matrix 
+
     # Add to mudata
     mudata.mod['guide'].layers['guide_assignment'] = sparse_matrix_csr
     

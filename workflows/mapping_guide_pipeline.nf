@@ -16,7 +16,7 @@ workflow mapping_guide_pipeline{
         file(params.seqspecs_directory),
         'guide')
 
-    GuideRef = createGuideRef(genome, file(params.guide_metadata))
+    GuideRef = createGuideRef(file(params.guide_metadata))
 
     fastq_files_ch = Channel.fromPath(params.fastq_files_guide)
     batch_ch = Channel.fromList(params.batch)
