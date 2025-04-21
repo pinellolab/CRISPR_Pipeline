@@ -17,7 +17,7 @@ workflow mapping_hashing_pipeline{
         file(params.seqspecs_directory),
         'hashing')
 
-    HashingRef = createHashingRef(genome, file(params.hashing_metadata))
+    HashingRef = createHashingRef(file(params.hashing_metadata))
 
     fastq_files_ch = Channel.fromPath(params.fastq_files_hashing)
     batch_ch = Channel.fromList(params.batch)
