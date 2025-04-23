@@ -14,8 +14,8 @@ process createGuideRef {
     script:
 
     """
-        k_bin=\$(which kallisto)
-        bustools_bin=\$(which bustools)
+        k_bin=\$(type -p kallisto)
+        bustools_bin=\$(type -p bustools)
         guide_features_table=\$(guide_table.py --guide_table ${guide_metadata})
         kb ref -i guide_index.idx -f1 guide_mismatch.fa -g t2guide.txt --kallisto \$k_bin --bustools \$bustools_bin --workflow kite guide_features.txt
     """
