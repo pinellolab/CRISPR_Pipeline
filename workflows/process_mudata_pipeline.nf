@@ -68,7 +68,16 @@ workflow process_mudata_pipeline {
     else if (params.assignment_method == "sceptre") {
         Guide_Assignment_Mtx = guide_assignment_sceptre(prepare_assignment_collected)
         guide_assignment_mtx_collected =  Guide_Assignment_Mtx.guide_assignment_mtx_output.collect()
-        Add_Guide_Assignment = add_guide_assignment_mtx_to_mudata(prepare_assignment_collected, guide_assignment_mtx_collected)
+        
+        // Join the two channels with the mudata and MTX files
+        Add_Guide_Assignment = add_guide_assignment_mtx_to_mudata(
+            prepare_assignment_collected
+                .map { v -> [v.simpleName, v] }.transpose()
+                .join( guide_assignment_mtx_collected
+                        .map { v -> [v.simpleName, v]}
+                        .transpose())
+        )
+        
         guide_assignment_collected =  Add_Guide_Assignment.guide_assignment_mudata_output.collect()
         Mudata_concat = mudata_concat(guide_assignment_collected)
         }

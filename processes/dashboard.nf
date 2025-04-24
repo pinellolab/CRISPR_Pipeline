@@ -32,6 +32,7 @@ process createDashboard {
         echo "js directory: ${js}"
         echo "svg directory: ${svg}"
 
+        export MPLCONFIGDIR="./tmp/mplconfigdir"
         process_json.py --output_dir json_dir
         create_dashboard_plots.py --mudata ${mudata} --output_dir figures
         create_dashboard_df.py --json_dir json_dir --guide_fq_tbl ${guide_fq_tbl} --mudata ${mudata} --gene_ann ${gene_ann} --gene_ann_filtered ${gene_ann_filtered} --guide_ann ${guide_ann} 
