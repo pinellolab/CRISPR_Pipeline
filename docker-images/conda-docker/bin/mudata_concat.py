@@ -30,7 +30,8 @@ def concat_mudatas(input_files, output_file):
 
     # Save the combined result
     print(f"Saving combined MuData with {combined_mdata.n_obs} cells to {output_file}")
-    
+    combined_mdata.update()
+    combined_mdata.write(output_file)
     print("Done!")
 
 def main():
