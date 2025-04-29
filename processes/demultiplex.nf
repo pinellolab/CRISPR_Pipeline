@@ -5,7 +5,7 @@ process demultiplex{
     debug true
 
     input:
-    each adata_path
+    path adata_path
 
     output:
     path "*_hashing_filtered_demux.h5ad", emit: hashing_demux_anndata

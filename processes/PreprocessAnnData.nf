@@ -18,7 +18,6 @@ process PreprocessAnnData {
   
   script:
         """
-        export MPLCONFIGDIR="./tmp/mplconfigdir"
         preprocess_adata.py ${adata_rna} ${gname_rna} --min_genes ${min_genes} --min_cells ${min_cells} --pct_mito ${pct_mito} --reference ${reference}
         mv concatenated_adata.h5ad rna_concatenated_adata.h5ad
         """

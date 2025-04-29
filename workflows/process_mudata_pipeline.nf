@@ -7,7 +7,6 @@ include { prepare_assignment } from '../processes/prepare_assignment.nf'
 include { mudata_concat } from '../processes/mudata_concat.nf'
 include { guide_assignment_cleanser } from '../processes/guide_assignment_cleanser.nf'
 include { guide_assignment_sceptre } from '../processes/guide_assignment_sceptre.nf'
-include { add_guide_assignment_mtx_to_mudata } from '../processes/add_guide_assignment_mtx_to_mudata.nf'
 include { skipGTFDownload } from '../processes/skipGTFDownload.nf'
 include { downloadGTF } from '../processes/downloadGTF.nf'
 include { prepare_guide_inference } from '../processes/prepare_guide_inference.nf'
@@ -37,7 +36,7 @@ workflow process_mudata_pipeline {
         params.pct_mito,
         params.transcriptome
         )
-    
+
     if (file(params.gtf_local_path).exists()) {
         GTF_Reference = skipGTFDownload(file(params.gtf_local_path))
     }
@@ -47,38 +46,26 @@ workflow process_mudata_pipeline {
 
     MuData = CreateMuData(
         Preprocessed_AnnData.filtered_anndata_rna,
-        concat_anndata_guide, 
+        concat_anndata_guide,
         file(params.guide_metadata),
         GTF_Reference.gencode_gtf,
         params.moi,
         params.capture_method
         )
 
-    MuData_Doublets = doublets_scrub(MuData.mudata) 
+    MuData_Doublets = doublets_scrub(MuData.mudata)
 
     Prepare_assignment = prepare_assignment{MuData_Doublets.mudata_doublet}
-    prepare_assignment_collected = Prepare_assignment.prepare_assignment_mudata.collect()
-
+    
     if (params.assignment_method == "cleanser") {
-        Guide_Assignment = guide_assignment_cleanser(prepare_assignment_collected, params.THRESHOLD)
+        Guide_Assignment = guide_assignment_cleanser(Prepare_assignment.prepare_assignment_mudata.flatten(), params.THRESHOLD)
         guide_assignment_collected =  Guide_Assignment.guide_assignment_mudata_output.collect()
         Mudata_concat = mudata_concat(guide_assignment_collected)
         }
 
     else if (params.assignment_method == "sceptre") {
-        Guide_Assignment_Mtx = guide_assignment_sceptre(prepare_assignment_collected)
-        guide_assignment_mtx_collected =  Guide_Assignment_Mtx.guide_assignment_mtx_output.collect()
-        
-        // Join the two channels with the mudata and MTX files
-        Add_Guide_Assignment = add_guide_assignment_mtx_to_mudata(
-            prepare_assignment_collected
-                .map { v -> [v.simpleName, v] }.transpose()
-                .join( guide_assignment_mtx_collected
-                        .map { v -> [v.simpleName, v]}
-                        .transpose())
-        )
-        
-        guide_assignment_collected =  Add_Guide_Assignment.guide_assignment_mudata_output.collect()
+        Guide_Assignment = guide_assignment_sceptre(Prepare_assignment.prepare_assignment_mudata.flatten())
+        guide_assignment_collected =  Guide_Assignment.guide_assignment_mudata_output.collect()
         Mudata_concat = mudata_concat(guide_assignment_collected)
         }
 
