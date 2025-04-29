@@ -21,8 +21,8 @@ process mappingscRNA {
         """
         echo "Processing $batch with $fastq_files"
 
-        k_bin=\$(which kallisto)
-        bustools_bin=\$(which bustools)
+        k_bin=\$(type -p kallisto)
+        bustools_bin=\$(type -p bustools)
         chemistry=\$(extract_parsed_seqspec.py --file ${parsed_seqSpec_file})
 
         kb count -i ${transcriptome_idx} -g ${transcriptome_t2g} --verbose -w ${barcode_file} \\

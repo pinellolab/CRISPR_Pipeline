@@ -19,7 +19,7 @@ process demultiplex{
 
     (
         export OPENBLAS_NUM_THREADS=1
-        GMM_DEMUX_PATH=\$(which GMM-demux)
+        GMM_DEMUX_PATH=\$(type -p GMM-demux)
         export PATH=\$(dirname \$GMM_DEMUX_PATH):\$PATH
         GMM-demux demuxfile/ \$hto_string -f FULL
     )
