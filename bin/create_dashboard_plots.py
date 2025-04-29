@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 import muon as mu
-import numpy as np 
+import numpy as np
 
 def plot_umi_threshold(mudata, save_dir):
     plt.figure(figsize=(10, 6))
@@ -131,7 +131,7 @@ def plot_sgRNA_frequencies(mudata, save_dir):
     plt.close()
 
 def plot_guides_per_cell(mudata, save_dir):
-    guides_per_cell = np.sum(mudata.mod['guide'].X, axis=1)
+    guides_per_cell = np.sum(mudata.mod['guide'].layers['guide_assignment'], axis=1)
     plt.figure(figsize=(10, 6))
     plt.hist(guides_per_cell, bins=50, alpha=0.6, color='skyblue', ec="steelblue")
     plt.xlabel('Number of Guides per Cell')
@@ -142,17 +142,16 @@ def plot_guides_per_cell(mudata, save_dir):
     plt.close()
 
 def plot_cells_per_guide(mudata, save_dir):
-    cells_per_guide = np.sum(mudata.mod['guide'].X, axis=0)
+    cells_per_guide = np.sum(mudata.mod['guide'].layers['guide_assignment'], axis=0)
     sorted_cells_per_guide = np.sort(np.array(cells_per_guide).flatten())
     plt.figure(figsize=(10, 6))
-    plt.hist(sorted_cells_per_guide, bins=30, alpha=0.6, color='skyblue', ec='steelblue')
+    plt.hist(sorted_cells_per_guide, bins=50, alpha=0.6, color='skyblue', ec='steelblue')
     plt.xlabel('Number of Cells per Guide')
     plt.ylabel('Density')
     plt.title('Histogram of Cells per Guide')
     plot_path = os.path.join(save_dir, 'cells_per_guide_histogram.png')
     plt.savefig(plot_path, dpi=300)
     plt.close()
-
 
 def main():
     parser = argparse.ArgumentParser(description="Generate various plots from MuData")
