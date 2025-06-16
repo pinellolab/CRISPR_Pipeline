@@ -10,7 +10,7 @@ The content of the .json file is :
 
 ```
 
-#### Case the dataset does not have SeqSpec in the repo
+#### Case the dataset does not have SeqSpec in the IGVF portal
 
 ```bash
 python3 generate_per_sample.py --keypair igvf_key.json --accession IGVFDS7340YDHF --output test_fetch.tsv --hash_seqspec hash_seq_spec.yaml --rna_seqspec rna_seq_spec.yaml --sgrna_seqspec sgrna_seq_spec.yaml
