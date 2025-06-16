@@ -24,5 +24,5 @@ Use the previous extracted tsv file to download files and generate full paths
 ```bash
 python3  download_igvf.py --sample test_fetch.tsv --access-key ***  --secret-key ***
 ```
-``` TODO:
-
+ TODO:
+ - [ ] download SeqSpecs    
