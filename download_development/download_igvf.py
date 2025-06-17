@@ -41,7 +41,7 @@ def calculate_md5(filepath: str, chunk_size: int = 8192) -> str:
 def download_and_verify_file(accession: str, expected_md5: str, fastq_dir: str, auth: tuple):
     """
     Downloads a single FASTQ file, shows progress, and verifies its MD5 checksum.
-    Skips the download if the file already exists.
+    Skips the download if the file already exists and the checksum is correct.
 
     Args:
         accession: The accession ID of the file to download.
@@ -77,6 +77,7 @@ def download_and_verify_file(accession: str, expected_md5: str, fastq_dir: str, 
             unit='iB',
             unit_scale=True,
             unit_divisor=1024,
+            leave=False # Prevents this progress bar from staying after completion
         ) as bar:
             for chunk in response.iter_content(chunk_size=8192):
                 size = f.write(chunk)
@@ -110,18 +111,27 @@ def download_and_verify_file(accession: str, expected_md5: str, fastq_dir: str, 
         colored_print(Color.RED, f"The downloaded file at {output_path} may be corrupt.")
 
 
-def process_sample_sheet(df, access_key: str, secret_key: str):
+def process_sample_sheet(df, access_key: str, secret_key: str) -> pd.DataFrame:
     """
-    Processes a sample sheet to download all specified FASTQ file pairs.
+    Processes a sample sheet to download all specified FASTQ file pairs and
+    returns a new DataFrame with local file paths.
 
     Args:
         df: Pandas DataFrame with R1/R2 paths and md5sums.
         access_key: IGVF API access key.
         secret_key: IGVF API secret key.
+        
+    Returns:
+        A new Pandas DataFrame with R1_path and R2_path updated to full local paths.
     """
     fastq_dir = "fastq_files"
     os.makedirs(fastq_dir, exist_ok=True)
     auth = (access_key, secret_key)
+    
+    local_paths_df = df.copy()
+    
+    r1_local_paths = []
+    r2_local_paths = []
 
     # Use tqdm to create an overall progress bar for the file pairs
     for _, row in tqdm(df.iterrows(), total=df.shape[0], desc="Processing all file pairs"):
@@ -130,7 +140,7 @@ def process_sample_sheet(df, access_key: str, secret_key: str):
         r2_accession = row['R2_path']
         r2_md5 = row['R2_md5sum']
 
-        print("-" * 50)
+        print("\n" + "-" * 60)
         colored_print(Color.GREEN, f"Processing pair: {r1_accession} & {r2_accession}")
         
         # Download and verify R1
@@ -138,6 +148,19 @@ def process_sample_sheet(df, access_key: str, secret_key: str):
         
         # Download and verify R2
         download_and_verify_file(r2_accession, r2_md5, fastq_dir, auth)
+
+        # Construct absolute paths for the new sample sheet
+        r1_local_path = os.path.abspath(os.path.join(fastq_dir, f"{r1_accession}.fastq.gz"))
+        r2_local_path = os.path.abspath(os.path.join(fastq_dir, f"{r2_accession}.fastq.gz"))
+        r1_local_paths.append(r1_local_path)
+        r2_local_paths.append(r2_local_path)
+
+    # Update the DataFrame with the new local paths
+    local_paths_df['R1_path'] = r1_local_paths
+    local_paths_df['R2_path'] = r2_local_paths
+    
+    return local_paths_df
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -166,10 +189,17 @@ Example usage:
         if missing_cols:
             raise ValueError(f"TSV file is missing required columns: {', '.join(missing_cols)}")
         
-        # Start the download process
-        process_sample_sheet(df, args.access_key, args.secret_key)
+        # Start the download process and get the DataFrame with local paths
+        local_paths_df = process_sample_sheet(df, args.access_key, args.secret_key)
+        
+        # --- Create the new TSV file with local paths ---
+        output_basename = os.path.basename(args.sample)
+        local_paths_filename = f"local_paths_{output_basename}"
+        
+        local_paths_df.to_csv(local_paths_filename, sep='\t', index=False)
         
         colored_print(Color.GREEN, "\nAll download and verification tasks complete.")
+        colored_print(Color.GREEN, f"Successfully created sample sheet with local paths: {local_paths_filename}")
         
     except FileNotFoundError:
         colored_print(Color.RED, f"Error: The file '{args.sample}' was not found.")
