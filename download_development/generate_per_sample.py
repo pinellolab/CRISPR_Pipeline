@@ -43,8 +43,6 @@ def modality_to_fallback_seqspec(modality, hash_seqspec, rna_seqspec, sgrna_seqs
     return None
 
 
-
-
 def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqspec=None, rna_seqspec=None, sgrna_seqspec=None):
     response = requests.get(
         f'{PORTAL}/analysis-sets/{analysis_set_accession}/@@object?format=json', auth=auth
@@ -59,6 +57,11 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
             modality = 'scRNA sequencing' if file_set_type == 'experimental data' else file_set_type
             accession = file_set_object['accession']
             files = file_set_object.get('files', [])
+
+            if file_set_object['@id'].startswith('/measurement-sets/'):
+                measurement_sets = accession
+            else:
+                measurement_sets = ', '.join([measurement_set.split('/')[-2] for measurement_set in file_set_object.get('measurement_sets', [])])
 
             sequence_file_index = {}
             for file in files:
@@ -107,6 +110,7 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
                     'R2_md5sum': read2['md5sum'],
                     'file_modality': modality,
                     'file_set': accession,
+                    'measurement_sets': measurement_sets,
                     'sequencing_run': key[0],
                     'lane': key[1],
                     'flowcell_id': key[2],
