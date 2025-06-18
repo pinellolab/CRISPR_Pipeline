@@ -3,7 +3,9 @@ import requests
 import pandas as pd
 import argparse
 import hashlib
+import json
 from tqdm import tqdm
+from requests.auth import HTTPBasicAuth
 
 # Helper class for colored console output
 class Color:
@@ -12,6 +14,19 @@ class Color:
     YELLOW = '\033[93m'
     RED = '\033[91m'
     END = '\033[0m'
+
+def get_auth(keypair_path=None):
+    if keypair_path:
+        with open(keypair_path) as f:
+            keypair = json.load(f)
+            return HTTPBasicAuth(keypair['key'], keypair['secret'])
+
+    key = os.getenv('IGVF_API_KEY')
+    secret = os.getenv('IGVF_SECRET_KEY')
+    if key and secret:
+        return HTTPBasicAuth(key, secret)
+
+    raise RuntimeError('No credentials provided. Set IGVF_API_KEY and IGVF_SECRET_KEY or provide a keypair JSON.')
 
 def colored_print(color, message):
     """Prints a message in the specified color."""
@@ -38,7 +53,7 @@ def calculate_md5(filepath: str, chunk_size: int = 8192) -> str:
         return ""
     return md5.hexdigest()
 
-def download_and_verify_file(accession: str, expected_md5: str, fastq_dir: str, auth: tuple):
+def download_and_verify_file(accession: str, expected_md5: str, fastq_dir: str, auth: HTTPBasicAuth):
     """
     Downloads a single FASTQ file, shows progress, and verifies its MD5 checksum.
     Skips the download if the file already exists and the checksum is correct.
@@ -47,7 +62,7 @@ def download_and_verify_file(accession: str, expected_md5: str, fastq_dir: str, 
         accession: The accession ID of the file to download.
         expected_md5: The expected MD5 checksum for verification.
         fastq_dir: The directory to save the file in.
-        auth: A tuple containing the (access_key, secret_key) for authentication.
+        auth: HTTPBasicAuth object for authentication.
     """
     base_url = "https://api.data.igvf.org/sequence-files"
     download_url = f"{base_url}/{accession}/@@download/{accession}.fastq.gz"
@@ -70,7 +85,7 @@ def download_and_verify_file(accession: str, expected_md5: str, fastq_dir: str, 
         response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
 
         total_size = int(response.headers.get('content-length', 0))
-        
+
         with open(output_path, 'wb') as f, tqdm(
             desc=f"Downloading {accession}",
             total=total_size,
@@ -111,25 +126,23 @@ def download_and_verify_file(accession: str, expected_md5: str, fastq_dir: str, 
         colored_print(Color.RED, f"The downloaded file at {output_path} may be corrupt.")
 
 
-def process_sample_sheet(df, access_key: str, secret_key: str) -> pd.DataFrame:
+def process_sample_sheet(df, auth: HTTPBasicAuth) -> pd.DataFrame:
     """
     Processes a sample sheet to download all specified FASTQ file pairs and
     returns a new DataFrame with local file paths.
 
     Args:
         df: Pandas DataFrame with R1/R2 paths and md5sums.
-        access_key: IGVF API access key.
-        secret_key: IGVF API secret key.
-        
+        auth: HTTPBasicAuth object for authentication.
+
     Returns:
         A new Pandas DataFrame with R1_path and R2_path updated to full local paths.
     """
     fastq_dir = "fastq_files"
     os.makedirs(fastq_dir, exist_ok=True)
-    auth = (access_key, secret_key)
-    
+
     local_paths_df = df.copy()
-    
+
     r1_local_paths = []
     r2_local_paths = []
 
@@ -142,10 +155,10 @@ def process_sample_sheet(df, access_key: str, secret_key: str) -> pd.DataFrame:
 
         print("\n" + "-" * 60)
         colored_print(Color.GREEN, f"Processing pair: {r1_accession} & {r2_accession}")
-        
+
         # Download and verify R1
         download_and_verify_file(r1_accession, r1_md5, fastq_dir, auth)
-        
+
         # Download and verify R2
         download_and_verify_file(r2_accession, r2_md5, fastq_dir, auth)
 
@@ -158,7 +171,7 @@ def process_sample_sheet(df, access_key: str, secret_key: str) -> pd.DataFrame:
     # Update the DataFrame with the new local paths
     local_paths_df['R1_path'] = r1_local_paths
     local_paths_df['R2_path'] = r2_local_paths
-    
+
     return local_paths_df
 
 
@@ -168,42 +181,46 @@ if __name__ == "__main__":
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="""
 Example usage:
-  python3 download_igvf.py --sample test_fetch.tsv --access-key YOUR_KEY --secret-key YOUR_SECRET
+# Using keypair JSON file:
+python3 download_igvf.py --sample test_fetch.tsv --keypair keypair.json
 """
     )
-    parser.add_argument('--sample', required=True, 
+    parser.add_argument('--sample', required=True,
                         help='Path to the TSV file containing sample information.')
-    parser.add_argument('--access-key', required=True,
-                        help='IGVF API access key.')
-    parser.add_argument('--secret-key', required=True,
-                        help='IGVF API secret key.')
-    
+    parser.add_argument('--keypair',
+                        help='Path to JSON file containing IGVF-API key pair.')
+
     args = parser.parse_args()
-    
+
     try:
+        # Get authentication using the get_auth function
+        auth = get_auth(args.keypair)
+
         df = pd.read_csv(args.sample, sep='\t')
         required_cols = ['R1_path', 'R2_path', 'R1_md5sum', 'R2_md5sum']
-        
+
         # Check for required columns
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
             raise ValueError(f"TSV file is missing required columns: {', '.join(missing_cols)}")
-        
+
         # Start the download process and get the DataFrame with local paths
-        local_paths_df = process_sample_sheet(df, args.access_key, args.secret_key)
-        
+        local_paths_df = process_sample_sheet(df, auth)
+
         # --- Create the new TSV file with local paths ---
         output_basename = os.path.basename(args.sample)
         local_paths_filename = f"local_paths_{output_basename}"
-        
+
         local_paths_df.to_csv(local_paths_filename, sep='\t', index=False)
-        
+
         colored_print(Color.GREEN, "\nAll download and verification tasks complete.")
         colored_print(Color.GREEN, f"Successfully created sample sheet with local paths: {local_paths_filename}")
-        
+
     except FileNotFoundError:
         colored_print(Color.RED, f"Error: The file '{args.sample}' was not found.")
     except pd.errors.EmptyDataError:
         colored_print(Color.RED, f"Error: The file '{args.sample}' is empty or improperly formatted.")
+    except RuntimeError as e:
+        colored_print(Color.RED, f"Authentication error: {str(e)}")
     except Exception as e:
         colored_print(Color.RED, f"An unexpected error occurred: {str(e)}")
