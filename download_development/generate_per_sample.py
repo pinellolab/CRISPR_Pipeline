@@ -115,13 +115,13 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
                     'lane': key[1],
                     'flowcell_id': key[2],
                     'index': key[3],
-                    'seqpsec': seqspec_path
+                    'seqspec': seqspec_path
                 }
 
                 per_sample_rows.append(row)
 
     # Final validation
-    if any(not row['seqpsec'] for row in per_sample_rows):
+    if any(not row['seqspec'] for row in per_sample_rows):
         raise RuntimeError("At least one row is missing a seqspec path – aborting.")
 
     write_tsv(per_sample_rows, output_path)
@@ -161,6 +161,6 @@ if __name__ == "__main__":
 
 
 #seqspec in the analysis set
-#python3  generate_per_sample.py --keypair igvf_key.json --accession IGVFDS9445RJOU --output test_fetch.tsv                                                                                                      
+#python3  generate_per_sample.py --keypair igvf_key.json --accession IGVFDS9445RJOU --output test_fetch.tsv
 #seqspec not in the analysis set, but provided as fallback
 #python3 generate_per_sample.py --keypair igvf_key.json --accession IGVFDS7340YDHF --output test_fetch.tsv --hash_seqspec hash_seq_spec.yaml --rna_seqspec rna_seq_spec.yaml --sgrna_seqspec sgrna_seq_spec.yaml
