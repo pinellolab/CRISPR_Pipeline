@@ -64,7 +64,7 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
         and verifies its MD5 checksum if provided. Skips the download if the file 
         already exists and is verified (or if no checksum is provided).
 
-        Args:
+    Args:
         accession: The accession ID of the file to download.
         expected_md5: The expected MD5 checksum for verification.
         dir: The directory to save the file in.
