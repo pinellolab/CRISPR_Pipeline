@@ -58,10 +58,49 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
             accession = file_set_object['accession']
             files = file_set_object.get('files', [])
 
+            barcode_onlist = ''
+            strand_specificity = ''
             if file_set_object['@id'].startswith('/measurement-sets/'):
                 measurement_sets = accession
+                barcode_onlist = file_set_object.get('onlist_files', [])
+                onlist_method = file_set_object.get('onlist_method', '')
+                if onlist_method and onlist_method != 'no combination':
+                    print(f'{onlist_method} not currently supported') # Upgrade this to a ValueError later
+                strand_specificity = file_set_object.get('strand_specificity', '')
             else:
                 measurement_sets = ', '.join([measurement_set.split('/')[-2] for measurement_set in file_set_object.get('measurement_sets', [])])
+
+            # Get guide RNA sequences reference
+            guide_rna_sequences = ''
+            if modality == 'gRNA sequencing':
+                construct_library_sets = file_set_object.get('construct_library_sets', [])
+                if len(construct_library_sets) > 1:
+                    raise ValueError(
+                        f'Datasets with multiple guide libraries are not currently supported by the pipeline.'
+                    )
+                construct_library_set_object = requests.get(f"{PORTAL}{construct_library_sets[0]}/@@embedded?format=json", auth=auth).json()
+                integrated_content_files = construct_library_set_object.get('integrated_content_files', [])
+                guide_rna_sequences = [integrated_content_file['accession'] for integrated_content_file in integrated_content_files if integrated_content_file['content_type'] == 'guide RNA sequences']
+                if len(guide_rna_sequences) > 1:
+                    raise ValueError(
+                        f'Datasets with multiple guide libraries are not currently supported by the pipeline.'
+                    )
+                elif len(guide_rna_sequences) == 1:
+                    guide_rna_sequences = guide_rna_sequences[0]
+                else:
+                    raise ValueError(
+                        f'Datasets without guide libraries are not supported by the pipeline.'
+                    )
+
+
+            # Get hashtag reference
+            barcode_to_hashtag_map = ''
+            if modality == 'cell hashing barcode sequencing':
+                barcode_to_hashtag_map = file_set_object.get('barcode_map', '')
+                if not(barcode_to_hashtag_map):
+                    print('No barcode to hashtag mapping provided.') # Upgrade this to a ValueError later
+                else:
+                    barcode_to_hashtag_map = barcode_to_hashtag_map.split('/')[-2]
 
             sequence_file_index = {}
             for file in files:
@@ -91,7 +130,7 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
                 # Handle seqspec fallback
                 seqspecs = read1.get('seqspecs', [])
                 if seqspecs and seqspecs[0]:
-                    seqspec_path = seqspecs[0]
+                    seqspec_path = seqspecs[0].split('/')[-2]
                 else:
                     seqspec_path = modality_to_fallback_seqspec(
                         modality, hash_seqspec, rna_seqspec, sgrna_seqspec
@@ -102,7 +141,6 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
                         f"Missing seqspec for modality '{modality}' (R1 {read1['@id']}). "
                         "Provide a fallback using --hash_seqspec / --rna_seqspec / --sgrna_seqspec or make sure to deposited your seqspec in the portal"
                     )
-
                 row = {
                     'R1_path': read1['@id'].split('/')[-2],
                     'R1_md5sum': read1['md5sum'],
@@ -115,7 +153,12 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
                     'lane': key[1],
                     'flowcell_id': key[2],
                     'index': key[3],
-                    'seqspec': seqspec_path
+                    'seqspec': seqspec_path,
+                    'barcode_onlist': barcode_onlist[0].split('/')[-2] if barcode_onlist else '',
+                    'onlist_method': onlist_method,
+                    'strand_specificity': strand_specificity,
+                    'guide_design': guide_rna_sequences,
+                    'barcode_hashtag_map': barcode_to_hashtag_map
                 }
 
                 per_sample_rows.append(row)
