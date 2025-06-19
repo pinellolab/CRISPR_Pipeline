@@ -29,6 +29,6 @@ process download_portal {
 
     """
     generate_per_sample.py --keypair ${keypair_json} --accession ${accession_id} --output per_sample.tsv
-    python3 download_igvf.py --sample per_sample.tsv --keypair ${keypair_json} ${download_args} ${output_dir}
+    download_igvf.py --sample per_sample.tsv --keypair ${keypair_json} ${download_args} ${output_dir}
     """
 }

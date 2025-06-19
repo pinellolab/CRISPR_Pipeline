@@ -31,7 +31,8 @@ process download_portal_no_seqspec {
     }
 
     """
+    echo "Start generating per-sample file ..."
     generate_per_sample.py --keypair ${keypair_json} --accession ${accession_id} --output per_sample.tsv --hash_seqspec ${hash_seqspec_yaml} --rna_seqspec ${rna_seqspec_yaml} --sgrna_seqspec ${grna_seqspec_yaml}
-    python3 download_igvf.py --sample per_sample.tsv --keypair ${keypair_json} ${download_args} ${output_dir}
+    download_igvf.py --sample per_sample.tsv --keypair ${keypair_json} ${download_args} ${output_dir}
     """
 }
