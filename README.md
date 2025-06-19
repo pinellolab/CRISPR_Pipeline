@@ -26,15 +26,6 @@ To obtain your token:
 3. Click "Add token" and generate a new token
 4. Set as environment variable: `export TOWER_ACCESS_TOKEN=your_token_here`
 
-If you do not want this feature, go to the input.config and scroll all the way down to disable this:
-```
-tower {
-    enabled = false
-    accessToken = "${TOWER_ACCESS_TOKEN ?: ''}"
-}
-```
-
-
 ## Pipeline Installation
 
 To install the pipeline:
@@ -51,79 +42,144 @@ git clone https://github.com/pinellolab/CRISPR_Pipeline.git
 - `{sample}_R1.fastq.gz`: Contains cell barcode and UMI sequences
 - `{sample}_R2.fastq.gz`: Contains transcript sequences
 
-#### YAML Configuration Files
+#### YAML Configuration Files (see example_data/)
 - `rna_seqspec.yml`: Defines RNA sequencing structure and parameters
 - `guide_seqspec.yml`: Specifies guide RNA detection parameters
 - `hash_seqspec.yml`: Defines cell hashing structure (required if using cell hashing)
-- `whitelist.txt`: List of valid cell barcodes
+- `barcode_onlist.txt`: List of valid cell barcodes
 
-#### Metadata Files
+#### Metadata Files (see example_data/)
 - `guide_metadata.tsv`: Contains guide RNA information and annotations
 - `hash_metadata.tsv`: Cell hashing sample information (required if using cell hashing)
 - `pairs_to_test.csv`: Defines perturbation pairs for comparison analysis (required if testing predefined pairs)
-
-This pipeline requires a specific data structure to function properly. Below is an overview of the required directory organization:
-
-```
-📁 example_data/
-   │
-   ├── 📁 fastq_files/
-   │   ├── 📄 {sample}_R1.fastq.gz
-   │   └── 📄 {sample}_R2.fastq.gz
-   │   └── 📄 ...
-   │
-   ├── 📁 yaml_files/
-   │   ├── 📄 rna_seqspec.yml
-   │   ├── 📄 guide_seqspec.yml
-   │   ├── 📄 hash_seqspec.yml (required if using cell hashing)
-   │   └── 📄 whitelist.txt
-   │
-   ├── 📄 guide_metadata.tsv
-   ├── 📄 hash_metadata.tsv (required if using cell hashing)
-   └── 📄 pairs_to_test.csv (required if testing predefined pairs)
-```
 
 For detailed specifications, see our [documentation](https://docs.google.com/document/d/1Z1SOlekIE5uGyXW41XxnszxaYdSw0wdAOUVzfy3fj3M/edit?tab=t.0#heading=h.ctbx1w9hj619).
 
 ## Running the Pipeline 
 
-### Configuration Steps
+### Pipeline Configuration
 
-#### 1. Pipeline Settings
+Before running the pipeline, customize the configuration files for your environment:
 
-Make sure to specify your data paths and analysis parameters in `configs/pipeline.config`.
+#### 1. Data and Analysis Parameters (`nextflow.config`)
 
-#### 2. Resource Configuration
+Update the pipeline-specific parameters in the `params` section, for example:
 
-Configure `input.config` to match your computing environment. For example:
+```groovy
+// Input data paths
+input = "/path/to/your/samplesheet.csv"
 
-💡 **Note:** Start with these default values and adjust based on your dataset size and system capabilities.
+// Reference data (update paths as needed)
+METADATA_sgRNA = "/path/to/guide_metadata.tsv" 
+METADATA_hash = "/path/to/hash_metadata.tsv"
+SEQUENCE_PARSING_barcode_list = "/path/to/barcode_list.txt"
 
-### Running the Pipeline
+// Analysis parameters (adjust for your experiment)
+QC_min_genes_per_cell = 500
+QC_min_cells_per_gene = 3
+QC_pct_mito = 20
+GUIDE_ASSIGNMENT_method = 'sceptre'  // or 'cleanser'
+INFERENCE_method = 'perturbo'        // or 'sceptre'
+```
 
-1. First, make the scripts executable:
+#### 2. Compute Environment Configuration
+
+Choose and configure your compute profile by updating the relevant sections:
+
+##### 🖥️ **Local Development**
+```groovy
+// Resource limits (adjust based on your machine)
+max_cpus = 8           // Number of CPU cores available
+max_memory = '32.GB'   // RAM available for the pipeline
+
+// Run with: nextflow run main.nf -profile local
+```
+
+##### 🏢 **SLURM Cluster**
+```groovy
+// Resource limits (adjust based on cluster specs)
+max_cpus = 128
+max_memory = '512.GB'
+
+// Update SLURM partitions in profiles section:
+slurm {
+    process {
+        queue = 'short,normal,long'  // Replace with your partition names
+    }
+}
+
+// Run with: nextflow run main.nf -profile slurm
+```
+
+##### ☁️ **Google Cloud Platform**
+```groovy
+// Update GCP settings
+google_bucket = 'gs://your-bucket-name'
+google_project = 'your-gcp-project-id'
+google_region = 'us-central1'  // Choose your preferred region
+
+// Resource limits
+max_cpus = 128
+max_memory = '512.GB'
+
+// Run with: nextflow run main.nf -profile google
+```
+
+#### 3. Container Configuration
+
+The pipeline uses pre-built containers. Update if you have custom versions:
+
+```groovy
+containers {
+    base     = 'sjiang9/conda-docker:0.2'      // Main analysis tools
+    cleanser = 'sjiang9/cleanser:0.3'          // Guide assignment
+    sceptre  = 'sjiang9/sceptre-igvf:0.1'     // Guide assignment/Perturbation inference 
+    perturbo = 'loganblaine/perturbo:latest'   // Perturbation inference 
+}
+```
+
+## 🎯 Resource Sizing Guidelines
+
+### Recommended Starting Values:
+
+| Environment | max_cpus | max_memory | Notes |
+|------------|----------|------------|--------|
+| **Local (development)** | 4-8 | 16-32GB | For testing small datasets |
+| **Local (full analysis)** | 8-16 | 64-128GB | For complete runs |
+| **SLURM cluster** | 64-128 | 256-512GB | Adjust based on node specs |
+| **Google Cloud** | 128+ | 512GB+ | Can scale dynamically |
+
+## 🔧 Testing Your Configuration
+
+1. **Validate syntax:**
    ```bash
+   nextflow config -profile local  # Test local profile
+   nextflow config -profile slurm  # Test SLURM profile
+   ```
+
+2. **Test with small dataset:**
+   ```bash
+   # Start with a subset of your data
+   # Make all scripts executable (required for pipeline execution)
    chmod +x bin/*
-   ```
-2. Export Nextflow Tower Token (if Nextflow Tower is enabled)
-   ```bash
-   export TOWER_ACCESS_TOKEN=your_token_here
+   # RUN THE PIPELINE
+   nextflow run main.nf -profile local --input small_test.tsv -outdir ./Outputs
    ```
 
-3. Launch the pipeline:
-   ```bash
-   nextflow run main.nf -c input.config
-   ```
 
-### Monitoring and Troubleshooting
+## 💡 Pro Tips
 
-#### During Execution
-- Watch the terminal output for progress updates
-- Check the `.nextflow.log` file for detailed execution logs
+- **Start conservative:** Begin with lower resource limits and increase as needed
+- **Profile-specific limits:** The pipeline automatically scales resources based on retry attempts
+- **Development workflow:** Use local profile for code testing, cluster/cloud for production runs
 
-#### Common Issues and Solutions
-- **Memory errors**: Increase the `memory` parameter in `input.config`
-- **Missing files**: Double-check paths in `configs/pipeline.config` and actual files in `example_data`
+## 🚨 Common Issues
+
+- **Memory errors:** Increase `max_memory` if you see out-of-memory failures
+- **Queue timeouts:** Adjust SLURM partition names to match your cluster
+- **Permission errors:** Ensure your Google Cloud service account has proper permissions
+- **Container issues:** Verify Singularity is available on your system
+- **Missing files**: Double-check paths in `nextflow.config` and actual files in `example_data`
 
 ## Output Description
 
@@ -249,8 +305,23 @@ This dataset comes from a large-scale CRISPR screen study published in Cell ([Ga
 
    #### Option A: TF_Perturb_Seq_Pilot Dataset
    ```bash
-   # Run with default configuration
-   nextflow run main.nf -c input.config
+   # Run with LOCAL
+   nextflow run main.nf \
+      -profile local \
+      --input samplesheet.tsv \
+      --outdir ./outputs/
+
+   # Run with SLURM
+   nextflow run main.nf \
+      -profile slurm \
+      --input samplesheet.tsv \
+      --outdir ./outputs/
+   
+   # Run with GCP
+   nextflow run main.nf \
+      -profile google \
+      --input samplesheet.tsv \
+      --outdir gs://igvf-pertub-seq-pipeline-data/scratch/ # Path to your GCP bucket
    ```
 
    #### Option B: Gasperini Dataset
@@ -259,7 +330,7 @@ This dataset comes from a large-scale CRISPR screen study published in Cell ([Ga
    
       ```bash
       # Copy configuration files and example data
-      cp -r example_gasperini/configs/* configs/
+      cp example_gasperini/nextflow.config nextflow.config
       cp -r example_gasperini/example_data/* example_data/
       ```
 
@@ -287,8 +358,23 @@ This dataset comes from a large-scale CRISPR screen study published in Cell ([Ga
 
    4. Launch the pipeline:
       ```bash
-      # Run with Gasperini configuration
-      nextflow run main.nf -c input.config
+      # Run with LOCAL
+      nextflow run main.nf \
+         -profile local \
+         --input samplesheet.tsv \
+         --outdir ./outputs/
+
+      # Run with SLURM
+      nextflow run main.nf \
+         -profile slurm \
+         --input samplesheet.tsv \
+         --outdir ./outputs/
+      
+      # Run with GCP
+      nextflow run main.nf \
+         -profile google \
+         --input samplesheet.tsv \
+         --outdir gs://igvf-pertub-seq-pipeline-data/scratch/ # Path to your GCP bucket
       ```
 
 ### Expected Outputs
