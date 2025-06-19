@@ -62,14 +62,16 @@ workflow PIPELINE_INITIALISATION {
         .map { row ->
             // Create a meta object with all required information
             def meta = [
-                id: "sample_${row.file_modality}_${row.measurement_sets}_${row.sequencing_run}_${row.lane}",
+                id: "sample_${row.file_modality}_${row.measurement_sets}_${row.sequencing_run}",
                 single_end: false,
                 modality: row.file_modality,
                 measurement_sets: row.measurement_sets,
                 sequencing_run: row.sequencing_run,
                 lane: row.lane,
                 seqspec: row.seqspec,
-                barcode_onlist: row.barcode_onlist
+                barcode_onlist: row.barcode_onlist,
+                guide_design: row.guide_design,
+                barcode_hashtag_map: row.barcode_hashtag_map
             ]
 
             // Return structured tuple with meta and file paths

@@ -10,6 +10,7 @@ workflow mapping_guide_pipeline {
     ch_guide
     ch_guide_seqspec
     ch_barcode_onlist
+    ch_guide_list
     parsed_covariate_file
 
     main:
@@ -19,7 +20,7 @@ workflow mapping_guide_pipeline {
         'guide'
     )
 
-    GuideRef = createGuideRef(file(params.METADATA_sgRNA))
+    GuideRef = createGuideRef(ch_guide_list)
 
     MappingOut = mappingGuide(
         ch_guide,

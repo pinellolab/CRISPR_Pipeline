@@ -6,6 +6,7 @@ workflow guideWorkflow {
 
     take:
     ch_guide
+    ch_guide_list
 
     main:
     ch_guide_split = ch_guide.map { meta, reads ->
@@ -17,7 +18,7 @@ workflow guideWorkflow {
     guide_seqSpecCheck = seqSpecCheck(
         ch_guide_split.map { meta, r1, r2 -> r1 },  // R1 channel
         ch_guide_split.map { meta, r1, r2 -> r2 },  // R2 channel
-        file(params.METADATA_sgRNA),
+        ch_guide_list,
         'guide'
     )
 
@@ -29,6 +30,7 @@ workflow guideWorkflow {
 workflow hashWorkflow {
     take:
     ch_hash
+    ch_barcode_hashtag_map
 
     main:
     ch_hash_split = ch_hash.map { meta, reads ->
@@ -40,7 +42,7 @@ workflow hashWorkflow {
     hash_seqSpecCheck = seqSpecCheck(
         ch_hash_split.map { meta, r1, r2 -> r1 },  // R1 channel
         ch_hash_split.map { meta, r1, r2 -> r2 },  // R2 channel
-        file(params.METADATA_hash),
+        ch_barcode_hashtag_map,
         'hashing'
     )
 
@@ -55,10 +57,13 @@ workflow seqSpecCheck_pipeline_HASHING {
     take:
     ch_guide
     ch_hash
+    ch_guide_list
+    ch_barcode_hashtag_map
+
 
     main:
-    guide = guideWorkflow(ch_guide)
-    hashing = hashWorkflow(ch_hash)
+    guide = guideWorkflow(ch_guide, ch_guide_list)
+    hashing = hashWorkflow(ch_hash, ch_barcode_hashtag_map)
 
     emit:
     guide_seqSpecCheck_plots = guide.guide_seqSpecCheck_plots

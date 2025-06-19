@@ -11,6 +11,7 @@ workflow mapping_hashing_pipeline {
     ch_hash
     ch_hash_seqspec
     ch_barcode_onlist
+    ch_barcode_hashtag_map
     parsed_covariate_file
 
     main:
@@ -20,7 +21,7 @@ workflow mapping_hashing_pipeline {
         'hashing'
     )
 
-    HashingRef = createHashingRef(file(params.METADATA_hash))
+    HashingRef = createHashingRef(ch_barcode_hashtag_map)
 
     MappingOut = mappingHashing(
         ch_hash,

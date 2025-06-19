@@ -9,7 +9,7 @@ args = parser.parse_args()
 
 samplesheet = pd.read_csv(args.input, sep='\t')
 
-updated_samplesheet = samplesheet[['R1_path', 'R2_path', 'file_modality', 'measurement_sets', 'sequencing_run', 'lane', 'flowcell_id','seqspec', 'barcode_onlist']].copy()
+updated_samplesheet = samplesheet[['R1_path', 'R2_path', 'file_modality', 'measurement_sets', 'sequencing_run', 'lane', 'flowcell_id','seqspec', 'barcode_onlist', 'guide_design',	'barcode_hashtag_map']].copy()
 
 updated_samplesheet['file_modality'] = updated_samplesheet['file_modality'].replace({
     'scRNA sequencing': 'scRNA',

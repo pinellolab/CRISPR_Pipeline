@@ -77,11 +77,23 @@ workflow CRISPR_PIPELINE {
         .unique()
         .first()
 
+    //guide_design
+    ch_guide_list = ch_guide
+        .map { meta, _fastqs -> meta.ch_guide_list }
+        .unique()
+        .first()
+
+    //barcode_hashtag_map
+    ch_barcode_hashtag_map = ch_hash
+        .map { meta, _fastqs -> meta.barcode_hashtag_map }
+        .unique()
+        .first()
+
     // Run seqSpecCheck pipeline
     if (params.ENABLE_DATA_HASHING == "true") {
-        seqSpecCheck_pipeline_HASHING(ch_guide.first(), ch_hash.first())
+        seqSpecCheck_pipeline_HASHING(ch_guide.first(), ch_hash.first(), ch_guide_list, ch_barcode_hashtag_map)
     } else {
-        seqSpecCheck_pipeline(ch_guide.first())
+        seqSpecCheck_pipeline(ch_guide.first(), ch_guide_list)
     }
 
     prepare_mapping_pipeline(ch_samples)
@@ -98,6 +110,7 @@ workflow CRISPR_PIPELINE {
         ch_guide,
         ch_guide_seqspec,
         ch_barcode_onlist,
+        ch_guide_list,
         prepare_mapping_pipeline.out.parsed_covariate_file
         )
 
@@ -106,6 +119,7 @@ workflow CRISPR_PIPELINE {
             ch_hash,
             ch_hash_seqspec,
             ch_barcode_onlist,
+            ch_barcode_hashtag_map,
             prepare_mapping_pipeline.out.parsed_covariate_file
             )
 
