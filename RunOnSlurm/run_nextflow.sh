@@ -22,4 +22,4 @@ export NXF_JAVA_HOME=$JAVA_HOME
 
 # Run Nextflow
 chmod +x bin/*
-nextflow run main.nf -c input_slurm.config 
+nextflow run main.nf -profile slurm  --input samplesheet.tsv --outdir ./outputs/
