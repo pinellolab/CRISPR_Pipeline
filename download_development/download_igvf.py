@@ -63,6 +63,13 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
         Downloads a single file (FASTQ, tabular, or configuration), shows progress,
         and verifies its MD5 checksum if provided. Skips the download if the file 
         already exists and is verified (or if no checksum is provided).
+
+        Args:
+        accession: The accession ID of the file to download.
+        expected_md5: The expected MD5 checksum for verification.
+        dir: The directory to save the file in.
+        auth: HTTPBasicAuth object for authentication.
+        file_type: file object type being downloaded (i.e. sequence, tabular, or configuration)
     """
 
     # Determine download URL and file extension based on file type
