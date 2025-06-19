@@ -1,0 +1,4 @@
+R1_path	R1_md5sum	R2_path	R2_md5sum	file_modality	file_set	measurement_sets	sequencing_run	lane	flowcell_id	index	seqspec	barcode_onlist	onlist_method	strand_specificity	guide_design	barcode_hashtag_map
+IGVFFI1946LEGM	e74e507f714b2f1369a94f3da1a58712	IGVFFI5195OGCL	8ab3678971ee4d8926e7bdf5799f5eff	scRNA sequencing	IGVFDS2628PYOH	IGVFDS2628PYOH	1	1	AAC5W2WHV		seqspec/rna_seq_spec.yaml	IGVFFI9487JPEN	no combination	3 prime to 5 prime
+IGVFFI7706SWGW	e2ca5e0b3059d8fb64b9f6e06c17a8dc	IGVFFI7788FDIR	5c55836d72df5acab5f5c10ac3f429b6	gRNA sequencing	IGVFDS8139DLEM	IGVFDS2628PYOH	1	1	AAC7VLGHV		seqspec/sgrna_seq_spec.yaml		no combination		IGVFFI7568FEHI
+IGVFFI5460OSRQ	8e08ada4ba4b86e7e52c05525af159d7	IGVFFI1587BLSX	5d9b02afe94f103e1f76cbe8d36d1227	cell hashing barcode sequencing	IGVFDS0109SCQO	IGVFDS2628PYOH	1	1	AAC7VLGHV		seqspec/hash_seq_spec.yaml		no combination

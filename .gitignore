@@ -1,5 +1,0 @@
-# Do not track example_data FASTQ files
-example_data/fastq_files
-
-# Also ignore any pipeline configuration with the keyword "test"
-configs/*test*

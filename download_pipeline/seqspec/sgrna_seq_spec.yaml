@@ -1,0 +1,112 @@
+!Assay
+seqspec_version: 0.2.0
+assay_id: MULTISEQ_10XV3_Guide
+name: MULTISEQ_10XV3_Guide
+doi: 'XXX'
+date: 15 July 2022
+description: Guide using 10x5'v3
+modalities:
+- guide
+lib_struct: https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium3.html
+sequence_protocol: Not-specified
+sequence_kit: Not-specified
+library_protocol: 10x5'_v3 Guide
+library_kit: Not-specified
+sequence_spec:
+- !Read
+  read_id: guide_R1.fq
+  name: Read 1
+  modality: guide
+  primer_id: r1_primer
+  min_len: 28
+  max_len: 28
+  strand: pos
+- !Read
+  read_id: guide_R2.fq
+  name: Read 2
+  modality: guide
+  primer_id: r2_primer
+  min_len: 83
+  max_len: 83
+  strand: neg
+library_spec:
+- !Region
+  parent_id: null
+  region_id: guide
+  region_type: null
+  name: null
+  sequence_type: null
+  sequence: null
+  min_len: 111
+  max_len: 111
+  onlist: null
+  regions:
+  - !Region
+    parent_id: guide
+    region_id: r1_primer
+    region_type: r1_primer
+    name: r1_primer
+    sequence_type: fixed
+    sequence: null
+    min_len: 0
+    max_len: 0
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: guide
+    region_id: barcode
+    region_type: barcode
+    name: barcode
+    sequence_type: onlist
+    sequence: NNNNNNNNNNNNNNNN
+    min_len: 16
+    max_len: 16
+    onlist: !Onlist
+      location: remote
+      filename: 737K-august-2016.txt
+      md5: f62a276e262fdd85262a889d0f48556b
+    regions: null
+  - !Region
+    parent_id: guide
+    region_id: umi
+    region_type: umi
+    name: umi
+    sequence_type: fixed
+    sequence: NNNNNNNNNNNN
+    min_len: 12
+    max_len: 12
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: guide
+    region_id: cdna
+    region_type: cdna
+    name: cdna
+    sequence_type: random
+    sequence: NNNNNNNNNNNNNNNNNNNN
+    min_len: 20
+    max_len: 20
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: guide
+    region_id: common
+    region_type: common
+    name: common
+    sequence_type: fixed
+    sequence: CAAGTTGATAACGGACTAGCCTTATTTAAACTTGCTATGCTGTTTCCAGCTTAGCTCTTAAAC
+    min_len: 63
+    max_len: 63
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: guide
+    region_id: r2_primer
+    region_type: r2_primer
+    name: r2_primer
+    sequence_type: fixed
+    sequence: null
+    min_len: 0
+    max_len: 0
+    onlist: null
+    regions: null

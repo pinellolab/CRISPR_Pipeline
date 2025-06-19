@@ -1,0 +1,4 @@
+R1_path,R2_path,measurement_sets,Lane,file_modality
+gs://igvf-pertub-seq-pipeline-data/data/fastq_files/IGVFFI7706SWGW.fastq.gz,gs://igvf-pertub-seq-pipeline-data/data/fastq_files/IGVFFI7788FDIR.fastq.gz,IGVFDS2628PYOH,1,gRNA
+gs://igvf-pertub-seq-pipeline-data/data/fastq_files/IGVFFI5460OSRQ.fastq.gz,gs://igvf-pertub-seq-pipeline-data/data/fastq_files/IGVFFI1587BLSX.fastq.gz,IGVFDS2628PYOH,1,hash
+gs://igvf-pertub-seq-pipeline-data/data/fastq_files/IGVFFI1946LEGM.fastq.gz,gs://igvf-pertub-seq-pipeline-data/data/fastq_files/IGVFFI5195OGCL.fastq.gz,IGVFDS2628PYOH,1,scRNA
