@@ -78,8 +78,8 @@ workflow CRISPR_PIPELINE {
         .first()
 
     //guide_design
-    ch_guide_list = ch_guide
-        .map { meta, _fastqs -> meta.ch_guide_list }
+    ch_guide_design = ch_guide
+        .map { meta, _fastqs -> meta.guide_design }
         .unique()
         .first()
 
@@ -91,9 +91,9 @@ workflow CRISPR_PIPELINE {
 
     // Run seqSpecCheck pipeline
     if (params.ENABLE_DATA_HASHING == "true") {
-        seqSpecCheck_pipeline_HASHING(ch_guide.first(), ch_hash.first(), ch_guide_list, ch_barcode_hashtag_map)
+        seqSpecCheck_pipeline_HASHING(ch_guide.first(), ch_hash.first(), ch_guide_design, ch_barcode_hashtag_map)
     } else {
-        seqSpecCheck_pipeline(ch_guide.first(), ch_guide_list)
+        seqSpecCheck_pipeline(ch_guide.first(), ch_guide_design)
     }
 
     prepare_mapping_pipeline(ch_samples)
@@ -110,7 +110,7 @@ workflow CRISPR_PIPELINE {
         ch_guide,
         ch_guide_seqspec,
         ch_barcode_onlist,
-        ch_guide_list,
+        ch_guide_design,
         prepare_mapping_pipeline.out.parsed_covariate_file
         )
 
@@ -131,7 +131,7 @@ workflow CRISPR_PIPELINE {
             mapping_hashing_pipeline.out.concat_anndata_hashing,
             mapping_hashing_pipeline.out.hashing_out_dir,
             prepare_mapping_pipeline.out.covariate_string,
-            ch_guide_list
+            ch_guide_design
             )
 
         evaluation_pipeline (
@@ -165,7 +165,7 @@ workflow CRISPR_PIPELINE {
             mapping_guide_pipeline.out.concat_anndata_guide,
             mapping_guide_pipeline.out.guide_out_dir,
             prepare_mapping_pipeline.out.covariate_string,
-            ch_guide_list
+            ch_guide_design
             )
         evaluation_pipeline (
             process_mudata_pipeline.out.gencode_gtf,

@@ -25,7 +25,7 @@ workflow process_mudata_pipeline {
     concat_anndata_guide
     guide_out_dir
     covariate_string
-    ch_guide_list
+    ch_guide_design
 
     main:
 
@@ -48,7 +48,7 @@ workflow process_mudata_pipeline {
     MuData = CreateMuData(
         Preprocessed_AnnData.filtered_anndata_rna,
         concat_anndata_guide,
-        ch_guide_list,
+        ch_guide_design,
         GTF_Reference.gencode_gtf,
         params.Multiplicity_of_infection,
         params.GUIDE_ASSIGNMENT_capture_method

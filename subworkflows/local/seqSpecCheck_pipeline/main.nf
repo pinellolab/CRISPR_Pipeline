@@ -6,7 +6,7 @@ workflow guideWorkflow {
 
     take:
     ch_guide
-    ch_guide_list
+    ch_guide_design
 
     main:
     ch_guide_split = ch_guide.map { meta, reads ->
@@ -18,7 +18,7 @@ workflow guideWorkflow {
     guide_seqSpecCheck = seqSpecCheck(
         ch_guide_split.map { meta, r1, r2 -> r1 },  // R1 channel
         ch_guide_split.map { meta, r1, r2 -> r2 },  // R2 channel
-        ch_guide_list,
+        ch_guide_design,
         'guide'
     )
 
@@ -30,10 +30,10 @@ workflow guideWorkflow {
 workflow seqSpecCheck_pipeline {
     take:
     ch_guide
-    ch_guide_list
+    ch_guide_design
 
     main:
-    guide = guideWorkflow(ch_guide, ch_guide_list)
+    guide = guideWorkflow(ch_guide, ch_guide_design)
 
     emit:
     guide_seqSpecCheck_plots = guide.guide_seqSpecCheck_plots

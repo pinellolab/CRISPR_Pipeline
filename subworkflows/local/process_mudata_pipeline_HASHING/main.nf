@@ -30,7 +30,7 @@ workflow process_mudata_pipeline_HASHING {
     concat_anndata_hashing
     hashing_out_dir
     covariate_string
-    ch_guide_list
+    ch_guide_design
 
     main:
 
@@ -69,7 +69,7 @@ workflow process_mudata_pipeline_HASHING {
         Preprocessed_AnnData.filtered_anndata_rna,
         concat_anndata_guide,
         Hashing_Concat.concatenated_hashing_demux,
-        ch_guide_list,
+        ch_guide_design,
         GTF_Reference.gencode_gtf,
         params.Multiplicity_of_infection,
         params.GUIDE_ASSIGNMENT_capture_method

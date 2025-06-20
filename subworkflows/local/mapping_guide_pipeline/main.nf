@@ -10,7 +10,7 @@ workflow mapping_guide_pipeline {
     ch_guide
     ch_guide_seqspec
     ch_barcode_onlist
-    ch_guide_list
+    ch_guide_design
     parsed_covariate_file
 
     main:
@@ -20,7 +20,7 @@ workflow mapping_guide_pipeline {
         'guide'
     )
 
-    GuideRef = createGuideRef(ch_guide_list)
+    GuideRef = createGuideRef(ch_guide_design)
 
     MappingOut = mappingGuide(
         ch_guide,
