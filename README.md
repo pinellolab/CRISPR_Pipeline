@@ -98,7 +98,7 @@ INFERENCE_method = 'perturbo'        // or 'sceptre'
 
 Choose and configure your compute profile by updating the relevant sections:
 
-##### 🖥️ **Local Development**
+##### 🖥️ **Local**
 ```groovy
 // Resource limits (adjust based on your machine)
 max_cpus = 8           // Number of CPU cores available
