@@ -130,7 +130,8 @@ workflow CRISPR_PIPELINE {
             mapping_guide_pipeline.out.guide_out_dir,
             mapping_hashing_pipeline.out.concat_anndata_hashing,
             mapping_hashing_pipeline.out.hashing_out_dir,
-            prepare_mapping_pipeline.out.covariate_string
+            prepare_mapping_pipeline.out.covariate_string,
+            ch_guide_list
             )
 
         evaluation_pipeline (
@@ -163,7 +164,8 @@ workflow CRISPR_PIPELINE {
             mapping_rna_pipeline.out.trans_out_dir,
             mapping_guide_pipeline.out.concat_anndata_guide,
             mapping_guide_pipeline.out.guide_out_dir,
-            prepare_mapping_pipeline.out.covariate_string
+            prepare_mapping_pipeline.out.covariate_string,
+            ch_guide_list
             )
         evaluation_pipeline (
             process_mudata_pipeline.out.gencode_gtf,

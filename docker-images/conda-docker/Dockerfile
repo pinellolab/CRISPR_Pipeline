@@ -1,7 +1,5 @@
 FROM condaforge/miniforge3:24.11.3-2
 
-# Set environment variables
-ENV PATH="/usr/local/bin:$PATH"
 # Set NUMBA cache directory to /tmp
 ENV NUMBA_CACHE_DIR=/tmp 
 
@@ -31,8 +29,8 @@ RUN chmod +x /usr/local/bin/*
 # Symlink kallisto and bustools binaries
 RUN ln --force -s /opt/conda/envs/nfenv/lib/python3.12/site-packages/kb_python/bins/linux/*/{kallisto,bustools} /opt/conda/envs/nfenv/bin/
 
+# Set environment variables
+ENV PATH="/opt/conda/envs/nfenv/bin:/usr/local/bin:$PATH"
+
 # Set the default command
 CMD ["/bin/bash", "--login"]
-
-# And the entrypoint
-ENTRYPOINT ["mamba", "run", "--no-capture-output", "-n", "nfenv"]
