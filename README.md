@@ -134,7 +134,9 @@ google_region = 'us-central1'  // Choose your preferred region
 max_cpus = 128
 max_memory = '512.GB'
 
-// Run with: nextflow run main.nf -profile google
+// Run with (see more in GCP_user_notebook.ipynb): 
+// export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/pipeline-service-key.json"
+// nextflow run main.nf -profile google 
 ```
 
 #### 3. Container Configuration
