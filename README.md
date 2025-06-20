@@ -86,11 +86,6 @@ Update the pipeline-specific parameters in the `params` section, for example:
 // Input data paths
 input = "/path/to/your/samplesheet.csv"
 
-// Reference data (update paths as needed)
-METADATA_sgRNA = "/path/to/guide_metadata.tsv" 
-METADATA_hash = "/path/to/hash_metadata.tsv"
-SEQUENCE_PARSING_barcode_list = "/path/to/barcode_list.txt"
-
 // Analysis parameters (adjust for your experiment)
 QC_min_genes_per_cell = 500
 QC_min_cells_per_gene = 3
