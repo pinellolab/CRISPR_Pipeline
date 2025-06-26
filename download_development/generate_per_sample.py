@@ -38,6 +38,8 @@ REQUIREMENTS:
     - Must be of `content_type`: "reads"
     - Must have `illumina_read_type`: "R1" and "R2"
     - Must **not** have `status` in ["deleted", "revoked"]
+    - Must have a valid v0.3.0 seqspec linked.
+    - All sequence files to be processed together should have the same seqspec read index per modality.
     - If `seqspecs` are missing, you must provide fallback YAML paths using CLI flags:
         --rna_seqspec, --sgrna_seqspec, --hash_seqspec
 
