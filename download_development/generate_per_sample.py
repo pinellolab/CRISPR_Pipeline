@@ -26,13 +26,13 @@ REQUIREMENTS:
 
 3. Auxiliary Sets:
     - Must include a `measurement_sets` link to its associated measurement set.
-    - If `file_set_type` is `cell hashing barcode sequencing`, the `barcode_map` is required.
+    - If `file_set_type` is `cell hashing barcode sequencing`, the `barcode_map`, i.e. the mapping between hashtags and barcodes is required.
 
 4. Construct Library Set:
-    - Must contain **exactly one** `integrated_content_file` with:
+    - Must contain **exactly one** file in `integrated_content_files` with:
         - `content_type`: "guide RNA sequences"
         - `status`: one of ["released", "in progress"]
-    - Deprecated guide files must be marked as "revoked", "archived", or "deleted".
+    - Deprecated guide files must be marked as "revoked", "archived", "deleted", or "replaced".
 
 5. Sequence Files:
     - Must be of `content_type`: "reads"
