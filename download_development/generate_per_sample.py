@@ -31,14 +31,18 @@ REQUIREMENTS:
 4. Construct Library Set:
     - Must contain **exactly one** file in `integrated_content_files` with:
         - `content_type`: "guide RNA sequences"
-        - `status`: one of ["released", "in progress"]
+        - `status`: one of ["in progress", "released", "preview"]
     - Deprecated guide files must be marked as "revoked", "archived", "deleted", or "replaced".
 
 5. Sequence Files:
     - Must be of `content_type`: "reads"
     - Must have `illumina_read_type`: "R1" and "R2"
     - Must **not** have `status` in ["deleted", "revoked"]
-    - Must have a valid v0.3.0 seqspec linked.
+    - `seqspecs`:
+        - Must have a seqspec for each modality i.e. scRNA-seq, gRNA, hashing
+        - seqspec must be linked to its sequence files through `seqspec_of`
+        - seqspec `status` must be one of ["in progress", "released", "preview"]
+        - seqspec must be validated i.e. `upload_status` = validated
     - All sequence files to be processed together should have the same seqspec read index per modality.
     - If `seqspecs` are missing, you must provide fallback YAML paths using CLI flags:
         --rna_seqspec, --sgrna_seqspec, --hash_seqspec
@@ -111,7 +115,7 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
         for file in integrated_content_files
         if (
             file['content_type'] == 'guide RNA sequences'
-            and file.get('status') in ['released', 'in progress']
+            and file.get('status') in ['in progress', 'preview', 'released']
         )
     ]    
     if len(guide_rna_sequences) > 1:
@@ -196,8 +200,14 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
 
             # Handle seqspec fallback
             seqspecs = read1.get('seqspecs', [])
-            if seqspecs and seqspecs[0]:
-                seqspec_path = seqspecs[0].split('/')[-2]
+            seqspec_path = ''
+            for seqspec in seqspecs:
+                seqspec_file_object = requests.get(f"{PORTAL}{seqspec}/@@object?format=json", auth=auth).json()
+                if seqspec_file_object.get('upload_status') != 'validated' or seqspec_file_object.get('status') not in ['in progress', 'preview', 'released']:
+                    continue
+                else:
+                    seqspec_path = seqspec.split('/')[-2]
+                
             else:
                 seqspec_path = modality_to_fallback_seqspec(
                     modality, hash_seqspec, rna_seqspec, sgrna_seqspec
