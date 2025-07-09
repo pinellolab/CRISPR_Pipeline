@@ -8,18 +8,60 @@ from collections import Counter
 import numpy as np  
 import os
 
+import gzip
+
+def is_gzipped(filename):
+    """Check if a file is gzipped by reading its magic number."""
+    with open(filename, 'rb') as f:
+        return f.read(2) == b'\x1f\x8b'
+
+def open_file(filename, mode='rt'):
+    """Open file with gzip if needed."""
+    if is_gzipped(filename):
+        return gzip.open(filename, mode)
+    else:
+        return open(filename, mode)
+
 def readFastq(filename, max_reads):
-    """Reads a FASTQ file and returns sequences, up to a maximum of max_reads."""
+    """
+    Reads a FASTQ or FASTA file (optionally gzipped) and returns sequences.
+    filetype: 'fastq' or 'fasta'
+    """
     sequences = []
-    with gzip.open(filename, 'rt') as fh:
-        while len(sequences) < max_reads:
-            header = fh.readline()  # Read the header line
-            if not header:
-                break  # End of file
-            seq = fh.readline().rstrip()  # Read base sequence
-            fh.readline()  # Skip the '+' line
-            fh.readline()  # Skip the quality line
-            sequences.append(seq)
+
+
+
+    if filename.endswith('.gz'):
+        filetype =  filename.split('.')[-2]
+    else:
+        filetype = filename.split('.')[-1]
+
+    with open_file(filename) as fh:
+        if filetype == 'fastq':
+            while len(sequences) < max_reads:
+                header = fh.readline()
+                if not header:
+                    break
+                seq = fh.readline().rstrip()
+                fh.readline()  # skip '+'
+                fh.readline()  # skip quality
+                sequences.append(seq)
+        elif filetype == 'fasta':
+            seq = ''
+            for line in fh:
+                line = line.strip()
+                if line.startswith('>'):
+                    if seq:
+                        sequences.append(seq)
+                        if len(sequences) >= max_reads:
+                            break
+                        seq = ''
+                else:
+                    seq += line
+            if seq and len(sequences) < max_reads:
+                sequences.append(seq)
+        else:
+            raise ValueError("Unsupported filetype: use 'fastq' or 'fasta'")
     return sequences
 
 def fastq_sequence_plot(seqs, file_name, ax):
@@ -90,8 +132,21 @@ def main():
 
     all_r2_tables = []
     for i, (r1, r2) in enumerate(zip(read1, read2)):
-        read1_name = os.path.basename(r1).replace('.fastq.gz', '')
-        read2_name = os.path.basename(r2).replace('.fastq.gz', '')
+        
+        
+        if r1.endswith('.gz'):
+            case_gz = '.gz'
+            filetype_use = r1.split('.')[-2]
+
+        else:
+            case_gz = ''
+            filetype_use = r1.split('.')[-1]
+
+
+        use_gz_sub = '.' + filetype_use.lower() + case_gz.lower()
+
+        read1_name = os.path.basename(r1).replace(use_gz_sub, '')
+        read2_name = os.path.basename(r2).replace(use_gz_sub, '')
 
         # Process read1
         sequences_r1 = readFastq(r1, max_reads)
