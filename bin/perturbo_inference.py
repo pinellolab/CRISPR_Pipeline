@@ -19,6 +19,7 @@ def run_perturbo(
     num_epochs=100,  # (max) number of epochs for training
     gene_modality_name="gene",  # name of the gene modality in the MuData object
     guide_modality_name="guide",  # name of the guide modality in the MuData
+    test_all_pairs=False,  # whether to test all pairs or only those in pairs_to_test
 ):
     mdata = md.read(mdata_input_fp)
     mdata[gene_modality_name].obs = (
@@ -107,7 +108,7 @@ def run_perturbo(
         library_size_key="total_gene_umis",
         continuous_covariates_keys=["log1p_total_guide_umis"],
         guide_by_element_key="intended_targets",
-        gene_by_element_key="intended_targets",
+        gene_by_element_key="intended_targets" if test_all_pairs else None,
         modalities={
             "rna_layer": gene_modality_name,
             "perturbation_layer": guide_modality_name,
@@ -233,6 +234,14 @@ def main():
         default="guide",
         help="Name of the guide modality in the MuData object (default: 'guide')",
     )
+    parser.add_argument(
+        "--test_all_pairs",
+        action="store_true",
+        help="Whether to test all pairs or only those in pairs_to_test (default: False)",
+    )
+
+    # Parse the arguments
+    # --- IGNORE ---
 
     args = parser.parse_args()
     run_perturbo(
@@ -248,6 +257,7 @@ def main():
         num_epochs=args.num_epochs,
         gene_modality_name=args.gene_modality_name,
         guide_modality_name=args.guide_modality_name,
+        test_all_pairs=args.test_all_pairs,
     )
 
 
