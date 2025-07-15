@@ -6,6 +6,7 @@ process inference_perturbo {
     input:
     path mudata
     val inference_method
+    val efficiency_mode
 
     output:
     path "inference_mudata.h5mu", emit: inference_mudata
@@ -14,7 +15,7 @@ process inference_perturbo {
 
     script:
         """
-        perturbo_inference.py ${mudata} inference_mudata.h5mu
-        export_output_single.py --mudata inference_mudata.h5mu --inference_method ${inference_method}
+        perturbo_inference.py ${mudata} inference_mudata.h5mu --efficiency_mode ${efficiency_mode}
+        export_output_single.py --mudata inference_mudata.h5mu --inference_method ${inference_method} 
         """
 }

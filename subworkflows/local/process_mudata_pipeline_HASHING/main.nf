@@ -111,11 +111,11 @@ workflow process_mudata_pipeline_HASHING {
         GuideInference = inference_mudata(TestResults.test_results, PrepareInference.mudata_inference_input, params.INFERENCE_method)
     }
     else if (params.INFERENCE_method == "perturbo"){
-        GuideInference = inference_perturbo(PrepareInference.mudata_inference_input, params.INFERENCE_method)
+        GuideInference = inference_perturbo(PrepareInference.mudata_inference_input, params.INFERENCE_method, params.Multiplicity_of_infection)
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
         SceptreResults = inference_sceptre(PrepareInference.mudata_inference_input, covariate_string)
-        PerturboResults = inference_perturbo(PrepareInference.mudata_inference_input,  "perturbo")
+        PerturboResults = inference_perturbo(PrepareInference.mudata_inference_input,  "perturbo", params.Multiplicity_of_infection)
         GuideInference = mergedResults(SceptreResults.test_results, PerturboResults.inference_mudata)
     }
 

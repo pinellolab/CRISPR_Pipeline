@@ -10,7 +10,7 @@ def run_perturbo(
     mdata_input_fp,
     mdata_output_fp,
     fit_guide_efficacy=True,  # whether to fit guide efficacy (if false, overrides efficiency_mode)
-    efficiency_mode="auto",  # can be "mixture" (for low MOI only), "scaled", or "auto" (mixture for low MOI, scaled for high MOI)
+    efficiency_mode="auto", #mapping from low-> mixgufd and high -> scaled# can be "mixture" (for low MOI only), "scaled", or "auto" (mixture for low MOI, scaled for high MOI)
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
     batch_size=512,  # batch size for training
     early_stopping=True,  # whether to use early stopping
@@ -39,6 +39,10 @@ def run_perturbo(
 
     mdata[guide_modality_name].X = mdata[guide_modality_name].layers["guide_assignment"]
 
+    efficiency_mode  = {'auto':'auto',
+                         'low': 'mixture', 
+                         'high': 'scaled' }[efficiency_mode]
+    
     if efficiency_mode == "auto":
         max_guides_per_cell = mdata[guide_modality_name].X.sum(axis=1).max()
         if max_guides_per_cell > 1:

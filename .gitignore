@@ -1,0 +1,7 @@
+/.nextflow
+/work
+.nextflow.log*
+*.img
+inference_mudata.h5mu
+per_element_output.tsv
+per_guide_output.tsv
