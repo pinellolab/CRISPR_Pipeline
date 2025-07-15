@@ -10,7 +10,7 @@ def run_perturbo(
     mdata_input_fp,
     mdata_output_fp,
     fit_guide_efficacy=True,  # whether to fit guide efficacy (if false, overrides efficiency_mode)
-    efficiency_mode="mixture",  # can be "mixture" (for low MOI) or "scaled" (low or high MOI)
+    efficiency_mode="scaled",  # can be "mixture" (for low MOI) or "scaled" (low or high MOI)
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
     batch_size=512,  # batch size for training
     early_stopping=True,  # whether to use early stopping
