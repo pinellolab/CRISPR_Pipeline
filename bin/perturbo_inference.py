@@ -118,6 +118,7 @@ def run_perturbo(
         mdata_subset,
         likelihood="nb",
         efficiency_mode=efficiency_mode,
+        fit_guide_efficacy=fit_guide_efficacy,
     )
 
     model.train(
@@ -127,7 +128,6 @@ def run_perturbo(
         accelerator=accelerator,
         early_stopping=early_stopping,
         early_stopping_patience=early_stopping_patience,
-        fit_guide_efficacy=fit_guide_efficacy,
         early_stopping_min_delta=1e-5,
         early_stopping_monitor="elbo_train",
     )
@@ -179,9 +179,9 @@ def main():
     parser.add_argument(
         "--efficiency_mode",
         type=str,
-        choices=["mixture", "scaled"],
-        default="scaled",
-        help="Efficiency mode for the model (default: scaled)",
+        choices=["mixture", "scaled", "auto"],
+        default="auto",
+        help="Efficiency mode for the model (default: auto)",
     )
 
     parser.add_argument(
