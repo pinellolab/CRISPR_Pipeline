@@ -17,25 +17,29 @@ def run_perturbo(
     early_stopping_patience=5,  # patience for early stopping
     lr=0.01,  # learning rate for training
     num_epochs=100,  # (max) number of epochs for training
+    gene_modality_name="gene",  # name of the gene modality in the MuData object
+    guide_modality_name="guide",  # name of the guide modality in the MuData
 ):
     mdata = md.read(mdata_input_fp)
-    mdata["gene"].obs = (
+    mdata[gene_modality_name].obs = (
         mdata.obs.join(
-            mdata["gene"].obs.drop(columns=mdata.obs.columns, errors="ignore")
+            mdata[gene_modality_name].obs.drop(
+                columns=mdata.obs.columns, errors="ignore"
+            )
         )
         .join(
-            mdata["guide"].obs.drop(
-                columns=mdata.obs.columns.union(mdata["gene"].obs.columns),
+            mdata[guide_modality_name].obs.drop(
+                columns=mdata.obs.columns.union(mdata[gene_modality_name].obs.columns),
                 errors="ignore",
             )
         )
         .assign(log1p_total_guide_umis=lambda x: np.log1p(x["total_guide_umis"]))
     )
 
-    mdata["guide"].X = mdata["guide"].layers["guide_assignment"]
+    mdata[guide_modality_name].X = mdata[guide_modality_name].layers["guide_assignment"]
 
     if efficiency_mode == "auto":
-        max_guides_per_cell = mdata["guide"].X.sum(axis=1).max()
+        max_guides_per_cell = mdata[guide_modality_name].X.sum(axis=1).max()
         if max_guides_per_cell > 1:
             efficiency_mode = "scaled"
         else:
@@ -54,11 +58,11 @@ def run_perturbo(
     )
 
     # pivot the data
-    mdata["gene"].varm["intended_targets"] = (
+    mdata[gene_modality_name].varm["intended_targets"] = (
         aggregated_df.pivot(
             index="gene_id", columns="intended_target_name", values="value"
         )
-        .reindex(mdata["gene"].var_names)
+        .reindex(mdata[gene_modality_name].var_names)
         .fillna(0)
     )
 
@@ -67,10 +71,10 @@ def run_perturbo(
     )
 
     intended_targets_df = pd.get_dummies(
-        mdata["guide"].var["intended_target_name"]
+        mdata[guide_modality_name].var["intended_target_name"]
     ).astype(float)
 
-    mdata["guide"].varm["intended_targets"] = intended_targets_df[
+    mdata[guide_modality_name].varm["intended_targets"] = intended_targets_df[
         mdata.uns["intended_target_names"]
     ]
 
@@ -79,11 +83,11 @@ def run_perturbo(
     tested_guides = pairs_to_test_df["guide_id"].unique()
     tested_genes = pairs_to_test_df["gene_id"].unique()
 
-    rna_subset = mdata["gene"][:, tested_genes]
-    grna_feature_ids = mdata["guide"].var["guide_id"].isin(tested_guides)
-    grna_subset = mdata["guide"][:, grna_feature_ids]
+    rna_subset = mdata[gene_modality_name][:, tested_genes]
+    grna_feature_ids = mdata[guide_modality_name].var["guide_id"].isin(tested_guides)
+    grna_subset = mdata[guide_modality_name][:, grna_feature_ids]
 
-    mdata_dict = {"gene": rna_subset, "guide": grna_subset}
+    mdata_dict = {gene_modality_name: rna_subset, guide_modality_name: grna_subset}
     if "hashing" in mdata.mod.keys():
         mdata_dict["hashing"] = mdata["hashing"]
     mdata_subset = md.MuData(mdata_dict)
@@ -99,8 +103,8 @@ def run_perturbo(
         guide_by_element_key="intended_targets",
         gene_by_element_key="intended_targets",
         modalities={
-            "rna_layer": "gene",
-            "perturbation_layer": "guide",
+            "rna_layer": gene_modality_name,
+            "perturbation_layer": guide_modality_name,
         },
     )
 
@@ -162,7 +166,8 @@ def main():
     parser.add_argument("mdata_output_fp", type=str, help="Output file path for MuData")
     parser.add_argument(
         "--fit_guide_efficacy",
-        action="store_true",
+        type=bool,
+        default=True,
         help="Whether to fit guide efficacy (overrides efficiency_mode if false)",
     )
     parser.add_argument(
@@ -188,7 +193,8 @@ def main():
     )
     parser.add_argument(
         "--early_stopping",
-        action="store_true",
+        type=bool,
+        default=True,
         help="Whether to use early stopping during training",
     )
     parser.add_argument(
@@ -209,6 +215,18 @@ def main():
         default=100,
         help="Maximum number of epochs for training (default: 100)",
     )
+    parser.add_argument(
+        "--gene_modality_name",
+        type=str,
+        default="gene",
+        help="Name of the gene modality in the MuData object (default: 'gene')",
+    )
+    parser.add_argument(
+        "--guide_modality_name",
+        type=str,
+        default="guide",
+        help="Name of the guide modality in the MuData object (default: 'guide')",
+    )
 
     args = parser.parse_args()
     run_perturbo(
@@ -222,6 +240,8 @@ def main():
         early_stopping_patience=args.early_stopping_patience,
         lr=args.lr,
         num_epochs=args.num_epochs,
+        gene_modality_name=args.gene_modality_name,
+        guide_modality_name=args.guide_modality_name,
     )
 
 
