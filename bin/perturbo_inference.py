@@ -10,7 +10,7 @@ def run_perturbo(
     mdata_input_fp,
     mdata_output_fp,
     fit_guide_efficacy=True,  # whether to fit guide efficacy (if false, overrides efficiency_mode)
-    efficiency_mode="scaled",  # can be "mixture" (for low MOI) or "scaled" (low or high MOI)
+    efficiency_mode="auto",  # can be "mixture" (for low MOI only), "scaled", or "auto" (mixture for low MOI, scaled for high MOI)
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
     batch_size=512,  # batch size for training
     early_stopping=True,  # whether to use early stopping
@@ -33,6 +33,14 @@ def run_perturbo(
     )
 
     mdata["guide"].X = mdata["guide"].layers["guide_assignment"]
+
+    if efficiency_mode == "auto":
+        max_guides_per_cell = mdata["guide"].X.sum(axis=1).max()
+        if max_guides_per_cell > 1:
+            efficiency_mode = "scaled"
+        else:
+            efficiency_mode = "mixture"
+
     pairs_to_test_df = pd.DataFrame(mdata.uns["pairs_to_test"])
     mdata.uns["intended_target_names"] = sorted(
         pd.unique(pairs_to_test_df["intended_target_name"])
