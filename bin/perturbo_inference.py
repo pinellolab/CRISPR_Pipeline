@@ -108,7 +108,7 @@ def run_perturbo(
         library_size_key="total_gene_umis",
         continuous_covariates_keys=["log1p_total_guide_umis"],
         guide_by_element_key="intended_targets",
-        gene_by_element_key="intended_targets" if test_all_pairs else None,
+        gene_by_element_key="intended_targets" if not test_all_pairs else None,
         modalities={
             "rna_layer": gene_modality_name,
             "perturbation_layer": guide_modality_name,
