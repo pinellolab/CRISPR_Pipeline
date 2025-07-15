@@ -42,8 +42,14 @@ def run_perturbo(
         max_guides_per_cell = mdata[guide_modality_name].X.sum(axis=1).max()
         if max_guides_per_cell > 1:
             efficiency_mode = "scaled"
+            print(
+                "Using 'scaled' efficiency mode due to high MOI (max guides per cell > 1)."
+            )
         else:
             efficiency_mode = "mixture"
+            print(
+                "Using 'mixture' efficiency mode due to low MOI (max guides per cell <= 1)."
+            )
 
     pairs_to_test_df = pd.DataFrame(mdata.uns["pairs_to_test"])
     mdata.uns["intended_target_names"] = sorted(
