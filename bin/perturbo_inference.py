@@ -121,7 +121,7 @@ def run_perturbo(
     )
 
     model.train(
-        num_epochs=num_epochs,
+        num_epochs,  # max number of epochs
         lr=lr,
         batch_size=batch_size,
         accelerator=accelerator,
