@@ -1,7 +1,6 @@
-
 process createDashboard {
     cache 'lenient'
-    publishDir './pipeline_dashboard'
+    publishDir './pipeline_dashboard', mode: 'copy'
 
     input:
         path guide_seqSpecCheck_plots
@@ -23,20 +22,44 @@ process createDashboard {
 
     script:
         """
-        echo "Guide seqSpec plots directory: ${guide_seqSpecCheck_plots}"
-        echo "Transcriptome output directory: ${ks_transcripts_out_dir_collected}"
-        echo "Guide output directory: ${ks_guide_out_dir_collected}"
-        echo "Figures directory: ${figures_dir}"
-        echo "Evaluation output directory: ${evaluation_output_dir}"
-        echo "css directory: ${css}"
-        echo "js directory: ${js}"
-        echo "svg directory: ${svg}"
+        echo "=== RENAMING INPUT DIRECTORIES ==="
+        [[ -e guide_seqSpec_plots ]] && mv guide_seqSpec_plots input_guide_seqSpec_plots
+        [[ -e figures ]] && mv figures input_figures
+        [[ -e evaluation_output ]] && mv evaluation_output input_evaluation_output
+        [[ -e svg ]] && mv svg input_svg
+        [[ -e ${mudata} ]] && mv ${mudata} input_mudata.h5mu
+
+        # Create new output directories with actual content
+        echo "=== CREATING OUTPUT DIRECTORIES ==="
+        mkdir -p guide_seqSpec_plots figures evaluation_output svg
+
+        # Copy content from renamed inputs to new outputs
+        if [[ -L input_guide_seqSpec_plots ]]; then
+            cp -rL input_guide_seqSpec_plots/* guide_seqSpec_plots/ 2>/dev/null || true
+        fi
+        if [[ -L input_figures ]]; then
+            cp -rL input_figures/* figures/ 2>/dev/null || true
+        fi
+        if [[ -L input_evaluation_output ]]; then
+            cp -rL input_evaluation_output/* evaluation_output/ 2>/dev/null || true
+        fi
+        if [[ -L input_svg ]]; then
+            cp -rL input_svg/* svg/ 2>/dev/null || true
+        fi
+        if [[ -f input_mudata.h5mu ]]; then
+            cp -L input_mudata.h5mu inference_mudata.h5mu
+        fi
 
         export MPLCONFIGDIR="./tmp/mplconfigdir"
-        process_json.py --output_dir json_dir
-        create_dashboard_plots.py --mudata ${mudata} --output_dir figures
-        create_dashboard_df.py --json_dir json_dir --guide_fq_tbl ${guide_fq_tbl} --mudata ${mudata} --gene_ann ${gene_ann} --gene_ann_filtered ${gene_ann_filtered} --guide_ann ${guide_ann}
-        create_dashboard.py --input all_df.pkl
-        """
+        mkdir -p \${MPLCONFIGDIR}
 
+        # Run scripts using the renamed input files
+        process_json.py --output_dir json_dir
+        create_dashboard_plots.py --mudata input_mudata.h5mu --output_dir figures
+        create_dashboard_df.py --json_dir json_dir --guide_fq_tbl ${guide_fq_tbl} --mudata input_mudata.h5mu --gene_ann ${gene_ann} --gene_ann_filtered ${gene_ann_filtered} --guide_ann ${guide_ann}
+        create_dashboard.py --input all_df.pkl
+
+        echo "=== FINAL OUTPUT SIZES ==="
+        du -sh guide_seqSpec_plots figures evaluation_output svg *.html *.h5mu 2>/dev/null || true
+        """
 }
