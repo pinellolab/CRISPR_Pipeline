@@ -15,7 +15,10 @@ process mergedResults {
 
     script:
         """
-        export_output_multiple.py --sceptre_result ${test_result} --perturbo_mudata ${mudata}
+        # Rename input to avoid conflicts
+        [[ -e ${mudata} ]] && mv ${mudata} input_mudata.h5mu
+
+        export_output_multiple.py --sceptre_result ${test_result} --perturbo_mudata input_mudata.h5mu
         """
 
 }

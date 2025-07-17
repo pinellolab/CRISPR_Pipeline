@@ -14,12 +14,12 @@ process inference_sceptre {
 
     cat <<EOF > args.txt
     ${mudata_fp}
-    ${params.side}
-    ${params.grna_integration_strategy}
-    ${params.resampling_approximation}
-    ${params.control_group}
-    ${params.resampling_mechanism}
-    ${params.formula_object}
+    ${params.INFERENCE_SCEPTRE_side}
+    ${params.INFERENCE_SCEPTRE_grna_integration_strategy}
+    ${params.INFERENCE_SCEPTRE_resampling_approximation}
+    ${params.INFERENCE_SCEPTRE_control_group}
+    ${params.INFERENCE_SCEPTRE_resampling_mechanism}
+    ${params.INFERENCE_SCEPTRE_formula_object}
     \$cov_string
     EOF
 
