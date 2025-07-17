@@ -1,6 +1,7 @@
 process inference_mudata {
     cache 'lenient'
-    publishDir './pipeline_outputs'
+    publishDir "${params.outdir ?: '.'}/pipeline_outputs", mode: 'copy'
+
 
     input:
     path test_result

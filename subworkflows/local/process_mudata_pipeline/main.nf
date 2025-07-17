@@ -14,8 +14,11 @@ include { prepare_all_guide_inference } from '../../../modules/local/prepare_all
 include { prepare_user_guide_inference } from '../../../modules/local/prepare_user_guide_inference'
 include { inference_sceptre } from '../../../modules/local/inference_sceptre'
 include { inference_perturbo } from '../../../modules/local/inference_perturbo'
+include { inference_perturbo as inference_perturbo_trans } from '../../../modules/local/inference_perturbo'
 include { inference_mudata } from '../../../modules/local/inference_mudata'
 include { mergedResults } from '../../../modules/local/mergedResults'
+include { publishFiles } from '../../../modules/local/publishFiles'
+include { mergeMudata } from '../../../modules/local/mergeMudata'
 
 workflow process_mudata_pipeline {
 
@@ -86,6 +89,17 @@ workflow process_mudata_pipeline {
             Mudata_concat.concat_mudata,
             GTF_Reference.gencode_gtf
         )}
+    else if (params.INFERENCE_target_guide_pairing_strategy == 'default') {
+        PrepareInference_cis = prepare_guide_inference(
+            Mudata_concat.concat_mudata,
+            GTF_Reference.gencode_gtf,
+            params.INFERENCE_max_target_distance_bp
+        )
+        PrepareInference_trans = prepare_all_guide_inference(
+            Mudata_concat.concat_mudata,
+            GTF_Reference.gencode_gtf
+        )
+    }
 
     if (params.INFERENCE_method == "sceptre"){
         TestResults = inference_sceptre(PrepareInference.mudata_inference_input, covariate_string)
@@ -98,6 +112,37 @@ workflow process_mudata_pipeline {
         SceptreResults = inference_sceptre(PrepareInference.mudata_inference_input, covariate_string)
         PerturboResults = inference_perturbo(PrepareInference.mudata_inference_input,  "perturbo", params.Multiplicity_of_infection)
         GuideInference = mergedResults(SceptreResults.test_results, PerturboResults.inference_mudata)
+    }
+    else if (params.INFERENCE_method == "default"){
+        if (params.INFERENCE_target_guide_pairing_strategy != 'default') {
+            error "INFERENCE_method='default' requires INFERENCE_target_guide_pairing_strategy='default'"
+        }
+        // Process cis results
+        SceptreResults_cis = inference_sceptre(PrepareInference_cis.mudata_inference_input, covariate_string)
+        PerturboResults_cis = inference_perturbo(PrepareInference_cis.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
+        GuideInference_cis = mergedResults(SceptreResults_cis.test_results, PerturboResults_cis.inference_mudata)
+        // Process trans results
+        GuideInference_trans = inference_perturbo_trans(PrepareInference_trans.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
+
+        // Rename tsv outputs to avoid conflicts
+        cis_per_element = GuideInference_cis.per_element_output.map { file -> file.copyTo(file.parent.resolve("cis-${file.name}")) }
+        cis_per_guide = GuideInference_cis.per_guide_output.map { file -> file.copyTo(file.parent.resolve("cis-${file.name}")) }
+
+        trans_per_element = GuideInference_trans.per_element_output.map { file -> file.copyTo(file.parent.resolve("trans-${file.name}")) }
+        trans_per_guide = GuideInference_trans.per_guide_output.map { file -> file.copyTo(file.parent.resolve("trans-${file.name}")) }
+
+        PublishFiles = publishFiles(cis_per_element, cis_per_guide, trans_per_element, trans_per_guide)
+
+        // Rename h5mu outputs to avoid conflicts
+        cis_file = GuideInference_cis.inference_mudata.map { file ->
+            file.copyTo(file.parent.resolve('cis_inference_mudata.h5mu'))
+        }
+        trans_file = GuideInference_trans.inference_mudata.map { file ->
+            file.copyTo(file.parent.resolve('trans_inference_mudata.h5mu'))
+        }
+
+        GuideInference = mergeMudata(cis_file, trans_file)
+
     }
 
 

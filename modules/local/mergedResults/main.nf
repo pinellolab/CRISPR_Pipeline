@@ -1,7 +1,7 @@
 
 process mergedResults {
     cache 'lenient'
-    publishDir './pipeline_outputs'
+    publishDir './pipeline_outputs', mode: 'copy', overwrite: true
 
     input:
     path test_result
