@@ -1,0 +1,530 @@
+/* Root variables for layout dimensions */
+:root {
+    --side-bar-width: 200px;
+    --content-padding: 10px;
+    --content-margin: 5px; 
+}
+
+/* Base styling */
+body { 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+    background-color: #f4f4f4; 
+    color: #333; 
+    margin: 0;
+    padding: 0;
+}
+
+/* Layout structure */
+.dashboard-container {
+    display: flex;
+    flex-direction: row;
+}
+
+/* Sidebar Layout */
+.sidebar { 
+    width: var(--side-bar-width); 
+    height: 100vh; 
+    background-color: #253546; 
+    padding: 20px; 
+    position: fixed; 
+    overflow-y: auto; 
+    color: white; 
+}
+
+/* Adjusted content spacing */
+.content-wrapper {
+    flex: 1;
+    margin-left: var(--side-bar-width); /* Reduced space between sidebar and content */
+    width: calc(100% - var(--side-bar-width));
+}
+
+.content-header {
+    position: sticky;
+    top: 0;
+    background-color: #f4f4f4;
+    padding: 20px var(--content-padding);
+    z-index: 1000;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-left: var(--side-bar-width); 
+    width: calc(100% - var(--side-bar-width));
+    box-sizing: border-box;
+}
+
+.content { 
+    flex: 1;
+    margin-left: var(--side-bar-width); 
+    padding: var(--content-padding);
+    transition: margin-left 0.3s ease, padding 0.3s ease;
+    width: calc(100% - var(--side-bar-width));
+    box-sizing: border-box;
+}
+
+/* Filter and Sort containers */
+.filter-sort-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 20px;
+}
+
+#filter-input {
+    flex-grow: 1;
+    margin-right: 10px;
+    padding: 5px;
+}
+
+#sort-select {
+    padding: 5px;
+}
+
+/* Tab styling */
+.tablinks { 
+    width: 100%; 
+    margin-bottom: 10px; 
+    background-color: #2c3e50; 
+    color: white; 
+    padding: 15px; 
+    text-align: left; 
+    border: none; 
+    outline: none; 
+    cursor: pointer; 
+}
+
+.tablinks:hover, .tablinks.active { 
+    background-color: #1abc9c; 
+    color: white; 
+}
+
+.tabcontent { 
+    display: none; 
+    padding: 20px; 
+}
+
+/* Card layout */
+.flex-container { 
+    display: flex; 
+    flex-wrap: wrap; 
+    gap: 40px;
+    justify-content: flex-start; 
+}
+
+.card { 
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2); 
+    transition: 0.3s; 
+    width: calc(33.33% - 20px); 
+    padding: 20px; 
+    background: white; 
+    border-radius: 10px; 
+}
+
+.card:nth-child(3n) { 
+    margin-right: 0; 
+}
+
+.card:hover { 
+    box-shadow: 0 8px 16px rgba(0,0,0,0.5); 
+}
+
+.highlight { 
+    font-size: 24px; 
+    color: red; 
+}
+
+/* Image and Table styling */
+img { 
+    width: 100%; 
+    max-height: 200px; 
+    object-fit: cover; 
+}
+
+table { 
+    width: 100%; 
+    margin-top: 10px; 
+    border-collapse: collapse; 
+}
+
+th, td { 
+    border: 2px solid #ddd; 
+    padding: 8px; 
+    text-align: center; 
+}
+
+th { 
+    font-size: 14px;
+    background-color: #1abc9c; 
+    color: white; 
+}
+
+td { 
+    background-color: white; 
+    font-size: 12px;
+}
+
+tr:hover { 
+    background-color: #ddd; 
+}
+
+/* Settings panel */
+.settings-panel {
+    background-color: #f1f1f1;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+}
+
+.settings-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.setting-item {
+    display: flex;
+    align-items: center;
+}
+
+.setting-item input[type="checkbox"] {
+    margin-right: 5px;
+}
+
+.setting-item select {
+    margin-left: 5px;
+}
+
+/* Button styling */
+.toggle-button {
+    background-color: #f1f1f1;
+    border: 1px solid #d3d3d3;
+    padding: 5px;
+    cursor: pointer;
+    border-radius: 4px;
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background-color 0.3s ease;
+    margin: 10px;
+    flex-shrink: 0; /* Prevent button from shrinking */
+    position: relative;
+}
+
+.toggle-button:hover {
+    background-color: #e1e1e1;
+}
+
+/* Active button styling */
+.toggle-button.active {
+    background-color: #1abc9c;
+    color: white;
+    border-color: #1abc9c;
+}
+
+.toggle-button img {
+    width: 20px;
+    height: 20px;
+    position: absolute; /* Ensure precise centering */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%); /* Center the image precisely */
+    display: block; /* Remove any default inline spacing */
+}
+
+/* Pagination styling */
+.pagination {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.pagination button {
+    margin: 0 5px;
+    padding: 5px 10px;
+    cursor: pointer;
+    border: none;
+    background-color: #f4f4f4;
+    color: #333;
+    border-radius: 2px;
+}
+
+.pagination button:hover {
+    background-color: #1abc9c;
+    color: white;
+}
+
+.pagination button.active {
+    background-color: #1abc9c;
+    color: white;
+    border-radius: 2px;
+}
+
+.table-content {
+    margin-bottom: 10px; 
+}
+
+.pagination-wrapper {
+    display: flex;
+    justify-content: center;
+    padding-top: 5px;
+    padding-bottom: 5px;
+}
+
+.table-pagination {
+    margin-top: 5px;
+    display: flex;
+    justify-content: center;
+}
+
+/* Table-pagination styling */
+.table-pagination button {
+    margin: 0 3px;
+    padding: 2px 4px;
+    cursor: pointer;
+    border: none;
+    background-color: #f4f4f4;
+    color: #333;
+    border-radius: 2px;
+}
+
+.table-pagination button:hover {
+    background-color: #1abc9c;
+    color: white;
+}
+
+.table-pagination button.active {
+    background-color: #1abc9c;
+    color: white;
+    border-radius: 2px;
+}
+
+.table-container {
+    display: none;
+    margin-top: 10px;
+}
+
+/* Table-sorting styling */
+.sort-icon {
+    font-size: 12px; /* Adjust the font size */
+    cursor: pointer;
+    display: block;
+    width: 10px; /* Set a fixed width */
+    height: 10px; /* Set a fixed height */
+    padding: 0;
+    margin: 1px 0; /* Center the icons horizontally */
+    color:#bbb
+}
+
+th {
+    position: relative; /* Keeps the icons within the header area */
+    padding-right: 20px; 
+    text-align: center; 
+}
+
+th .sort-icon-wrapper {
+    position: absolute;
+    right: 5px; 
+    top: 40%; 
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center; 
+    justify-content: center;
+    height: 100%;
+}
+
+.sort-icon:hover {
+    color: #000;
+}
+
+/* Figure styling */
+.figure-container {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.figure-wrapper {
+    margin: 5px 0;
+    text-align: left;
+    width: 100%;
+}
+
+.figure-image {
+    max-width: 100%;
+    height: auto;
+    display: none;
+}
+
+/* Table search bar */
+.table-search-container {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    transition: opacity 0.3s ease;
+    opacity: 1;
+}
+
+.table-search-container[style*="display: none"] {
+    opacity: 0;
+}
+
+.table-search {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.table-search:focus {
+    outline: none;
+    border-color: #1abc9c;
+    box-shadow: 0 0 0 2px rgba(26, 188, 156, 0.2);
+}
+
+/* Modal styling */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.7);
+}
+
+.modal-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+}
+
+#modalImage {
+    max-width: 90%;
+    max-height: 90%;
+    object-fit: contain;
+}
+
+.close {
+    color: #fff;
+    font-size: 35px;
+    font-weight: bold;
+    position: absolute;
+    right: 35px;
+    top: 15px;
+}
+
+.close:hover,
+.close:focus {
+    color: #bbb;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* CSS for the image description */
+.description {
+    font-size: 12px;
+    color: #555;
+    flex-grow: 1;
+    word-wrap: break-word; /* Allow long words to break */
+    overflow-wrap: break-word;
+    hyphens: auto; /* Enable hyphenation for very long words */
+    max-width: calc(100% - 40px); /* Adjust based on button width */
+    line-height: 1.4; /* Improve readability for wrapped text */
+}
+
+
+.figure-wrapper {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px; /* Space between each figure wrapper */
+}
+
+/* table-button */
+.button-description-container {
+    display: flex;
+    margin-bottom: 10px;
+    align-items: center;
+}
+
+.button-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 5px;
+}
+
+/* value-display */
+.value-display {
+    font-size: 14px; 
+    color: #555; 
+}
+
+.value-display .highlighted-value {
+    color: #1abc9c;  
+    font-weight: bold;
+}
+
+/* page entry box */
+.pagination-input {
+    width: 30px;     
+    height: 15px;    
+    font-size: 10px;  
+    padding: 1px;   
+    margin-left: 1px; 
+}
+
+
+/* Media Queries for responsive design */
+@media (min-width: 701px) {
+    .dashboard-container {
+        max-width: 100%;
+    }
+    
+    .sidebar {
+        width: var(--side-bar-width);
+    }
+    
+    .content {
+        margin-left: var(--side-bar-width);
+        padding: 50px 50px 50px 50px;
+    }
+    
+    .card {
+        width: calc(33.33% - 20px);
+    }
+    
+    .card:nth-child(3n) {
+        margin-right: 0;
+    }
+}
+
+@media (max-width: 700px) {
+    .dashboard-container {
+        flex-direction: column;
+    }
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: static;
+    }
+    .content-wrapper {
+        margin-left: 0;
+        width: 100%;
+    }
+    .content-header {
+        position: static;
+        padding: 20px;
+    }
+    .content {
+        margin-left: 0;
+        padding: var(--content-padding);
+    }
+    .card {
+        width: 100%;
+        margin-right: 0;
+    }
+}
