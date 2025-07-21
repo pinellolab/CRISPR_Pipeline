@@ -65,10 +65,88 @@ identify_non_redundant_covariates <- function(data, cov_string) {
   return(paste(to_keep, collapse = " + "))
 }
 
+convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE){
+  # extract information from MuData
+  moi <- MultiAssayExperiment::metadata(mudata[['guide']])$moi
+  if(is.null(SummarizedExperiment::assayNames(mudata[['gene']]))){
+    SummarizedExperiment::assayNames(mudata[['gene']]) <- 'counts'
+  } else{
+    SummarizedExperiment::assayNames(mudata[['gene']])[[1]] <- 'counts'
+  }
+  if(is.null(SummarizedExperiment::assayNames(mudata[['guide']]))){
+    SummarizedExperiment::assayNames(mudata[['guide']]) <- 'counts'
+  } else{
+    SummarizedExperiment::assayNames(mudata[['guide']])[[1]] <- 'counts'
+  }
+
+  scRNA_data <- mudata@ExperimentList$gene
+  guides_data <- mudata@ExperimentList$guide
+  response_matrix <- scRNA_data@assays@data@listData[["counts"]]
+
+  if(!is.null(SummarizedExperiment::colData(mudata))){
+    covariates <- SummarizedExperiment::colData(mudata) |> as.data.frame()
+    covariates[] <- lapply(covariates, as.factor)
+    # Check and remove factor variables with fewer than two levels
+    number_of_levels <- sapply(covariates, function(x) length(unique(x)))
+    multi_level_factors <- number_of_levels > 1
+    covariates_clean <- covariates[, multi_level_factors, drop = FALSE]
+
+    if(ncol(covariates_clean) == 0){
+      remove_collinear_covariates <- FALSE
+    }
+    
+    if(remove_collinear_covariates){
+      model_matrix <- stats::model.matrix(object = ~ ., data = covariates_clean)
+      multicollinear <- Matrix::rankMatrix(model_matrix) < ncol(model_matrix)
+      if(multicollinear){
+        print("Removing multicollinear covariates")
+        extra_covariates <- data.frame()
+      } else{
+        extra_covariates <- covariates_clean
+      }
+    } else{
+      extra_covariates <- covariates_clean
+    }
+  } else{
+    extra_covariates <- data.frame()
+  }
+
+  # if guide assignments not present, then extract guide counts
+  if(length(guides_data@assays@data@listData) == 1){
+    grna_matrix <- guides_data@assays@data@listData[["counts"]]
+    # otherwise, extract guide assignments
+  } else{
+    grna_matrix <- guides_data@assays@data@listData[["guide_assignment"]]
+  }
+
+  grna_ids <- rownames(SingleCellExperiment::rowData(mudata[['guide']]))
+  rownames(grna_matrix) <- grna_ids
+
+  gene_ids <- rownames(SingleCellExperiment::rowData(mudata[['gene']]))
+  rownames(response_matrix) <- gene_ids
+  grna_target_data_frame <- SingleCellExperiment::rowData(mudata[['guide']]) |>
+    as.data.frame() |>
+    tibble::rownames_to_column(var = "grna_id") |>
+    dplyr::rename(grna_target = intended_target_name) |>
+    dplyr::select(grna_id, grna_target)
+
+  # assemble information into sceptre object
+  sceptre_object <- sceptre::import_data(
+    response_matrix = response_matrix,
+    grna_matrix = grna_matrix,
+    grna_target_data_frame = grna_target_data_frame,
+    moi = moi,
+    extra_covariates = extra_covariates
+  )
+
+  # return sceptre object
+  return(sceptre_object)
+}
+
 ### Define Function
 inference_sceptre_m <- function(mudata, ...) {
   # convert MuData object to sceptre object
-  sceptre_object <- sceptreIGVF::convert_mudata_to_sceptre_object(mudata)
+  sceptre_object <- convert_mudata_to_sceptre_object_v1(mudata)
 
   # extract set of discovery pairs to test
   pairs_to_test <- MultiAssayExperiment::metadata(mudata)$pairs_to_test |>
@@ -84,34 +162,14 @@ inference_sceptre_m <- function(mudata, ...) {
 
   # assemble arguments to set_analysis_parameters()
   args_list <- list(...)
-  formula_object <- args_list$formula_object
-  cov_string <- args_list$cov_string
-
-   # check nested covariates
-  if (cov_string != "") {
-    new_cov_string <- identify_non_redundant_covariates(df, cov_string)
-  } else {
-    new_cov_string <- ""
-  }
   
   if("discovery_pairs" %in% names(args_list)){
     warning("The `discovery_pairs` argument is ignored. The `discovery_pairs` are set from the `pairs_to_test` metadata.")
   }
   args_list[["discovery_pairs"]] <- discovery_pairs
-  if (!"formula_object" %in% names(args_list) || formula_object == "default") {
-    args_list$formula_object <- stats::formula(~ log(response_n_nonzero) + log(response_n_umis))
-  } else {
-    if (new_cov_string != "") {
-      args_list$formula_object <- stats::formula(sprintf("~ %s + log(response_n_nonzero) + log(response_n_umis)", new_cov_string))
-    } else {
-      args_list$formula_object <- stats::formula("~ log(response_n_nonzero) + log(response_n_umis)")
-    }
-  }
-
-  args_list$cov_string <- NULL
   args_list$sceptre_object <- sceptre_object
 
-  # set analysis parameters
+  # set analysis parameters - use sceptre's default formula
   sceptre_object <- do.call(sceptre::set_analysis_parameters, args_list)
 
   # extract gRNA assignment and turn off QC
@@ -158,13 +216,7 @@ grna_integration_strategy <- args[3]
 resampling_approximation <- args[4]
 control_group <- args[5]
 resampling_mechanism <- args[6]
-formula_object <- args[7]
-cov_string <- args[8]
 
-# process formula object
-# if (!identical(formula_object, "default")) {
-#  formula_object <- stats::formula(formula_object)
-# }
 
 # read MuData
 mudata_in <- MuData::readH5MU(mudata_fp)
@@ -176,9 +228,7 @@ results <- inference_sceptre_m(
   grna_integration_strategy = grna_integration_strategy,
   resampling_approximation = resampling_approximation,
   control_group = control_group,
-  resampling_mechanism = resampling_mechanism,
-  formula_object = formula_object,
-  cov_string = cov_string
+  resampling_mechanism = resampling_mechanism
 )
 
 # write MuData

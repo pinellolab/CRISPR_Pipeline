@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 library(Matrix)
 
-assign_grnas_sceptre_v1 <- function(mudata) {
+assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n_em_rep = "default") {
   # convert MuData object to sceptre object, removing multicollinear covariates
   sceptre_object <- convert_mudata_to_sceptre_object_v1(
     mudata,
@@ -18,7 +18,17 @@ assign_grnas_sceptre_v1 <- function(mudata) {
     )
 
   # assign gRNAs
-  sceptre_object <- sceptre_object |> sceptre::assign_grnas(method = "mixture")
+  assign_grnas_args <- list(sceptre_object, method = "mixture")
+  
+  # Add optional parameters if they are not "default"
+  if (probability_threshold != "default") {
+    assign_grnas_args$probability_threshold <- as.numeric(probability_threshold)
+  }
+  if (n_em_rep != "default") {
+    assign_grnas_args$n_em_rep <- as.integer(n_em_rep)
+  }
+  
+  sceptre_object <- do.call(sceptre::assign_grnas, assign_grnas_args)
 
   # extract sparse logical matrix of gRNA assignments
   grna_assignment_matrix <- sceptre_object |>
@@ -117,9 +127,13 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 args <- commandArgs(trailingOnly = TRUE)
 
 mudata_input <- args[1]
+probability_threshold <- if(length(args) >= 2) args[2] else "default"
+n_em_rep <- if(length(args) >= 3) args[3] else "default"
 
 mudata_in <- MuData::readH5MU(mudata_input)
-results <- assign_grnas_sceptre_v1(mudata = mudata_in)
+results <- assign_grnas_sceptre_v1(mudata = mudata_in, 
+                                   probability_threshold = probability_threshold,
+                                   n_em_rep = n_em_rep)
 guide_assignment <- results$guide_assignment
 
 print("Is guide_assignment NULL?")
