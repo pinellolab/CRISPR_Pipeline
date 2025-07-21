@@ -1,70 +1,5 @@
 #!/usr/bin/env Rscript
 
-###
-identify_non_redundant_covariates <- function(data, cov_string) {
-  all_covs <- strsplit(gsub("\\s*\\+\\s*$", "", cov_string), "\\s*\\+\\s*")[[1]]
-
-  if (length(all_covs) == 1) {
-    return(cov_string)
-  } 
-  
-  # check if two columns have the same level structure
-  have_same_levels <- function(col1, col2) {
-  if (!(col1 %in% colnames(data) && col2 %in% colnames(data))) {
-    stop(sprintf("Columns '%s' or '%s' do not exist in the data", col1, col2))
-  }
-  
-  levels1 <- unique(data[[col1]])
-  levels2 <- unique(data[[col2]])
-  
-  if (length(levels1) == 0 || length(levels2) == 0) {
-    warning(sprintf("Column '%s' or '%s' has no levels", col1, col2))
-    return(FALSE)
-  }
-  
-    return(length(levels1) == length(levels2) && 
-          all(sapply(levels1, function(l) {
-            matches <- data[[col2]][data[[col1]] == l]
-            length(matches) > 0 && all(matches == matches[1])
-          })))
-  }
-  # Identify groups of columns with the same level structure
-  redundant_groups <- list()
-  for (i in 1:(length(all_covs) - 1)) {
-    for (j in (i + 1):length(all_covs)) {
-      if (have_same_levels(all_covs[i], all_covs[j])) {
-        group <- c(all_covs[i], all_covs[j])
-        redundant_groups[[length(redundant_groups) + 1]] <- group
-      }
-    }
-  }
-  
-  merged_groups <- list()
-  for (group in redundant_groups) {
-    added <- FALSE
-    for (i in seq_along(merged_groups)) {
-      if (any(group %in% merged_groups[[i]])) {
-        merged_groups[[i]] <- unique(c(merged_groups[[i]], group))
-        added <- TRUE
-        break
-      }
-    }
-    if (!added) {
-      merged_groups[[length(merged_groups) + 1]] <- group
-    }
-  }
-  
-  # Choose one representative from each group (the first one)
-  to_keep <- sapply(merged_groups, function(group) group[1])
-  to_keep <- c(to_keep, setdiff(all_covs, unlist(merged_groups)))
-  
-  # Remove any columns with only one unique value
-  to_keep <- to_keep[sapply(to_keep, function(col) length(unique(data[[col]])) > 1)]
-  
-  # Return the non-redundant covariates as a string
-  return(paste(to_keep, collapse = " + "))
-}
-
 convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE){
   # extract information from MuData
   moi <- MultiAssayExperiment::metadata(mudata[['guide']])$moi
@@ -99,7 +34,6 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
       model_matrix <- stats::model.matrix(object = ~ ., data = covariates_clean)
       multicollinear <- Matrix::rankMatrix(model_matrix) < ncol(model_matrix)
       if(multicollinear){
-        print("Removing multicollinear covariates")
         extra_covariates <- data.frame()
       } else{
         extra_covariates <- covariates_clean
@@ -146,7 +80,7 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 ### Define Function
 inference_sceptre_m <- function(mudata, ...) {
   # convert MuData object to sceptre object
-  sceptre_object <- convert_mudata_to_sceptre_object_v1(mudata)
+  sceptre_object <- convert_mudata_to_sceptre_object_v1(mudata, remove_collinear_covariates = TRUE)
 
   # extract set of discovery pairs to test
   pairs_to_test <- MultiAssayExperiment::metadata(mudata)$pairs_to_test |>
@@ -158,8 +92,6 @@ inference_sceptre_m <- function(mudata, ...) {
       response_id = gene_id
     )
 
-  df = sceptre_object@covariate_data_frame
-
   # assemble arguments to set_analysis_parameters()
   args_list <- list(...)
   
@@ -169,7 +101,15 @@ inference_sceptre_m <- function(mudata, ...) {
   args_list[["discovery_pairs"]] <- discovery_pairs
   args_list$sceptre_object <- sceptre_object
 
-  # set analysis parameters - use sceptre's default formula
+  # construct formula excluding gRNA covariates to avoid multicollinearity
+  # (gRNA assignments are binary, making grna_n_nonzero and grna_n_umis identical)
+  formula_object <- sceptre:::auto_construct_formula_object(
+    cell_covariates = sceptre_object@covariate_data_frame,
+    include_grna_covariates = FALSE
+  )
+  args_list[["formula_object"]] <- formula_object
+
+  # set analysis parameters with custom formula
   sceptre_object <- do.call(sceptre::set_analysis_parameters, args_list)
 
   # extract gRNA assignment and turn off QC
@@ -192,9 +132,8 @@ inference_sceptre_m <- function(mudata, ...) {
                   log2_fc = log_2_fold_change)
   
   discovery_unique <- discovery_results |>
-  dplyr::distinct(gene_id, intended_target_name, .keep_all = TRUE)
-  print(sprintf('discovery_results: %d', nrow(discovery_results)))
-  print(sprintf('discovery_unique: %d', nrow(discovery_unique)))
+    dplyr::distinct(gene_id, intended_target_name, .keep_all = TRUE)
+  
   # add results to MuData
   test_results <- pairs_to_test |>
     dplyr::left_join(discovery_unique, by = c("intended_target_name", "gene_id"))
@@ -205,33 +144,36 @@ inference_sceptre_m <- function(mudata, ...) {
   return(list(mudata = mudata, test_results = test_results))
 }
 
-### Run Command
-args <- commandArgs(trailingOnly = TRUE)
-args <- readLines(commandArgs(trailingOnly = TRUE)[1])
-
-# obtain the command line arguments
-mudata_fp <- args[1]
-side <- args[2]
-grna_integration_strategy <- args[3]
-resampling_approximation <- args[4]
-control_group <- args[5]
-resampling_mechanism <- args[6]
-
-
-# read MuData
-mudata_in <- MuData::readH5MU(mudata_fp)
-
-# run sceptre inference
-results <- inference_sceptre_m(
-  mudata = mudata_in,
-  side = side,
-  grna_integration_strategy = grna_integration_strategy,
-  resampling_approximation = resampling_approximation,
-  control_group = control_group,
-  resampling_mechanism = resampling_mechanism
-)
-
-# write MuData
-write.csv(results$test_results, file = "test_results.csv", row.names = FALSE)
-#MuData::writeH5MU(object = results$mudata, file = 'inference_mudata.h5mu')
+### Run Command (only execute when script is run directly, not when sourced)
+if (!exists(".sourced_from_test")) {
+  
+  args <- commandArgs(trailingOnly = TRUE)
+  args <- readLines(commandArgs(trailingOnly = TRUE)[1])
+  
+  # obtain the command line arguments
+  mudata_fp <- args[1]
+  side <- args[2]
+  grna_integration_strategy <- args[3]
+  resampling_approximation <- args[4]
+  control_group <- args[5]
+  resampling_mechanism <- args[6]
+  
+  
+  # read MuData
+  mudata_in <- MuData::readH5MU(mudata_fp)
+  
+  # run sceptre inference
+  results <- inference_sceptre_m(
+    mudata = mudata_in,
+    side = side,
+    grna_integration_strategy = grna_integration_strategy,
+    resampling_approximation = resampling_approximation,
+    control_group = control_group,
+    resampling_mechanism = resampling_mechanism
+  )
+  
+  # write MuData
+  write.csv(results$test_results, file = "test_results.csv", row.names = FALSE)
+  #MuData::writeH5MU(object = results$mudata, file = 'inference_mudata.h5mu')
+}
 
