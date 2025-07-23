@@ -7,7 +7,7 @@ import numpy as np
 def create_nontargeting_intended_targets(
     mdata_input_fp,
     mdata_output_fp,
-    strategy="median",  # strategy for creating NT elements: "median" or "same"
+    strategy="same",  # strategy for creating NT elements: "median" or "same"
 ):
     """
     Fill intended target names for nontargeting/safe-targeting/negative control guides in MuData object.
@@ -23,6 +23,8 @@ def create_nontargeting_intended_targets(
         Path to output MuData file
     strategy : str
         Strategy for assigning targets ("median" or "same")
+        If median, creates new NT elements from the NT guides with the same median guides per element as the targeting guides.
+        If same, assigns all NT guides to a single "non-targeting" element.
     """
     mdata = md.read(mdata_input_fp)
     gdata = mdata["guide"]
@@ -59,14 +61,14 @@ def create_nontargeting_intended_targets(
         print(f"Creating {total_nt_elements} non-targeting elements")
 
         intended_targets = [
-            f"non_targeting|{i + 1}"
+            f"non-targeting|{i + 1}"
             for i in range(total_nt_elements)
             for _ in range(median_guides_per_element)
         ][:total_nt_guides]  # Trim to exact number needed
 
     elif strategy == "same":
-        print("Using same strategy: all control guides assigned to 'non_targeting'")
-        intended_targets = ["non_targeting"] * control_guide_var.shape[0]
+        print("Using same strategy: all control guides assigned to 'non-targeting'")
+        intended_targets = ["non-targeting"] * control_guide_var.shape[0]
     else:
         raise ValueError(f"Unknown strategy: {strategy}. Must be 'median' or 'same'")
 
