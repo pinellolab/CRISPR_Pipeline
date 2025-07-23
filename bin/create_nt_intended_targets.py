@@ -98,8 +98,8 @@ def main():
         "--strategy",
         type=str,
         choices=["median", "same"],
-        default="median",
-        help="Strategy for assigning targets to control guides (default: median)",
+        default="same",
+        help="Strategy for assigning targets to control guides (default: same)",
     )
 
     args = parser.parse_args()
