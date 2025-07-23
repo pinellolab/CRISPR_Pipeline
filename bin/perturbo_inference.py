@@ -94,9 +94,7 @@ def run_perturbo(
             .fillna(0)
         )
 
-    ########################################
-    ## subset mdata for perturbo speedup ##
-    if not test_all_pairs:
+        # subset mdata for perturbo speedup
         tested_guides = pairs_to_test_df["guide_id"].unique()
         tested_genes = pairs_to_test_df["gene_id"].unique()
 
@@ -124,6 +122,7 @@ def run_perturbo(
         mdata_subset = mdata
 
     ########################################
+    # Setup MuData for PerTurbo
 
     perturbo.PERTURBO.setup_mudata(
         mdata_subset,
@@ -158,6 +157,7 @@ def run_perturbo(
         early_stopping_monitor="elbo_train",
     )
 
+    # Reformat the output to match IGVF specifications
     igvf_name_map = {
         "element": "intended_target_name",
         "gene": "gene_id",
@@ -174,26 +174,21 @@ def run_perturbo(
         )
     )
 
-    if test_all_pairs:
-        mdata.uns["test_results"] = element_effects[
-            [
-                "gene_id",
-                "intended_target_name",
-                "log2_fc",
-                "p_value",
-            ]
+    mdata.uns["test_results"] = element_effects[
+        [
+            "gene_id",
+            "intended_target_name",
+            "log2_fc",
+            "p_value",
         ]
-    if not test_all_pairs:
-        mdata.uns["test_results"] = element_effects.merge(pairs_to_test_df)[
-            [
-                "gene_id",
-                "guide_id",
-                "intended_target_name",
-                "log2_fc",
-                "p_value",
-                "pair_type",
-            ]
-        ]
+    ]
+
+    if "pairs_to_test" in mdata.uns:
+        mdata.uns["test_results"] = element_effects.merge(
+            mdata.uns["pairs_to_test"],
+            on=["gene_id", "intended_target_name"],
+            how="inner",
+        )  # inner join allows this to work even if we don't test control guides
 
     mdata.uns["test_results"].rename(
         columns={"log2_fc": "perturbo_log2_fc", "p_value": "perturbo_p_value"},
