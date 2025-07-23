@@ -44,6 +44,15 @@ def modality_to_fallback_seqspec(modality, hash_seqspec, rna_seqspec, sgrna_seqs
     return None
 
 
+def filter_valid_files(sfiles, portal_url = 'https://api.data.igvf.org', auth = ''):
+    sfiles_valid = []
+    for sfile in sfiles:
+        file_object = requests.get(f"{PORTAL}{sfile}/@@object?format=json", auth=auth).json()
+        if file_object.get('status') not in ['deleted', 'revoked']:
+            sfiles_valid.append(sfile)
+    return sfiles_valid
+
+
 def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqspec=None, rna_seqspec=None, sgrna_seqspec=None):
     response = requests.get(
         f'{PORTAL}/analysis-sets/{analysis_set_accession}/@@object?format=json', auth=auth
@@ -130,6 +139,10 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
 
                 # Handle seqspec fallback
                 seqspecs = read1.get('seqspecs', [])
+
+                # Filter out invalid seqspecs
+                seqspecs = filter_valid_files(seqspecs, portal_url = PORTAL, auth = auth)
+
                 if seqspecs and seqspecs[0]:
                     seqspec_path = seqspecs[0].split('/')[-2]
                 else:
