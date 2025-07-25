@@ -107,16 +107,22 @@ def export_output(merged_result, mudata):
     # Generate per-element output by grouping by the actual target
     print("Generating per-element output...")
 
-    # Group by the unique target identifier and concatenate guide IDs
-    per_element_output = (
-        per_guide_output.groupby(["gene_id", "intended_target_name"], as_index=False)
-        .agg({"guide_id(s)": lambda x: ",".join(x.dropna().astype(str))})
-        .merge(
-            per_guide_output.drop_duplicates(["gene_id", "intended_target_name"]).drop(
-                columns=["guide_id(s)"]
-            ),
-            on=["gene_id", "intended_target_name"],
-        )
+    # Group by gene and target and aggregate all columns efficiently
+    per_element_output = per_guide_output.groupby(
+        ["gene_id", "intended_target_name"], as_index=False, observed=True
+    ).agg(
+        {
+            "guide_id(s)": lambda x: ",".join(x.dropna().astype(str)),
+            "intended_target_chr": "first",
+            "intended_target_start": "first",
+            "intended_target_end": "first",
+            "sceptre_log2_fc": "first",
+            "sceptre_p_value": "first",
+            "perturbo_log2_fc": "first",
+            "perturbo_p_value": "first",
+            "cell_number": "first",
+            "avg_gene_expression": "first",
+        }
     )
 
     # Reorder columns
