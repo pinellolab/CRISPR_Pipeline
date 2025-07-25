@@ -1,16 +1,22 @@
-process createDashboard {
+process createDashboard_HASHING_default {
     cache 'lenient'
     publishDir './pipeline_dashboard', mode: 'copy'
 
     input:
         path guide_seqSpecCheck_plots
         path guide_fq_tbl
+        path hashing_seqSpecCheck_plots
+        path hashing_fq_tbl
         path mudata
         path gene_ann
         path gene_ann_filtered
         path guide_ann
+        path hashing_ann
+        path hashing_demux
+        path hashing_unfiltered_demux
         path ks_transcripts_out_dir_collected
         path ks_guide_out_dir_collected
+        path ks_hashing_out_dir_collected
         path figures_dir
         path evaluation_output_dir
         path css
@@ -18,12 +24,13 @@ process createDashboard {
         path svg
 
     output:
-        tuple path("evaluation_output"), path("figures"), path("guide_seqSpec_plots"), path("dashboard.html"), path("svg"), path("inference_mudata.h5mu")
+        tuple path("evaluation_output"), path("figures"), path("guide_seqSpec_plots"), path("hashing_seqSpec_plots"), path("dashboard.html"), path("svg"), path("inference_mudata.h5mu")
 
     script:
         """
         echo "=== RENAMING INPUT DIRECTORIES ==="
         [[ -e guide_seqSpec_plots ]] && mv guide_seqSpec_plots input_guide_seqSpec_plots
+        [[ -e hashing_seqSpec_plots ]] && mv hashing_seqSpec_plots input_hashing_seqSpec_plots
         [[ -e figures ]] && mv figures input_figures
         [[ -e evaluation_output ]] && mv evaluation_output input_evaluation_output
         [[ -e svg ]] && mv svg input_svg
@@ -31,11 +38,14 @@ process createDashboard {
 
         # Create new output directories with actual content
         echo "=== CREATING OUTPUT DIRECTORIES ==="
-        mkdir -p guide_seqSpec_plots figures evaluation_output svg
+        mkdir -p guide_seqSpec_plots hashing_seqSpec_plots figures evaluation_output svg
 
         # Copy content from renamed inputs to new outputs
         if [[ -L input_guide_seqSpec_plots ]]; then
             cp -rL input_guide_seqSpec_plots/* guide_seqSpec_plots/ 2>/dev/null || true
+        fi
+        if [[ -L input_hashing_seqSpec_plots ]]; then
+            cp -rL input_hashing_seqSpec_plots/* hashing_seqSpec_plots/ 2>/dev/null || true
         fi
         if [[ -L input_figures ]]; then
             cp -rL input_figures/* figures/ 2>/dev/null || true
@@ -54,12 +64,12 @@ process createDashboard {
         mkdir -p \${MPLCONFIGDIR}
 
         # Run scripts using the renamed input files
-        process_json.py --output_dir json_dir
-        create_dashboard_plots.py --mudata input_mudata.h5mu --output_dir figures
-        create_dashboard_df.py --json_dir json_dir --guide_fq_tbl ${guide_fq_tbl} --mudata input_mudata.h5mu --gene_ann ${gene_ann} --gene_ann_filtered ${gene_ann_filtered} --guide_ann ${guide_ann}
-        create_dashboard.py --input all_df.pkl
+        process_json_HASHING.py --output_dir json_dir
+        create_dashboard_plots_HASHING.py --mudata ${mudata} --hashing_demux ${hashing_demux} --unfiltered_hashing_demux ${hashing_unfiltered_demux} --output_dir figures
+        create_dashboard_df_HASHING.py --json_dir json_dir --guide_fq_tbl ${guide_fq_tbl} --hashing_fq_tbl ${hashing_fq_tbl} --mudata input_mudata.h5mu --gene_ann ${gene_ann} --gene_ann_filtered ${gene_ann_filtered} --guide_ann ${guide_ann} --hashing_ann ${hashing_ann} --hashing_demux ${hashing_demux} --hashing_unfiltered_demux ${hashing_unfiltered_demux} --default
+        create_dashboard_HASHING.py --input all_df.pkl
 
         echo "=== FINAL OUTPUT SIZES ==="
-        du -sh guide_seqSpec_plots figures evaluation_output svg *.html *.h5mu 2>/dev/null || true
+        du -sh guide_seqSpec_plots hashing_seqSpec_plots figures evaluation_output svg *.html *.h5mu 2>/dev/null || true
         """
 }
