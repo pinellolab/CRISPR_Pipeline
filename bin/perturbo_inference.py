@@ -76,10 +76,9 @@ def run_perturbo(
     if not test_all_pairs:
         pairs_to_test_df = mdata.uns["pairs_to_test"]
         aggregated_df = (
-            pairs_to_test_df.assign(value=1)
-            .groupby(["gene_id", "intended_target_name"])
-            .agg(value=("value", "max"))
-            .reset_index()
+            pairs_to_test_df[["gene_id", "intended_target_name"]]
+            .drop_duplicates()
+            .assign(value=1)
         )
 
         # pivot the data

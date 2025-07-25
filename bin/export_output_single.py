@@ -115,28 +115,21 @@ def export_output(mudata, inference_method):
 
         per_guide_output = per_guide_output[final_cols].rename(columns={'guide_id': 'guide_id(s)'})
 
-        # Generate per-element output
+        # Generate per-element output by grouping by the actual target
         print("Generating per-element output...")
-        
-        # OPTIMIZATION: Faster groupby approach
-        # First, create a mapping of gene_id to concatenated guide_ids
-        guide_id_map = per_guide_output.groupby('gene_id')['guide_id(s)'].apply(
-            lambda x: ','.join(x.dropna().astype(str))
-        ).to_dict()
-        
-        # Then, get one row per gene_id as a template
-        per_element_template = per_guide_output.drop_duplicates('gene_id').drop(columns=['guide_id(s)'])
-        
-        # Create per-element dataframe
-        per_element_output = pd.DataFrame({'gene_id': list(guide_id_map.keys())})
-        per_element_output['guide_id(s)'] = per_element_output['gene_id'].map(guide_id_map)
-        
-        # Merge with template
-        per_element_output = pd.merge(
-            per_element_output,
-            per_element_template,
-            on='gene_id',
-            how='left'
+
+        # Group by the unique target identifier and concatenate guide IDs
+        per_element_output = (
+            per_guide_output.groupby(
+                ["gene_id", "intended_target_name"], as_index=False
+            )
+            .agg({"guide_id(s)": lambda x: ",".join(x.dropna().astype(str))})
+            .merge(
+                per_guide_output.drop_duplicates(
+                    ["gene_id", "intended_target_name"]
+                ).drop(columns=["guide_id(s)"]),
+                on=["gene_id", "intended_target_name"],
+            )
         )
 
         column_order = [
