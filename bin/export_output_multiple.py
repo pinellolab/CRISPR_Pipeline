@@ -104,27 +104,25 @@ def export_output(merged_result, mudata):
         'perturbo_p_value', 'cell_number', 'avg_gene_expression'
     ])
 
-    # OPTIMIZATION: More efficient per-element output generation
+    # Generate per-element output by grouping by the actual target
     print("Generating per-element output...")
 
-    # First, create a mapping of gene_id to concatenated guide_ids
-    guide_id_map = per_guide_output.groupby('gene_id')['guide_id(s)'].apply(
-        lambda x: ','.join(x.dropna().astype(str))
-    ).to_dict()
-
-    # Then, get one row per gene_id as a template
-    per_element_template = per_guide_output.drop_duplicates('gene_id').drop(columns=['guide_id(s)'])
-
-    # Create per-element dataframe efficiently
-    per_element_output = pd.DataFrame({'gene_id': list(guide_id_map.keys())})
-    per_element_output['guide_id(s)'] = per_element_output['gene_id'].map(guide_id_map)
-
-    # Merge with template
-    per_element_output = pd.merge(
-        per_element_output,
-        per_element_template,
-        on='gene_id',
-        how='left'
+    # Group by gene and target and aggregate all columns efficiently
+    per_element_output = per_guide_output.groupby(
+        ["gene_id", "intended_target_name"], as_index=False, observed=True
+    ).agg(
+        {
+            "guide_id(s)": lambda x: ",".join(x.dropna().astype(str)),
+            "intended_target_chr": "first",
+            "intended_target_start": "first",
+            "intended_target_end": "first",
+            "sceptre_log2_fc": "first",
+            "sceptre_p_value": "first",
+            "perturbo_log2_fc": "first",
+            "perturbo_p_value": "first",
+            "cell_number": "first",
+            "avg_gene_expression": "first",
+        }
     )
 
     # Reorder columns
