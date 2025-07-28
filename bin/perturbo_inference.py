@@ -78,7 +78,11 @@ def run_perturbo(
 
     # create element by gene matrix if not testing all pairs
     if not test_all_pairs:
-        pairs_to_test_df = mdata.uns["pairs_to_test"]
+        if isinstance(mdata.uns["pairs_to_test"], pd.DataFrame):
+            pairs_to_test_df = mdata.uns["pairs_to_test"]
+        elif isinstance(mdata.uns["pairs_to_test"], dict):
+            pairs_to_test_df = pd.DataFrame(mdata.uns["pairs_to_test"])
+
         aggregated_df = (
             pairs_to_test_df[["gene_id", "intended_target_name"]]
             .drop_duplicates()
@@ -190,17 +194,17 @@ def run_perturbo(
     # This is to maintain compatibility with the existing workflow, which condenses per-guide output
     # into per-element output in a separate module.
 
-    if "pairs_to_test" in mdata.uns:
+    if not test_all_pairs:
         mdata.uns["test_results"] = element_effects.merge(
-            mdata.uns["pairs_to_test"],
+            pairs_to_test_df,
             on=["gene_id", "intended_target_name"],
             how="left",
         )
     else:
         mdata.uns["test_results"] = element_effects.merge(
-            mdata["guide"].var[["gene_id", "intended_target_name", "guide_id"]],
+            mdata["guide"].var[["intended_target_name", "guide_id"]],
             how="left",
-            on=["gene_id", "intended_target_name"],
+            on=["intended_target_name"],
         )
 
     mdata.uns["test_results"].rename(
