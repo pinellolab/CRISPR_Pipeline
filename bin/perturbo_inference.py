@@ -195,13 +195,13 @@ def run_perturbo(
     # into per-element output in a separate module.
 
     if not test_all_pairs:
-        mdata.uns["test_results"] = element_effects.merge(
+        mdata.uns["test_results"] = mdata.uns["test_results"].merge(
             pairs_to_test_df,
             on=["gene_id", "intended_target_name"],
             how="left",
         )
     else:
-        mdata.uns["test_results"] = element_effects.merge(
+        mdata.uns["test_results"] = mdata.uns["test_results"].merge(
             mdata["guide"].var[["intended_target_name", "guide_id"]],
             how="left",
             on=["intended_target_name"],
