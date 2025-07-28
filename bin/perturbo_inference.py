@@ -11,7 +11,7 @@ def run_perturbo(
     mdata_input_fp,
     mdata_output_fp,
     fit_guide_efficacy=True,  # whether to fit guide efficacy (if false, overrides efficiency_mode)
-    efficiency_mode="undecided", #mapping from undecided->auto, low->mixture, high->scaled# can be "mixture" (for low MOI only), "scaled", "undecided" (auto), "low" (mixture), or "high" (scaled)
+    efficiency_mode="undecided",  # mapping from undecided->auto, low->mixture, high->scaled# can be "mixture" (for low MOI only), "scaled", "undecided" (auto), "low" (mixture), or "high" (scaled)
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
     batch_size=512,  # batch size for training
     early_stopping=True,  # whether to use early stopping
@@ -48,9 +48,9 @@ def run_perturbo(
         - mdata[gene_modality_name].obs["log1p_total_guide_umis"].mean()
     )
 
-    efficiency_mode  = {'undecided':'auto',
-                        'low': 'mixture',
-                        'high': 'scaled'}[efficiency_mode]
+    efficiency_mode = {"undecided": "auto", "low": "mixture", "high": "scaled"}[
+        efficiency_mode
+    ]
 
     if efficiency_mode == "auto":
         max_guides_per_cell = mdata[guide_modality_name].X.sum(axis=1).max()
@@ -78,7 +78,11 @@ def run_perturbo(
 
     # create element by gene matrix if not testing all pairs
     if not test_all_pairs:
-        pairs_to_test_df = mdata.uns["pairs_to_test"]
+        if isinstance(mdata.uns["pairs_to_test"], pd.DataFrame):
+            pairs_to_test_df = mdata.uns["pairs_to_test"]
+        elif isinstance(mdata.uns["pairs_to_test"], dict):
+            pairs_to_test_df = pd.DataFrame(mdata.uns["pairs_to_test"])
+
         aggregated_df = (
             pairs_to_test_df[["gene_id", "intended_target_name"]]
             .drop_duplicates()
@@ -186,24 +190,27 @@ def run_perturbo(
         ]
     ]
 
-    if "pairs_to_test" in mdata.uns:
-        mdata.uns["test_results"] = element_effects.merge(
-            mdata.uns["pairs_to_test"],
+    # NOTE: this part creates a per-guide output table even though we are running per-element inference.
+    # This is to maintain compatibility with the existing workflow, which condenses per-guide output
+    # into per-element output in a separate module.
+
+    if not test_all_pairs:
+        mdata.uns["test_results"] = mdata.uns["test_results"].merge(
+            pairs_to_test_df,
             on=["gene_id", "intended_target_name"],
-            how="inner",
-        )  # inner join allows this to work even if we don't test control guides
+            how="left",
+        )
+    else:
+        mdata.uns["test_results"] = mdata.uns["test_results"].merge(
+            mdata["guide"].var[["intended_target_name", "guide_id"]],
+            how="left",
+            on=["intended_target_name"],
+        )
 
     mdata.uns["test_results"].rename(
         columns={"log2_fc": "perturbo_log2_fc", "p_value": "perturbo_p_value"},
         inplace=True,
     )
-
-    # convert pairs_to_test to categorical if it's not already
-    if "pairs_to_test" in mdata.uns:
-        for col in mdata.uns["pairs_to_test"].columns:
-            mdata.uns["pairs_to_test"][col] = mdata.uns["pairs_to_test"][col].astype(
-                "category"
-            )
 
     mdata.write(mdata_output_fp, compression="gzip")
     return mdata

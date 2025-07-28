@@ -13,11 +13,10 @@ include { guide_assignment_sceptre } from '../../../modules/local/guide_assignme
 include { skipGTFDownload } from '../../../modules/local/skipGTFDownload'
 include { downloadGTF } from '../../../modules/local/downloadGTF'
 include { prepare_guide_inference } from '../../../modules/local/prepare_guide_inference'
-include { prepare_all_guide_inference } from '../../../modules/local/prepare_all_guide_inference'
 include { prepare_user_guide_inference } from '../../../modules/local/prepare_user_guide_inference'
 include { inference_sceptre } from '../../../modules/local/inference_sceptre'
 include { inference_perturbo } from '../../../modules/local/inference_perturbo'
-include { inference_perturbo as inference_perturbo_trans } from '../../../modules/local/inference_perturbo'
+include { inference_perturbo_trans } from '../../../modules/local/inference_perturbo_trans'
 include { inference_mudata } from '../../../modules/local/inference_mudata'
 include { mergedResults } from '../../../modules/local/mergedResults'
 include { publishFiles } from '../../../modules/local/publishFiles'
@@ -103,20 +102,11 @@ workflow process_mudata_pipeline_HASHING {
             GTF_Reference.gencode_gtf,
             params.INFERENCE_max_target_distance_bp
         )}
-    else if (params.INFERENCE_target_guide_pairing_strategy == 'all_by_all') {
-        PrepareInference = prepare_all_guide_inference(
-            Mudata_concat.concat_mudata,
-            GTF_Reference.gencode_gtf
-        )}
     else if (params.INFERENCE_target_guide_pairing_strategy == 'default') {
         PrepareInference_cis = prepare_guide_inference(
             Mudata_concat.concat_mudata,
             GTF_Reference.gencode_gtf,
             params.INFERENCE_max_target_distance_bp
-        )
-        PrepareInference_trans = prepare_all_guide_inference(
-            Mudata_concat.concat_mudata,
-            GTF_Reference.gencode_gtf
         )
     }
 
