@@ -131,7 +131,7 @@ workflow process_mudata_pipeline_HASHING {
         PerturboResults_cis = inference_perturbo(PrepareInference_cis.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
         GuideInference_cis = mergedResults(SceptreResults_cis.test_results, PerturboResults_cis.inference_mudata)
         // Process trans results
-        GuideInference_trans = inference_perturbo_trans(PrepareInference_trans.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
+        GuideInference_trans = inference_perturbo_trans(Mudata_concat.concat_mudata, "perturbo", params.Multiplicity_of_infection)
 
         // Rename tsv outputs to avoid conflicts
         cis_per_element = GuideInference_cis.per_element_output.map { file -> file.copyTo(file.parent.resolve("cis-${file.name}")) }
