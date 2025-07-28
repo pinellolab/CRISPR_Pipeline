@@ -62,7 +62,7 @@ workflow process_mudata_pipeline {
     Prepare_assignment = prepare_assignment{MuData_Doublets.mudata_doublet}
 
     if (params.GUIDE_ASSIGNMENT_method == "cleanser") {
-        Guide_Assignment = guide_assignment_cleanser(Prepare_assignment.prepare_assignment_mudata.flatten(), params.GUIDE_ASSIGNMENT_cleanser_probability_threshold)
+        Guide_Assignment = guide_assignment_cleanser(Prepare_assignment.prepare_assignment_mudata.flatten(), params.GUIDE_ASSIGNMENT_cleanser_probability_threshold, params.GUIDE_ASSIGNMENT_capture_method)
         guide_assignment_collected =  Guide_Assignment.guide_assignment_mudata_output.collect()
         Mudata_concat = mudata_concat(guide_assignment_collected)
         }
