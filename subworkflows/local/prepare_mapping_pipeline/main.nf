@@ -28,5 +28,5 @@ workflow prepare_mapping_pipeline {
 
     emit:
     parsed_covariate_file =  Prepare_covariate.parsed_covariate_file
-    //covariate_string =  Prepare_covariate.covariate_string
+    covariate_string =  Prepare_covariate.covariate_string
 }

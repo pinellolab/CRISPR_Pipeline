@@ -26,7 +26,7 @@ workflow process_mudata_pipeline {
     trans_out_dir
     concat_anndata_guide
     guide_out_dir
-    //covariate_string
+    covariate_string
     ch_guide_design
 
     main:
@@ -67,7 +67,7 @@ workflow process_mudata_pipeline {
         }
 
     else if (params.GUIDE_ASSIGNMENT_method == "sceptre") {
-        Guide_Assignment = guide_assignment_sceptre(Prepare_assignment.prepare_assignment_mudata.flatten(), params.GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold, params.GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep)
+        Guide_Assignment = guide_assignment_sceptre(Prepare_assignment.prepare_assignment_mudata.flatten(), params.GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold,  params.GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep)
         guide_assignment_collected =  Guide_Assignment.guide_assignment_mudata_output.collect()
         Mudata_concat = mudata_concat(guide_assignment_collected)
         }
@@ -92,14 +92,14 @@ workflow process_mudata_pipeline {
     }
 
     if (params.INFERENCE_method == "sceptre"){
-        TestResults = inference_sceptre(PrepareInference.mudata_inference_input)
+        TestResults = inference_sceptre(PrepareInference.mudata_inference_input, covariate_string)
         GuideInference = inference_mudata(TestResults.test_results, PrepareInference.mudata_inference_input, params.INFERENCE_method)
     }
     else if (params.INFERENCE_method == "perturbo"){
         GuideInference = inference_perturbo(PrepareInference.mudata_inference_input, params.INFERENCE_method, params.Multiplicity_of_infection)
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
-        SceptreResults = inference_sceptre(PrepareInference.mudata_inference_input)
+        SceptreResults = inference_sceptre(PrepareInference.mudata_inference_input, covariate_string)
         PerturboResults = inference_perturbo(PrepareInference.mudata_inference_input,  "perturbo", params.Multiplicity_of_infection)
         GuideInference = mergedResults(SceptreResults.test_results, PerturboResults.inference_mudata)
     }
@@ -108,7 +108,7 @@ workflow process_mudata_pipeline {
             error "INFERENCE_method='default' requires INFERENCE_target_guide_pairing_strategy='default'"
         }
         // Process cis results
-        SceptreResults_cis = inference_sceptre(PrepareInference_cis.mudata_inference_input)
+        SceptreResults_cis = inference_sceptre(PrepareInference_cis.mudata_inference_input, covariate_string)
         PerturboResults_cis = inference_perturbo(PrepareInference_cis.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
         GuideInference_cis = mergedResults(SceptreResults_cis.test_results, PerturboResults_cis.inference_mudata)
         // Process trans results
