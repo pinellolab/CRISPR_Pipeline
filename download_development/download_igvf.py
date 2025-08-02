@@ -4,6 +4,8 @@ import pandas as pd
 import argparse
 import hashlib
 import json
+import gzip
+import shutil
 from tqdm import tqdm
 from requests.auth import HTTPBasicAuth
 
@@ -85,7 +87,7 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
     route, ext = file_type_to_url[file_type]
     base_url = f"https://api.data.igvf.org/{route}"
     download_url = f"{base_url}/{accession}/@@download/{accession}.{ext}"
-    output_path = os.path.join(download_dir, f"{accession}.{ext}")
+    output_path = os.path.join(download_dir, f"{accession}.{ext.rstrip('.gz')}")
 
     # --- 1. Check if file already exists ---
     if os.path.exists(output_path):
@@ -139,7 +141,17 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
 
     colored_print(Color.GREEN, f"Downloaded {accession} successfully.")
 
-    # --- 3. Verify the downloaded file if expected_md5 is provided ---
+    # --- 3. Gunzip the file ---
+    unzipped_path = output_path.rstrip('.gz')
+    try:
+        with gzip.open(output_path, 'rb') as f_in, open(unzipped_path, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+        os.remove(output_path)
+        colored_print(Color.GREEN, f"Gunzipped {accession} to {os.path.basename(unzipped_path)}")
+    except Exception as e:
+        colored_print(Color.RED, f"Failed to gunzip {accession}: {e}")
+
+    # --- 4. Verify the downloaded file if expected_md5 is provided ---
     if expected_md5 is not None:
         colored_print(Color.YELLOW, f"Verifying checksum for {accession}...")
         actual_md5 = calculate_md5(output_path)
@@ -155,7 +167,6 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
 
 
 def process_sample_sheet(df, auth: HTTPBasicAuth, file_types='all', output_dir='downloads') -> pd.DataFrame:
-
     os.makedirs(output_dir, exist_ok=True)
     local_paths_df = df.copy()
 
@@ -168,18 +179,18 @@ def process_sample_sheet(df, auth: HTTPBasicAuth, file_types='all', output_dir='
                 expected_md5 = row.get(md5_col)
                 if pd.notna(accession) and isinstance(accession, str) and accession.startswith("IGVFFI"):
                     download_and_verify_file(accession, expected_md5, output_dir, auth, file_type='sequence')
-                    local_paths_df.at[_, f'local_{col}'] = os.path.abspath(os.path.join(output_dir, f"{accession}.fastq.gz"))
+                    local_paths_df.at[_, f'local_{col}'] = os.path.abspath(os.path.join(output_dir, f"{accession}.fastq"))
 
             elif file_types in ['other', 'all']:
                 if col in CONFIGURATION_FILE_COLUMNS and pd.notna(row[col]):
                     accession = row[col]
                     download_and_verify_file(accession, None, output_dir, auth, file_type='configuration')
-                    local_paths_df.at[_, f'local_{col}'] = os.path.abspath(os.path.join(output_dir, f"{accession}.yaml.gz"))
+                    local_paths_df.at[_, f'local_{col}'] = os.path.abspath(os.path.join(output_dir, f"{accession}.yaml"))
 
                 elif col in TABULAR_FILE_COLUMNS and pd.notna(row[col]):
                     accession = row[col]
                     download_and_verify_file(accession, None, output_dir, auth, file_type='tabular')
-                    local_paths_df.at[_, f'local_{col}'] = os.path.abspath(os.path.join(output_dir, f"{accession}.tsv.gz"))
+                    local_paths_df.at[_, f'local_{col}'] = os.path.abspath(os.path.join(output_dir, f"{accession}.tsv"))
 
     return local_paths_df
 
