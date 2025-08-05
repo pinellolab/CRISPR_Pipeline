@@ -3,18 +3,18 @@
 Chunked PerTurbo inference script.
 
 This script performs PerTurbo inference on chunks of genes to handle large datasets.
-It adds covariates to the full dataset, chunks the data, runs inference on each chunk
-independently, then combines the results and saves them back to the original MuData.
+It uses the chunk_mudata.py script to create chunks, then calls perturbo_inference.py
+on each chunk via subprocess to avoid GPU model shape consistency issues,
+then combines the results and saves them back to the original MuData.
 """
 
 import argparse
 import os
-from math import ceil
+import subprocess
+import tempfile
+import shutil
 import pandas as pd
-import numpy as np
 import mudata as md
-import perturbo
-import scvi
 
 
 def run_perturbo_chunked(
@@ -36,7 +36,12 @@ def run_perturbo_chunked(
     num_workers=0,
 ):
     """
-    Run PerTurbo inference on chunks of genes and combine results.
+    Run PerTurbo inference on chunks of genes by calling external scripts.
+
+    This function:
+    1. Uses chunk_mudata.py to create gene chunks
+    2. Calls perturbo_inference.py on each chunk via subprocess
+    3. Combines the results and saves them back to the original MuData
 
     Parameters:
     -----------
@@ -49,341 +54,181 @@ def run_perturbo_chunked(
     Other parameters match those in perturbo_inference.py
     """
 
-    scvi.settings.seed = 0
-    if num_workers > 0:
-        scvi.settings.dl_num_workers = num_workers
+    print(f"Starting chunked PerTurbo inference on {mdata_input_fp}...")
 
-    print(f"Loading MuData from {mdata_input_fp}...")
-    mdata = md.read(mdata_input_fp)
+    # Get the directory containing this script to find other scripts
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    chunk_script = os.path.join(script_dir, "chunk_mudata.py")
+    perturbo_script = os.path.join(script_dir, "perturbo_inference.py")
 
-    # Add covariates to the full dataset (as done in original perturbo_inference.py)
-    print("Adding covariates to full dataset...")
+    # Verify required scripts exist
+    if not os.path.exists(chunk_script):
+        raise FileNotFoundError(f"Required script not found: {chunk_script}")
+    if not os.path.exists(perturbo_script):
+        raise FileNotFoundError(f"Required script not found: {perturbo_script}")
 
-    # Identify control guides
-    control_guide_filter = (~mdata[guide_modality_name].var["targeting"]) | (
-        mdata[guide_modality_name]
-        .var["type"]
-        .isin(["safe-targeting", "non-targeting", "negative control"])
-    )
-    if np.any(control_guide_filter):
-        control_guides = (
-            mdata[guide_modality_name].var_names[control_guide_filter].tolist()
+    # Create temporary directory for chunks
+    temp_dir = tempfile.mkdtemp(prefix="perturbo_chunks_")
+    print(f"Using temporary directory: {temp_dir}")
+
+    try:
+        # Step 1: Create chunks using chunk_mudata.py
+        print(f"\nStep 1: Chunking MuData into {chunk_size} genes per chunk...")
+        chunk_cmd = [
+            "python",
+            chunk_script,
+            mdata_input_fp,
+            temp_dir,
+            "--chunk-size",
+            str(chunk_size),
+            "--output-prefix",
+            "chunk",
+        ]
+
+        if test_all_pairs:
+            chunk_cmd.append(
+                "--test-all-pairs"
+            )  # Add flag when we want to test all pairs
+
+        print(f"Running: {' '.join(chunk_cmd)}")
+        result = subprocess.run(chunk_cmd, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            print(f"Error in chunking: {result.stderr}")
+            raise RuntimeError(f"Chunking failed with return code {result.returncode}")
+
+        print("Chunking completed successfully")
+
+        # Step 2: Find all chunk files
+        chunk_files = []
+        for filename in os.listdir(temp_dir):
+            if filename.startswith("chunk.") and filename.endswith(".h5mu"):
+                chunk_files.append(os.path.join(temp_dir, filename))
+
+        chunk_files.sort()  # Ensure consistent order
+        print(f"Found {len(chunk_files)} chunk files")
+
+        if not chunk_files:
+            raise RuntimeError("No chunk files were created")
+
+        # Step 3: Run PerTurbo on each chunk
+        processed_chunks = []
+
+        for i, chunk_file in enumerate(chunk_files):
+            print(
+                f"\nStep 3.{i + 1}: Processing chunk {i + 1}/{len(chunk_files)}: {os.path.basename(chunk_file)}"
+            )
+
+            # Create output file for this chunk
+            chunk_output = chunk_file.replace(".h5mu", "_results.h5mu")
+
+            # Build command for perturbo_inference.py
+            perturbo_cmd = [
+                "python",
+                perturbo_script,
+                chunk_file,
+                chunk_output,
+                "--fit_guide_efficacy",
+                str(fit_guide_efficacy),
+                "--efficiency_mode",
+                efficiency_mode,
+                "--accelerator",
+                accelerator,
+                "--batch_size",
+                str(batch_size),
+                "--early_stopping",
+                str(early_stopping),
+                "--early_stopping_patience",
+                str(early_stopping_patience),
+                "--lr",
+                str(lr),
+                "--num_epochs",
+                str(num_epochs),
+                "--gene_modality_name",
+                gene_modality_name,
+                "--guide_modality_name",
+                guide_modality_name,
+                "--test_control_guides",
+                str(test_control_guides),
+                "--num_workers",
+                str(num_workers),
+            ]
+
+            if test_all_pairs:
+                perturbo_cmd.append("--test_all_pairs")
+
+            print(f"Running: {' '.join(perturbo_cmd)}")
+            result = subprocess.run(perturbo_cmd, capture_output=True, text=True)
+
+            if result.returncode != 0:
+                print(f"Error in chunk {i + 1}: {result.stderr}")
+                print(f"Skipping chunk {i + 1}")
+                continue
+
+            processed_chunks.append(chunk_output)
+            print(f"Successfully processed chunk {i + 1}")
+
+        if not processed_chunks:
+            raise RuntimeError("No chunks were successfully processed")
+
+        # Step 4: Combine results
+        print(
+            f"\nStep 4: Combining results from {len(processed_chunks)} processed chunks..."
         )
-    else:
-        control_guides = None
+        combine_chunk_results(processed_chunks, mdata_input_fp, mdata_output_fp)
 
-    # Add log-transformed covariates
-    mdata[gene_modality_name].obs["log1p_total_guide_umis"] = np.log1p(
-        mdata[guide_modality_name].obs["total_guide_umis"]
-    )
-    mdata[gene_modality_name].obs["log1p_total_guide_umis_centered"] = (
-        mdata[gene_modality_name].obs["log1p_total_guide_umis"]
-        - mdata[gene_modality_name].obs["log1p_total_guide_umis"].mean()
-    )
+        print(f"Results saved to {mdata_output_fp}")
 
-    # Determine efficiency mode
-    efficiency_mode = {"undecided": "auto", "low": "mixture", "high": "scaled"}[
-        efficiency_mode
-    ]
+    finally:
+        # Clean up temporary directory
+        print(f"\nCleaning up temporary directory: {temp_dir}")
+        shutil.rmtree(temp_dir)
 
-    if efficiency_mode == "auto":
-        max_guides_per_cell = mdata[guide_modality_name].X.sum(axis=1).max()
-        if max_guides_per_cell > 1:
-            efficiency_mode = "scaled"
-            print(
-                "Using 'scaled' efficiency mode due to high MOI (max guides per cell > 1)."
-            )
-        else:
-            efficiency_mode = "mixture"
-            print(
-                "Using 'mixture' efficiency mode due to low MOI (max guides per cell <= 1)."
-            )
+    print("Chunked PerTurbo inference completed successfully!")
 
-    # Create intended_targets matrix
-    intended_targets_df = pd.get_dummies(
-        mdata[guide_modality_name].var["intended_target_name"]
-    ).astype(float)
 
-    if not test_control_guides:
-        if control_guides is not None:
-            control_elements = intended_targets_df.loc[control_guides].sum(axis=0) > 0
-            intended_targets_df = intended_targets_df.drop(
-                columns=intended_targets_df.columns[control_elements]
-            )
+def combine_chunk_results(processed_chunk_files, original_mdata_path, output_path):
+    """
+    Combine results from multiple processed chunks into the original MuData.
 
-    mdata[guide_modality_name].varm["intended_targets"] = intended_targets_df
-    mdata.uns["intended_target_names"] = intended_targets_df.columns.tolist()
+    Parameters:
+    -----------
+    processed_chunk_files : list
+        List of paths to processed chunk files
+    original_mdata_path : str
+        Path to original MuData file
+    output_path : str
+        Path for output MuData file
+    """
 
-    # Load pairs_to_test if needed
-    pairs_to_test_df = None
-    if not test_all_pairs:
-        if "pairs_to_test" not in mdata.uns:
-            raise ValueError(
-                "pairs_to_test not found in mdata.uns when test_all_pairs=False"
-            )
-
-        pairs_to_test = mdata.uns["pairs_to_test"]
-        if isinstance(pairs_to_test, dict):
-            pairs_to_test_df = pd.DataFrame(pairs_to_test)
-        else:
-            pairs_to_test_df = pairs_to_test
-
-    # Set up chunking
-    n_genes = mdata[gene_modality_name].shape[1]
-    n_chunks = ceil(n_genes / chunk_size)
-    print(f"Splitting {n_genes} genes into {n_chunks} chunks of size {chunk_size}")
+    print("Loading original MuData...")
+    original_mdata = md.read(original_mdata_path)
 
     all_results = []
 
-    # Process each chunk
-    for i in range(n_chunks):
-        print(f"\n--- Processing chunk {i + 1}/{n_chunks} ---")
+    for chunk_file in processed_chunk_files:
+        print(f"Loading results from {os.path.basename(chunk_file)}...")
+        chunk_mdata = md.read(chunk_file)
 
-        # Define gene range for this chunk
-        start = i * chunk_size
-        end = min(start + chunk_size, n_genes)
-        print(f"Genes {start} to {end - 1}")
-
-        # Extract gene subset for this chunk
-        gene_adata_subset = mdata[gene_modality_name][:, start:end]
-
-        if not test_all_pairs:
-            # Filter to genes and guides in this chunk
-            chunk_genes = gene_adata_subset.var_names.tolist()
-            chunk_pairs = pairs_to_test_df[
-                pairs_to_test_df["gene_id"].isin(chunk_genes)
-            ]
-
-            if len(chunk_pairs) == 0:
-                print(f"  No pairs to test in chunk {i + 1}, skipping...")
-                continue
-
-            chunk_guides = chunk_pairs["guide_id"].unique()
-            print(
-                f"  Found {len(chunk_guides)} unique guides for {len(chunk_genes)} genes"
-            )
-
-            # Filter guide data
-            guide_mask = mdata[guide_modality_name].var["guide_id"].isin(chunk_guides)
-            guide_adata_subset = mdata[guide_modality_name][:, guide_mask]
-
-            # Create gene by element matrix for this chunk
-            aggregated_df = (
-                chunk_pairs[["gene_id", "intended_target_name"]]
-                .drop_duplicates()
-                .assign(value=1)
-            )
-
-            gene_by_element = (
-                aggregated_df.pivot(
-                    index="gene_id", columns="intended_target_name", values="value"
-                )
-                .reindex(
-                    index=gene_adata_subset.var_names,
-                    columns=mdata.uns["intended_target_names"],
-                )
-                .fillna(0)
-            )
-
-            # Subset to targeted cells only
-            targeted_cells = guide_adata_subset.X.sum(axis=1) > 0
-            if not targeted_cells.any():
-                print(f"  No targeted cells found in chunk {i + 1}, skipping...")
-                continue
-
-            chunk_mdata = md.MuData(
-                {
-                    gene_modality_name: gene_adata_subset[targeted_cells],
-                    guide_modality_name: guide_adata_subset[targeted_cells],
-                }
-            )
-
-            # Add gene by element matrix to chunk
-            chunk_mdata[gene_modality_name].varm["intended_targets"] = gene_by_element
-            chunk_mdata.uns["pairs_to_test"] = chunk_pairs
-
+        if (
+            "test_results" in chunk_mdata.uns
+            and len(chunk_mdata.uns["test_results"]) > 0
+        ):
+            all_results.append(chunk_mdata.uns["test_results"])
         else:
-            # Use all guide data for this gene chunk
-            chunk_mdata = md.MuData(
-                {
-                    gene_modality_name: gene_adata_subset,
-                    guide_modality_name: mdata[guide_modality_name].copy(),
-                }
-            )
+            print(f"  No results found in {os.path.basename(chunk_file)}")
 
-        # Copy over necessary metadata
-        chunk_mdata.uns["intended_target_names"] = mdata.uns["intended_target_names"]
-
-        print(
-            f"  Chunk shape: {gene_modality_name} {chunk_mdata[gene_modality_name].shape}, "
-            f"{guide_modality_name} {chunk_mdata[guide_modality_name].shape}"
-        )
-
-        try:
-            # Run PerTurbo on this chunk
-            chunk_results = run_perturbo_on_chunk(
-                chunk_mdata,
-                efficiency_mode=efficiency_mode,
-                fit_guide_efficacy=fit_guide_efficacy,
-                accelerator=accelerator,
-                batch_size=batch_size,
-                early_stopping=early_stopping,
-                early_stopping_patience=early_stopping_patience,
-                lr=lr,
-                num_epochs=num_epochs,
-                gene_modality_name=gene_modality_name,
-                guide_modality_name=guide_modality_name,
-                test_all_pairs=test_all_pairs,
-                control_guides=control_guides,
-            )
-
-            if chunk_results is not None:
-                all_results.append(chunk_results)
-                print(
-                    f"  Successfully processed chunk {i + 1}, found {len(chunk_results)} results"
-                )
-            else:
-                print(f"  No results from chunk {i + 1}")
-
-        except Exception as e:
-            print(f"  Error processing chunk {i + 1}: {e}")
-            continue
-
-    # Combine all results
     if all_results:
-        print(f"\nCombining results from {len(all_results)} chunks...")
+        print(f"Combining results from {len(all_results)} chunks...")
         combined_results = pd.concat(all_results, ignore_index=True)
-
-        # Add results to original mdata
-        mdata.uns["test_results"] = combined_results
+        original_mdata.uns["test_results"] = combined_results
         print(f"Combined results: {len(combined_results)} total gene-element pairs")
     else:
         print("No results to combine!")
-        mdata.uns["test_results"] = pd.DataFrame()
+        original_mdata.uns["test_results"] = pd.DataFrame()
 
-    # Save the updated mdata with covariates and results
-    print(f"Saving results to {mdata_output_fp}...")
-    mdata.write(mdata_output_fp, compression="gzip")
-
-    return mdata
-
-
-def run_perturbo_on_chunk(
-    chunk_mdata,
-    efficiency_mode,
-    fit_guide_efficacy,
-    accelerator,
-    batch_size,
-    early_stopping,
-    early_stopping_patience,
-    lr,
-    num_epochs,
-    gene_modality_name,
-    guide_modality_name,
-    test_all_pairs,
-    control_guides,
-):
-    """
-    Run PerTurbo inference on a single chunk.
-
-    Returns:
-    --------
-    pd.DataFrame or None
-        Results dataframe for this chunk, or None if no results
-    """
-
-    try:
-        # Setup MuData for PerTurbo
-        perturbo.PERTURBO.setup_mudata(
-            chunk_mdata,
-            perturbation_layer="guide_assignment",
-            batch_key="batch",
-            library_size_key="total_gene_umis",
-            continuous_covariates_keys=["log1p_total_guide_umis_centered"],
-            guide_by_element_key="intended_targets",
-            gene_by_element_key="intended_targets" if not test_all_pairs else None,
-            modalities={
-                "rna_layer": gene_modality_name,
-                "perturbation_layer": guide_modality_name,
-            },
-        )
-
-        model = perturbo.PERTURBO(
-            chunk_mdata,
-            # control_guides=control_guides,  # broken in current PerTurbo version
-            likelihood="nb",
-            efficiency_mode=efficiency_mode,
-            fit_guide_efficacy=fit_guide_efficacy,
-        )
-
-        model.train(
-            num_epochs,
-            lr=lr,
-            batch_size=batch_size,
-            accelerator=accelerator,
-            early_stopping=early_stopping,
-            early_stopping_patience=early_stopping_patience,
-            early_stopping_min_delta=1e-5,
-            early_stopping_monitor="elbo_train",
-        )
-
-        # Get element effects
-        igvf_name_map = {
-            "element": "intended_target_name",
-            "gene": "gene_id",
-            "q_value": "p_value",
-        }
-
-        element_effects = (
-            model.get_element_effects()
-            .rename(columns=igvf_name_map)
-            .assign(log2_fc=lambda x: x["loc"] / np.log(2))
-            .assign(
-                gene_id=lambda x: x["gene_id"].astype("category"),
-                intended_target_name=lambda x: x["intended_target_name"].astype(
-                    "category"
-                ),
-            )
-        )
-
-        results = element_effects[
-            [
-                "gene_id",
-                "intended_target_name",
-                "log2_fc",
-                "p_value",
-            ]
-        ]
-
-        # Merge with pairs_to_test to get guide_id information
-        if not test_all_pairs and "pairs_to_test" in chunk_mdata.uns:
-            pairs_to_test_df = chunk_mdata.uns["pairs_to_test"]
-            results = results.merge(
-                pairs_to_test_df,
-                on=["gene_id", "intended_target_name"],
-                how="left",
-            )
-        else:
-            # For test_all_pairs case
-            results = results.merge(
-                chunk_mdata[guide_modality_name].var[
-                    ["intended_target_name", "guide_id"]
-                ],
-                how="left",
-                on=["intended_target_name"],
-            )
-
-        # Rename columns to match expected output
-        results.rename(
-            columns={"log2_fc": "perturbo_log2_fc", "p_value": "perturbo_p_value"},
-            inplace=True,
-        )
-
-        return results
-
-    except Exception as e:
-        print(f"    Error in PerTurbo processing: {e}")
-        return None
+    print("Saving combined results...")
+    original_mdata.write(output_path, compression="gzip")
 
 
 def main():
