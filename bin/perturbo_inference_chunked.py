@@ -55,6 +55,51 @@ def run_perturbo_chunked(
     """
 
     print(f"Starting chunked PerTurbo inference on {mdata_input_fp}...")
+    mdata = md.read_h5mu(mdata_input_fp, backed="r")
+    if mdata[gene_modality_name].n_vars < chunk_size:
+        print(
+            "Number of genes is less than chunk size; running standard PerTurbo inference instead."
+        )
+        perturbo_script = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "perturbo_inference.py"
+        )
+        perturbo_cmd = [
+            "python",
+            perturbo_script,
+            mdata_input_fp,
+            mdata_output_fp,
+            "--fit_guide_efficacy",
+            str(fit_guide_efficacy),
+            "--efficiency_mode",
+            efficiency_mode,
+            "--accelerator",
+            accelerator,
+            "--batch_size",
+            str(batch_size),
+            "--early_stopping",
+            str(early_stopping),
+            "--early_stopping_patience",
+            str(early_stopping_patience),
+            "--lr",
+            str(lr),
+            "--num_epochs",
+            str(num_epochs),
+            "--gene_modality_name",
+            gene_modality_name,
+            "--guide_modality_name",
+            guide_modality_name,
+            "--test_control_guides",
+            str(test_control_guides),
+            "--num_workers",
+            str(num_workers),
+        ]
+
+        if test_all_pairs:
+            perturbo_cmd.append("--test_all_pairs")
+
+        print(f"Running: {' '.join(perturbo_cmd)}")
+        subprocess.run(perturbo_cmd)
+        return
 
     # Get the directory containing this script to find other scripts
     script_dir = os.path.dirname(os.path.abspath(__file__))
