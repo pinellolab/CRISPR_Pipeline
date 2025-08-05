@@ -77,6 +77,73 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
   return(sceptre_object)
 }
 
+###
+###
+identify_non_redundant_covariates <- function(data, cov_string) {
+  all_covs <- strsplit(gsub("\\s*\\+\\s*$", "", cov_string), "\\s*\\+\\s*")[[1]]
+
+  if (length(all_covs) == 1) {
+    return(cov_string)
+  }
+
+  # check if two columns have the same level structure
+  have_same_levels <- function(col1, col2) {
+  if (!(col1 %in% colnames(data) && col2 %in% colnames(data))) {
+    stop(sprintf("Columns '%s' or '%s' do not exist in the data", col1, col2))
+  }
+
+  levels1 <- unique(data[[col1]])
+  levels2 <- unique(data[[col2]])
+
+  if (length(levels1) == 0 || length(levels2) == 0) {
+    warning(sprintf("Column '%s' or '%s' has no levels", col1, col2))
+    return(FALSE)
+  }
+
+    return(length(levels1) == length(levels2) &&
+          all(sapply(levels1, function(l) {
+            matches <- data[[col2]][data[[col1]] == l]
+            length(matches) > 0 && all(matches == matches[1])
+          })))
+  }
+  # Identify groups of columns with the same level structure
+  redundant_groups <- list()
+  for (i in 1:(length(all_covs) - 1)) {
+    for (j in (i + 1):length(all_covs)) {
+      if (have_same_levels(all_covs[i], all_covs[j])) {
+        group <- c(all_covs[i], all_covs[j])
+        redundant_groups[[length(redundant_groups) + 1]] <- group
+      }
+    }
+  }
+
+  merged_groups <- list()
+  for (group in redundant_groups) {
+    added <- FALSE
+    for (i in seq_along(merged_groups)) {
+      if (any(group %in% merged_groups[[i]])) {
+        merged_groups[[i]] <- unique(c(merged_groups[[i]], group))
+        added <- TRUE
+        break
+      }
+    }
+    if (!added) {
+      merged_groups[[length(merged_groups) + 1]] <- group
+    }
+  }
+
+  # Choose one representative from each group (the first one)
+  to_keep <- sapply(merged_groups, function(group) group[1])
+  to_keep <- c(to_keep, setdiff(all_covs, unlist(merged_groups)))
+
+  # Remove any columns with only one unique value
+  to_keep <- to_keep[sapply(to_keep, function(col) length(unique(data[[col]])) > 1)]
+
+  # Return the non-redundant covariates as a string
+  return(paste(to_keep, collapse = " + "))
+>>>>>>> main
+}
+
 ### Define Function
 inference_sceptre_m <- function(mudata, ...) {
   # convert MuData object to sceptre object
@@ -85,7 +152,7 @@ inference_sceptre_m <- function(mudata, ...) {
   # extract set of discovery pairs to test
   pairs_to_test <- MultiAssayExperiment::metadata(mudata)$pairs_to_test |>
     as.data.frame()
-  
+
   discovery_pairs <- pairs_to_test |>
     dplyr::rename(
       grna_target = intended_target_name,
@@ -130,7 +197,7 @@ inference_sceptre_m <- function(mudata, ...) {
     dplyr::rename(gene_id = response_id,
                   intended_target_name = grna_target,
                   log2_fc = log_2_fold_change)
-  
+
   discovery_unique <- discovery_results |>
     dplyr::distinct(gene_id, intended_target_name, .keep_all = TRUE)
   
@@ -140,7 +207,7 @@ inference_sceptre_m <- function(mudata, ...) {
 
   MultiAssayExperiment::metadata(mudata)$test_results <- test_results
 
-  # return 
+  # return
   return(list(mudata = mudata, test_results = test_results))
 }
 
@@ -157,7 +224,6 @@ if (!exists(".sourced_from_test")) {
   resampling_approximation <- args[4]
   control_group <- args[5]
   resampling_mechanism <- args[6]
-  
   
   # read MuData
   mudata_in <- MuData::readH5MU(mudata_fp)
@@ -176,4 +242,3 @@ if (!exists(".sourced_from_test")) {
   write.csv(results$test_results, file = "test_results.csv", row.names = FALSE)
   #MuData::writeH5MU(object = results$mudata, file = 'inference_mudata.h5mu')
 }
-

@@ -4,13 +4,14 @@ import perturbo
 import mudata as md
 import numpy as np
 import pandas as pd
+import scvi
 
 
 def run_perturbo(
     mdata_input_fp,
     mdata_output_fp,
     fit_guide_efficacy=True,  # whether to fit guide efficacy (if false, overrides efficiency_mode)
-    efficiency_mode="undecided", #mapping from undecided->auto, low->mixture, high->scaled# can be "mixture" (for low MOI only), "scaled", "undecided" (auto), "low" (mixture), or "high" (scaled)
+    efficiency_mode="undecided",  # mapping from undecided->auto, low->mixture, high->scaled# can be "mixture" (for low MOI only), "scaled", "undecided" (auto), "low" (mixture), or "high" (scaled)
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
     batch_size=512,  # batch size for training
     early_stopping=True,  # whether to use early stopping
@@ -20,28 +21,36 @@ def run_perturbo(
     gene_modality_name="gene",  # name of the gene modality in the MuData object
     guide_modality_name="guide",  # name of the guide modality in the MuData
     test_all_pairs=False,  # whether to test all pairs or only those in pairs_to_test
+    test_control_guides=True,  # whether to remove control guides from the analysis
+    num_workers=0,  # number of worker processes for data loading
 ):
+    scvi.settings.seed = 0
+    if num_workers > 0:
+        scvi.settings.dl_num_workers = num_workers
+
     mdata = md.read(mdata_input_fp)
-    mdata[gene_modality_name].obs = (
-        mdata.obs.join(
-            mdata[gene_modality_name].obs.drop(
-                columns=mdata.obs.columns, errors="ignore"
-            )
-        )
-        .join(
-            mdata[guide_modality_name].obs.drop(
-                columns=mdata.obs.columns.union(mdata[gene_modality_name].obs.columns),
-                errors="ignore",
-            )
-        )
-        .assign(log1p_total_guide_umis=lambda x: np.log1p(x["total_guide_umis"]))
+
+    control_guide_filter = (~mdata["guide"].var["targeting"]) | (
+        mdata["guide"]
+        .var["type"]
+        .isin(["safe-targeting", "non-targeting", "negative control"])
+    )
+    if np.any(control_guide_filter):
+        control_guides = mdata["guide"].var_names[control_guide_filter].tolist()
+    else:
+        control_guides = None
+
+    mdata[gene_modality_name].obs["log1p_total_guide_umis"] = np.log1p(
+        mdata[guide_modality_name].obs["total_guide_umis"]
+    )
+    mdata[gene_modality_name].obs["log1p_total_guide_umis_centered"] = (
+        mdata[gene_modality_name].obs["log1p_total_guide_umis"]
+        - mdata[gene_modality_name].obs["log1p_total_guide_umis"].mean()
     )
 
-    mdata[guide_modality_name].X = mdata[guide_modality_name].layers["guide_assignment"]
-
-    efficiency_mode  = {'undecided':'auto',
-                        'low': 'mixture',
-                        'high': 'scaled'}[efficiency_mode]
+    efficiency_mode = {"undecided": "auto", "low": "mixture", "high": "scaled"}[
+        efficiency_mode
+    ]
 
     if efficiency_mode == "auto":
         max_guides_per_cell = mdata[guide_modality_name].X.sum(axis=1).max()
@@ -56,61 +65,78 @@ def run_perturbo(
                 "Using 'mixture' efficiency mode due to low MOI (max guides per cell <= 1)."
             )
 
-    pairs_to_test_df = pd.DataFrame(mdata.uns["pairs_to_test"])
-    mdata.uns["intended_target_names"] = sorted(
-        pd.unique(pairs_to_test_df["intended_target_name"])
-    )
-    # direct aggregate
-    aggregated_df = (
-        pairs_to_test_df.assign(value=1)
-        .groupby(["gene_id", "intended_target_name"])
-        .agg(value=("value", "max"))
-        .reset_index()
-    )
-
-    # pivot the data
-    mdata[gene_modality_name].varm["intended_targets"] = (
-        aggregated_df.pivot(
-            index="gene_id", columns="intended_target_name", values="value"
-        )
-        .reindex(mdata[gene_modality_name].var_names)
-        .fillna(0)
-    )
-
-    mdata.uns["intended_target_names"] = sorted(
-        pd.unique(pairs_to_test_df["intended_target_name"])
-    )
-
     intended_targets_df = pd.get_dummies(
         mdata[guide_modality_name].var["intended_target_name"]
     ).astype(float)
+    if not test_control_guides:
+        control_elements = intended_targets_df[control_guides].sum(axis=0) > 0
+        intended_targets_df = intended_targets_df.drop(control_elements, axis=1)
 
-    mdata[guide_modality_name].varm["intended_targets"] = intended_targets_df[
-        mdata.uns["intended_target_names"]
-    ]
+    mdata[guide_modality_name].varm["intended_targets"] = intended_targets_df
+
+    mdata.uns["intended_target_names"] = intended_targets_df.columns.tolist()
+
+    # create element by gene matrix if not testing all pairs
+    if not test_all_pairs:
+        if isinstance(mdata.uns["pairs_to_test"], pd.DataFrame):
+            pairs_to_test_df = mdata.uns["pairs_to_test"]
+        elif isinstance(mdata.uns["pairs_to_test"], dict):
+            pairs_to_test_df = pd.DataFrame(mdata.uns["pairs_to_test"])
+
+        aggregated_df = (
+            pairs_to_test_df[["gene_id", "intended_target_name"]]
+            .drop_duplicates()
+            .assign(value=1)
+        )
+
+        # pivot the data
+        mdata[gene_modality_name].varm["intended_targets"] = (
+            aggregated_df.pivot(
+                index="gene_id", columns="intended_target_name", values="value"
+            )
+            .reindex(
+                index=mdata[gene_modality_name].var_names,
+                columns=mdata.uns["intended_target_names"],
+            )
+            .fillna(0)
+        )
+
+        # subset mdata for perturbo speedup
+        tested_guides = pairs_to_test_df["guide_id"].unique()
+        tested_genes = pairs_to_test_df["gene_id"].unique()
+
+        rna_subset = mdata[gene_modality_name][:, tested_genes]
+        grna_feature_ids = (
+            mdata[guide_modality_name].var["guide_id"].isin(tested_guides)
+        )
+        grna_subset = mdata[guide_modality_name][:, grna_feature_ids]
+
+        targeted_cells = grna_subset.X.sum(axis=1) > 0
+        if not targeted_cells.any():
+            raise ValueError("No targeted cells found in the guide modality subset.")
+
+        mdata_dict = {
+            gene_modality_name: rna_subset[targeted_cells],
+            guide_modality_name: grna_subset[targeted_cells],
+        }
+
+        # copy over any additional modalities
+        for mod in mdata.mod.keys():
+            if mod not in mdata_dict:
+                mdata_dict[mod] = mdata[mod][targeted_cells]
+        mdata_subset = md.MuData(mdata_dict).copy()
+    else:
+        mdata_subset = mdata
 
     ########################################
-    ## subset mdata for perturbo speedup ##
-    tested_guides = pairs_to_test_df["guide_id"].unique()
-    tested_genes = pairs_to_test_df["gene_id"].unique()
-
-    rna_subset = mdata[gene_modality_name][:, tested_genes]
-    grna_feature_ids = mdata[guide_modality_name].var["guide_id"].isin(tested_guides)
-    grna_subset = mdata[guide_modality_name][:, grna_feature_ids]
-
-    mdata_dict = {gene_modality_name: rna_subset, guide_modality_name: grna_subset}
-    if "hashing" in mdata.mod.keys():
-        mdata_dict["hashing"] = mdata["hashing"]
-    mdata_subset = md.MuData(mdata_dict)
-
-    mdata_subset = mdata_subset.copy()
-    ########################################
+    # Setup MuData for PerTurbo
 
     perturbo.PERTURBO.setup_mudata(
         mdata_subset,
+        perturbation_layer="guide_assignment",
         batch_key="batch",
         library_size_key="total_gene_umis",
-        continuous_covariates_keys=["log1p_total_guide_umis"],
+        continuous_covariates_keys=["log1p_total_guide_umis_centered"],
         guide_by_element_key="intended_targets",
         gene_by_element_key="intended_targets" if not test_all_pairs else None,
         modalities={
@@ -121,6 +147,7 @@ def run_perturbo(
 
     model = perturbo.PERTURBO(
         mdata_subset,
+        # control_guides=control_guides, # broken in current PerTurbo version, fix when we update image
         likelihood="nb",
         efficiency_mode=efficiency_mode,
         fit_guide_efficacy=fit_guide_efficacy,
@@ -137,6 +164,7 @@ def run_perturbo(
         early_stopping_monitor="elbo_train",
     )
 
+    # Reformat the output to match IGVF specifications
     igvf_name_map = {
         "element": "intended_target_name",
         "gene": "gene_id",
@@ -147,27 +175,44 @@ def run_perturbo(
         model.get_element_effects()
         .rename(columns=igvf_name_map)
         .assign(log2_fc=lambda x: x["loc"] / np.log(2))
-        .merge(pairs_to_test_df)
+        .assign(
+            gene_id=lambda x: x["gene_id"].astype("category"),
+            intended_target_name=lambda x: x["intended_target_name"].astype("category"),
+        )
     )
 
-    mdata = md.read(mdata_input_fp)
     mdata.uns["test_results"] = element_effects[
         [
             "gene_id",
-            "guide_id",
             "intended_target_name",
             "log2_fc",
             "p_value",
-            "pair_type",
         ]
     ]
+
+    # NOTE: this part creates a per-guide output table even though we are running per-element inference.
+    # This is to maintain compatibility with the existing workflow, which condenses per-guide output
+    # into per-element output in a separate module.
+
+    if not test_all_pairs:
+        mdata.uns["test_results"] = mdata.uns["test_results"].merge(
+            pairs_to_test_df,
+            on=["gene_id", "intended_target_name"],
+            how="left",
+        )
+    else:
+        mdata.uns["test_results"] = mdata.uns["test_results"].merge(
+            mdata["guide"].var[["intended_target_name", "guide_id"]],
+            how="left",
+            on=["intended_target_name"],
+        )
 
     mdata.uns["test_results"].rename(
         columns={"log2_fc": "perturbo_log2_fc", "p_value": "perturbo_p_value"},
         inplace=True,
     )
 
-    mdata.write(mdata_output_fp)
+    mdata.write(mdata_output_fp, compression="gzip")
     return mdata
 
 
@@ -243,10 +288,20 @@ def main():
         action="store_true",
         help="Whether to test all pairs or only those in pairs_to_test (default: False)",
     )
+    parser.add_argument(
+        "--test_control_guides",
+        type=bool,
+        default=True,
+        help="Whether to remove control guides from the analysis (default: False)",
+    )
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=0,
+        help="Number of workers for data loading (default: 0)",
+    )
 
     # Parse the arguments
-    # --- IGNORE ---
-
     args = parser.parse_args()
     run_perturbo(
         args.mdata_input_fp,
