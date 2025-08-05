@@ -77,7 +77,7 @@ def main(adata_rna, gname_rna, min_genes, min_cells, pct_mito, reference):
 
     # filter for mic_cells and min_genes
     sc.pp.filter_cells(adata_rna, min_genes=min_genes)
-    sc.pp.filter_genes(adata_rna, min_cells=min_cells)
+    sc.pp.filter_genes(adata_rna, min_cells=10) # just to remove some basic amout of genes, this will be treated in during the mudata concat
 
     # filter for percent mito
     pct_mito=pct_mito 
