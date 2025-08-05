@@ -134,7 +134,7 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
                             if file_set.startswith('/measurement-sets/') or file_set.startswith('/auxiliary-sets/')],
                             reverse=True) # start with the measurement sets to create a mapping for measurement set-only properties
     for input_file_set in input_file_sets:
-        print(input_file_set)
+        print(f'Parsing input file set: {input_file_set}')
         file_set_object = requests.get(f"{PORTAL}{input_file_set}/@@object?format=json", auth=auth).json()
         file_set_type = file_set_object['file_set_type']
         modality = 'scRNA sequencing' if file_set_type == 'experimental data' else file_set_type
@@ -207,17 +207,16 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
                     continue
                 else:
                     seqspec_path = seqspec.split('/')[-2]
-                
-            else:
-                seqspec_path = modality_to_fallback_seqspec(
-                    modality, hash_seqspec, rna_seqspec, sgrna_seqspec
-                )
-
             if not seqspec_path:
-                raise ValueError(
-                    f'Missing seqspec for modality {modality} (R1 {read1["@id"]}). '
-                    'Provide a fallback using --hash_seqspec / --rna_seqspec / --sgrna_seqspec or make sure to deposit your seqspec in the data portal.'
-                )
+                if hash_seqspec and rna_seqspec and sgrna_seqspec:
+                    seqspec_path = modality_to_fallback_seqspec(
+                        modality, hash_seqspec, rna_seqspec, sgrna_seqspec
+                    )
+                else:
+                    raise ValueError(
+                        f'Missing seqspec for modality {modality} (R1 {read1["@id"]}). '
+                        'Provide a fallback using --hash_seqspec / --rna_seqspec / --sgrna_seqspec or make sure to deposit your seqspec in the data portal.'
+                    )
 
             if not(strand_specificity):
                 raise ValueError(f'Missing an associated strand specificty on {file_set_object["@id"]}. Please submit to the strand_specificity property on the data portal under the measurement set.')
@@ -230,9 +229,9 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
 
             row = {
                 'R1_path': read1['@id'].split('/')[-2],
-                'R1_md5sum': read1['md5sum'],
+                'R1_md5sum': read1['content_md5sum'],
                 'R2_path': read2['@id'].split('/')[-2],
-                'R2_md5sum': read2['md5sum'],
+                'R2_md5sum': read2['content_md5sum'],
                 'file_modality': modality,
                 'file_set': accession,
                 'measurement_sets': measurement_sets,
