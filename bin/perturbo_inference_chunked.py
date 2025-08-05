@@ -20,7 +20,7 @@ import scvi
 def run_perturbo_chunked(
     mdata_input_fp,
     mdata_output_fp,
-    chunk_size=4000,
+    chunk_size=8000,
     fit_guide_efficacy=True,
     efficiency_mode="undecided",
     accelerator="auto",
@@ -45,7 +45,7 @@ def run_perturbo_chunked(
     mdata_output_fp : str
         Path to output MuData file
     chunk_size : int
-        Number of genes per chunk (default: 4000)
+        Number of genes per chunk (default: 8000)
     Other parameters match those in perturbo_inference.py
     """
 
@@ -396,7 +396,7 @@ def main():
     parser.add_argument("mdata_output_fp", type=str, help="Output file path for MuData")
 
     parser.add_argument(
-        "--chunk-size", "-c", type=int, default=4000, help="Number of genes per chunk"
+        "--chunk_size", "-c", type=int, default=8000, help="Number of genes per chunk"
     )
 
     parser.add_argument(
