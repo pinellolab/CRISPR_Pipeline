@@ -52,7 +52,7 @@ def main():
     parser = argparse.ArgumentParser(description="Concatenate MuData files")
     parser.add_argument("-i", "--input", dest="input", nargs="+", required=True, help="Input mudata files")
     parser.add_argument("-o", "--output", dest="output", required=True, help="Output file path")
-    parser.add_argument("-g", "--gene_filter", dest="filter genes based in a percentage", type=float, default=0.05, help="Minimum number of cells a gene must be expressed in to be retained")
+    parser.add_argument("-g", "--gene_filter", dest="gene_filter", type=float, default=0.05, help="Minimum number of cells a gene must be expressed in to be retained")
     args = parser.parse_args()
 
     concat_mudatas(args.input, args.output, args.gene_filter)
