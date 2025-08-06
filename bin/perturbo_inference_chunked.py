@@ -31,7 +31,7 @@ def run_perturbo_chunked(
     num_epochs=100,
     gene_modality_name="gene",
     guide_modality_name="guide",
-    test_all_pairs=True,
+    test_all_pairs=False,
     test_control_guides=True,
     num_workers=0,
 ):
@@ -363,9 +363,8 @@ def main():
 
     parser.add_argument(
         "--test_all_pairs",
-        type=bool,
-        default=True,
-        help="Whether to test all pairs or only those in pairs_to_test",
+        action="store_true",
+        help="Whether to test all pairs or only those in pairs_to_test (default: False)",
     )
 
     parser.add_argument(
