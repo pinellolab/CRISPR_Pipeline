@@ -47,7 +47,7 @@ workflow CRISPR_PIPELINE {
     ch_rna = ch_samples.filter { meta, _fastqs -> meta.modality == 'scrna' }
     //ch_rna.view()
     ch_guide = ch_samples.filter { meta, _fastqs -> meta.modality == 'grna' }
-    //ch_guide.view()
+    ch_guide.view()
     ch_hash = ch_samples.filter { meta, _fastqs -> meta.modality == 'hash' }
     //ch_hash.view()
 
@@ -90,7 +90,7 @@ workflow CRISPR_PIPELINE {
         .first()
 
     // Run seqSpecCheck pipeline
-    if (params.ENABLE_DATA_HASHING == "true") {
+    if (params.ENABLE_DATA_HASHING) {
         seqSpecCheck_pipeline_HASHING(ch_guide.first(), ch_hash.first(), ch_guide_design, ch_barcode_hashtag_map)
     } else {
         seqSpecCheck_pipeline(ch_guide.first(), ch_guide_design)
@@ -114,7 +114,7 @@ workflow CRISPR_PIPELINE {
         prepare_mapping_pipeline.out.parsed_covariate_file
         )
 
-    if (params.ENABLE_DATA_HASHING == "true") {
+    if (params.ENABLE_DATA_HASHING) {
         mapping_hashing_pipeline(
             ch_hash,
             ch_hash_seqspec,

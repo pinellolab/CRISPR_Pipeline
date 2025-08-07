@@ -19,7 +19,7 @@ workflow mapping_rna_pipeline {
         'rna'
     )
 
-    DownloadRefResult = downloadReference(params.REFERENCE_transcriptome)
+    DownloadRefResult = downloadReference(params.REFERENCE_transcriptome, params.use_igvf_reference)
 
     MappingOut = mappingscRNA(
         ch_rna,
