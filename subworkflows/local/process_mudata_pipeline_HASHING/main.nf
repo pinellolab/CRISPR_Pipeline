@@ -13,10 +13,11 @@ include { guide_assignment_sceptre } from '../../../modules/local/guide_assignme
 include { skipGTFDownload } from '../../../modules/local/skipGTFDownload'
 include { downloadGTF } from '../../../modules/local/downloadGTF'
 include { prepare_guide_inference } from '../../../modules/local/prepare_guide_inference'
+include { prepare_all_guide_inference } from '../../../modules/local/prepare_all_guide_inference'
 include { prepare_user_guide_inference } from '../../../modules/local/prepare_user_guide_inference'
 include { inference_sceptre } from '../../../modules/local/inference_sceptre'
 include { inference_perturbo } from '../../../modules/local/inference_perturbo'
-include { inference_perturbo_trans } from '../../../modules/local/inference_perturbo_trans'
+include { inference_perturbo as inference_perturbo_trans } from '../../../modules/local/inference_perturbo'
 include { inference_mudata } from '../../../modules/local/inference_mudata'
 include { mergedResults } from '../../../modules/local/mergedResults'
 include { publishFiles } from '../../../modules/local/publishFiles'
@@ -80,15 +81,15 @@ workflow process_mudata_pipeline_HASHING {
     Prepare_assignment = prepare_assignment{MuData.mudata}
 
     if (params.GUIDE_ASSIGNMENT_method == "cleanser") {
-        Guide_Assignment = guide_assignment_cleanser(Prepare_assignment.prepare_assignment_mudata.flatten(), params.GUIDE_ASSIGNMENT_cleanser_probability_threshold, params.GUIDE_ASSIGNMENT_capture_method)
+        Guide_Assignment = guide_assignment_cleanser(Prepare_assignment.prepare_assignment_mudata.flatten(), params.GUIDE_ASSIGNMENT_cleanser_probability_threshold)
         guide_assignment_collected =  Guide_Assignment.guide_assignment_mudata_output.collect()
-        Mudata_concat = mudata_concat(guide_assignment_collected, params.QC_min_cells_per_gene)
+        Mudata_concat = mudata_concat(guide_assignment_collected)
         }
 
     else if (params.GUIDE_ASSIGNMENT_method == "sceptre") {
         Guide_Assignment = guide_assignment_sceptre(Prepare_assignment.prepare_assignment_mudata.flatten(), params.GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold, params.GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep)
         guide_assignment_collected =  Guide_Assignment.guide_assignment_mudata_output.collect()
-        Mudata_concat = mudata_concat(guide_assignment_collected, params.QC_min_cells_per_gene)
+        Mudata_concat = mudata_concat(guide_assignment_collected)
         }
 
     if (params.INFERENCE_target_guide_pairing_strategy == 'predefined_pairs') {
@@ -102,23 +103,32 @@ workflow process_mudata_pipeline_HASHING {
             GTF_Reference.gencode_gtf,
             params.INFERENCE_max_target_distance_bp
         )}
+    else if (params.INFERENCE_target_guide_pairing_strategy == 'all_by_all') {
+        PrepareInference = prepare_all_guide_inference(
+            Mudata_concat.concat_mudata,
+            GTF_Reference.gencode_gtf
+        )}
     else if (params.INFERENCE_target_guide_pairing_strategy == 'default') {
         PrepareInference_cis = prepare_guide_inference(
             Mudata_concat.concat_mudata,
             GTF_Reference.gencode_gtf,
             params.INFERENCE_max_target_distance_bp
         )
+        PrepareInference_trans = prepare_all_guide_inference(
+            Mudata_concat.concat_mudata,
+            GTF_Reference.gencode_gtf
+        )
     }
 
     if (params.INFERENCE_method == "sceptre"){
-        TestResults = inference_sceptre(PrepareInference.mudata_inference_input, covariate_string)
+        TestResults = inference_sceptre(PrepareInference.mudata_inference_input)
         GuideInference = inference_mudata(TestResults.test_results, PrepareInference.mudata_inference_input, params.INFERENCE_method)
     }
     else if (params.INFERENCE_method == "perturbo"){
         GuideInference = inference_perturbo(PrepareInference.mudata_inference_input, params.INFERENCE_method, params.Multiplicity_of_infection)
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
-        SceptreResults = inference_sceptre(PrepareInference.mudata_inference_input, covariate_string)
+        SceptreResults = inference_sceptre(PrepareInference.mudata_inference_input)
         PerturboResults = inference_perturbo(PrepareInference.mudata_inference_input,  "perturbo", params.Multiplicity_of_infection)
         GuideInference = mergedResults(SceptreResults.test_results, PerturboResults.inference_mudata)
     }
@@ -127,11 +137,11 @@ workflow process_mudata_pipeline_HASHING {
             error "INFERENCE_method='default' requires INFERENCE_target_guide_pairing_strategy='default'"
         }
         // Process cis results
-        SceptreResults_cis = inference_sceptre(PrepareInference_cis.mudata_inference_input, covariate_string)
+        SceptreResults_cis = inference_sceptre(PrepareInference_cis.mudata_inference_input)
         PerturboResults_cis = inference_perturbo(PrepareInference_cis.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
         GuideInference_cis = mergedResults(SceptreResults_cis.test_results, PerturboResults_cis.inference_mudata)
         // Process trans results
-        GuideInference_trans = inference_perturbo_trans(Mudata_concat.concat_mudata, "perturbo", params.Multiplicity_of_infection)
+        GuideInference_trans = inference_perturbo_trans(PrepareInference_trans.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
 
         // Rename tsv outputs to avoid conflicts
         cis_per_element = GuideInference_cis.per_element_output.map { file -> file.copyTo(file.parent.resolve("cis-${file.name}")) }
