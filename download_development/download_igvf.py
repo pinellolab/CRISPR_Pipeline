@@ -176,7 +176,7 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
     if args.gcs_upload:
         try:
             gcs_rel_path = os.path.join(args.gcs_prefix, os.path.basename(unzipped_path))
-            gcs_url = upload_to_gcs(unzipped_path, args.gcs_bucket, gcs_rel_path)
+            gcs_url = upload_to_gcs(unzipped_path, args.gcs_bucket, gcs_rel_path, force=args.gcs_force_upload)
         except Exception as e:
             colored_print(Color.RED, f"Failed to upload {accession} to GCS: {e}")
 
@@ -226,21 +226,24 @@ def process_sample_sheet(df, auth: HTTPBasicAuth, file_types='all', output_dir='
 
     return local_paths_df
 
-def upload_to_gcs(local_path, bucket_name, gcs_path):
-    """Upload a file to Google Cloud Storage if it doesn't already exist."""
+def upload_to_gcs(local_path: str, bucket_name: str, gcs_path: str, force=False) -> str:
+    """Upload file to GCS if it doesn't already exist or if forced."""
     client = storage.Client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(gcs_path)
 
-    colored_print(Color.YELLOW, f"Uploading to GCS: gs://{bucket_name}/{gcs_path}")
+    if blob.exists() and not force:
+        print(f"Skipping GCS upload (already exists): gs://{bucket_name}/{gcs_path}")
+        return f"gs://{bucket_name}/{gcs_path}"
 
-    if blob.exists():
-        colored_print(Color.YELLOW, f"GCS already has {gcs_path}, skipping upload.")
-    else:
+    print(f"Uploading to GCS: gs://{bucket_name}/{gcs_path}")
+    try:
         blob.upload_from_filename(local_path)
-        colored_print(Color.GREEN, f"Uploaded {os.path.basename(local_path)} to GCS.")
+        return f"gs://{bucket_name}/{gcs_path}"
+    except Exception as e:
+        print(f"Failed to upload {os.path.basename(local_path)} to GCS: {e}")
+        return None
 
-    return f"gs://{bucket_name}/{gcs_path}"
 
 
 if __name__ == "__main__":
@@ -274,6 +277,8 @@ if __name__ == "__main__":
                         help='Name of the GCS bucket to upload to.')
     parser.add_argument('--gcs-prefix',
                         help='(Required if --gcs-upload) Subfolder inside the GCS bucket (e.g., pipeline_runs/IGVFDS6673ZFFG_2025_08_06).')
+    parser.add_argument('--gcs-force-upload', action='store_true',
+                        help='Force upload to GCS even if file already exists in the bucket')
     parser.add_argument('--dry-run', action='store_true', help='Print actions without performing download/upload.')
 
 
