@@ -42,8 +42,6 @@ assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n
   return(list(mudata = mudata, guide_assignment = grna_assignment_matrix))
 }
 
-
-
 convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE){
   # extract information from MuData
   moi <- MultiAssayExperiment::metadata(mudata[['guide']])$moi
@@ -78,7 +76,6 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
       model_matrix <- stats::model.matrix(object = ~ ., data = covariates_clean)
       multicollinear <- Matrix::rankMatrix(model_matrix) < ncol(model_matrix)
       if(multicollinear){
-        print("Removing multicollinear covariates")
         extra_covariates <- data.frame()
       } else{
         extra_covariates <- covariates_clean
@@ -122,23 +119,20 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
   return(sceptre_object)
 }
 
-# Run Command
-
-args <- commandArgs(trailingOnly = TRUE)
-
-mudata_input <- args[1]
-probability_threshold <- if(length(args) >= 2) args[2] else "default"
-n_em_rep <- if(length(args) >= 3) args[3] else "default"
-
-mudata_in <- MuData::readH5MU(mudata_input)
-results <- assign_grnas_sceptre_v1(mudata = mudata_in, 
-                                   probability_threshold = probability_threshold,
-                                   n_em_rep = n_em_rep)
-guide_assignment <- results$guide_assignment
-
-print("Is guide_assignment NULL?")
-print(is.null(guide_assignment))
-
-print("Writing to Matrix Market format...")
-writeMM(guide_assignment, "guide_assignment.mtx")
-print("File written successfully")
+# Run Command (only execute when script is run directly, not when sourced)
+if (!exists(".sourced_from_test")) {
+  
+  args <- commandArgs(trailingOnly = TRUE)
+  
+  mudata_input <- args[1]
+  probability_threshold <- if(length(args) >= 2) args[2] else "default"
+  n_em_rep <- if(length(args) >= 3) args[3] else "default"
+  
+  mudata_in <- MuData::readH5MU(mudata_input)
+  results <- assign_grnas_sceptre_v1(mudata = mudata_in, 
+                                     probability_threshold = probability_threshold,
+                                     n_em_rep = n_em_rep)
+  guide_assignment <- results$guide_assignment
+  
+  writeMM(guide_assignment, "guide_assignment.mtx")
+}
