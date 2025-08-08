@@ -1,7 +1,7 @@
 
 # IGVF single-cell Perturb-seq Pipeline Data Downloader
 
-This toolkit provides a two-step workflow to generate per-sample metadata and download the corresponding files from the [IGVF Data Portal](https://data.igvf.org) for Perturb-seq pipelines.
+This toolkit provides a two-step workflow to generate per-sample metadata and download the corresponding files from the [IGVF data portal](https://data.igvf.org) for Perturb-seq pipelines.
 
 ---
 
@@ -35,7 +35,7 @@ OR set environment variables: `IGVF_API_KEY` and `IGVF_SECRET_KEY`.
 
 ## Step 1: Generate Per-Sample Metadata TSV
 
-### If `seqspec` files are available in the IGVF portal
+### If `seqspec` files are available in the IGVF data portal
 
 ```bash
 python3 generate_per_sample.py \
@@ -78,7 +78,7 @@ python3 download_igvf.py \
 ```
 
 This will:
-- Download FASTQ, YAML, and TSV files from the IGVF Data Portal
+- Download FASTQ, YAML, and TSV files from the IGVF data portal
 - Verify MD5 checksums
 - Gunzip files and store them locally
 - Generate `updated_paths_test_fetch.tsv` with local file paths
@@ -124,7 +124,7 @@ Preview download/upload actions without performing them:
 
 ---
 
-## ⚙️ Optional Arguments
+## Optional Arguments
 
 | Argument              | Description                                                                 |
 |-----------------------|-----------------------------------------------------------------------------|
