@@ -24,8 +24,8 @@ def run_perturbo_chunked(
     fit_guide_efficacy=True,
     efficiency_mode="undecided",
     accelerator="auto",
-    batch_size=512,
-    early_stopping=True,
+    batch_size=4096,
+    early_stopping=False,
     early_stopping_patience=5,
     lr=0.01,
     num_epochs=100,
@@ -315,14 +315,14 @@ def main():
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=512,
+        default=4096,
         help="Batch size for training",
     )
 
     parser.add_argument(
         "--early_stopping",
         type=bool,
-        default=True,
+        default=False,
         help="Whether to use early stopping during training",
     )
 

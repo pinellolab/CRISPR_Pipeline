@@ -13,8 +13,8 @@ def run_perturbo(
     fit_guide_efficacy=True,  # whether to fit guide efficacy (if false, overrides efficiency_mode)
     efficiency_mode="undecided",  # mapping from undecided->auto, low->mixture, high->scaled# can be "mixture" (for low MOI only), "scaled", "undecided" (auto), "low" (mixture), or "high" (scaled)
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
-    batch_size=512,  # batch size for training
-    early_stopping=True,  # whether to use early stopping
+    batch_size=4096,  # batch size for training
+    early_stopping=False,  # whether to use early stopping
     early_stopping_patience=5,  # patience for early stopping
     lr=0.01,  # learning rate for training
     num_epochs=100,  # (max) number of epochs for training
@@ -244,13 +244,13 @@ def main():
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=512,
-        help="Batch size for training (default: 512)",
+        default=4096,
+        help="Batch size for training (default: 4096)",
     )
     parser.add_argument(
         "--early_stopping",
         type=bool,
-        default=True,
+        default=False,
         help="Whether to use early stopping during training",
     )
     parser.add_argument(
