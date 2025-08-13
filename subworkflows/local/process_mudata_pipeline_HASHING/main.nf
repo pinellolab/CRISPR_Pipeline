@@ -83,13 +83,13 @@ workflow process_mudata_pipeline_HASHING {
     if (params.GUIDE_ASSIGNMENT_method == "cleanser") {
         Guide_Assignment = guide_assignment_cleanser(Prepare_assignment.prepare_assignment_mudata.flatten(), params.GUIDE_ASSIGNMENT_cleanser_probability_threshold)
         guide_assignment_collected =  Guide_Assignment.guide_assignment_mudata_output.collect()
-        Mudata_concat = mudata_concat(guide_assignment_collected)
+        Mudata_concat = mudata_concat(guide_assignment_collected, params.QC_min_cells_per_gene)
         }
 
     else if (params.GUIDE_ASSIGNMENT_method == "sceptre") {
         Guide_Assignment = guide_assignment_sceptre(Prepare_assignment.prepare_assignment_mudata.flatten(), params.GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold, params.GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep)
         guide_assignment_collected =  Guide_Assignment.guide_assignment_mudata_output.collect()
-        Mudata_concat = mudata_concat(guide_assignment_collected)
+        Mudata_concat = mudata_concat(guide_assignment_collected, params.QC_min_cells_per_gene)
         }
 
     if (params.INFERENCE_target_guide_pairing_strategy == 'predefined_pairs') {
