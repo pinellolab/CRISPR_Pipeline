@@ -93,7 +93,7 @@ if __name__ == "__main__":
     parser.add_argument('adata_rna', type=str, help='Path to the AnnData file.')
     parser.add_argument('gname_rna', type=str, help='Path to the cells x genes txt file.')
     parser.add_argument('--min_genes', type=int, default=100, help='Minimum number of genes per cell.')
-    parser.add_argument('--min_cells', type=int, default=3, help='Minimum number of cells per gene.')
+    parser.add_argument('--min_cells', type=float, default=0.05, help='Minimum number of cells per gene.')
     parser.add_argument('--pct_mito', type=float, default=0.2, help='Minimum percent of proportion of mitochondrial reads in cells.')
     parser.add_argument('--reference', type=str, required=True, help='Reference species')
 
