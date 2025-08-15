@@ -89,19 +89,21 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
     base_url = f"https://api.data.igvf.org/{route}"
     download_url = f"{base_url}/{accession}/@@download/{accession}.{ext}"
     output_path = os.path.join(download_dir, f"{accession}.{ext}")
+    unzipped_filename = os.path.basename(output_path).rstrip('.gz')
+    unzipped_path = os.path.join(download_dir, unzipped_filename)
 
     if args.dry_run:
         colored_print(Color.YELLOW, f"[Dry run] Would download: {download_url}")
         return None, None
 
     # --- 1. Check if file already exists ---
-    if os.path.exists(output_path):
+    if os.path.exists(unzipped_path):
         if expected_md5 is None:
             colored_print(Color.YELLOW, f"No checksum provided for {accession}. Skipping verification and download.")
             return
         else:
             colored_print(Color.YELLOW, f"Verifying checksum for {accession}...")
-            actual_md5 = calculate_md5(output_path)
+            actual_md5 = calculate_md5(unzipped_path)
             if actual_md5 == expected_md5:
                 colored_print(Color.GREEN, f"Checksum for existing file {accession} is correct. Skipping download.")
                 return
@@ -147,8 +149,6 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
     colored_print(Color.GREEN, f"Downloaded {accession} successfully.")
 
     # --- 3. Gunzip the file ---
-    unzipped_filename = os.path.basename(output_path).rstrip('.gz')
-    unzipped_path = os.path.join(download_dir, unzipped_filename)
     try:
         with gzip.open(output_path, 'rb') as f_in, open(unzipped_path, 'wb') as f_out:
             shutil.copyfileobj(f_in, f_out)
@@ -194,7 +194,7 @@ def process_sample_sheet(df, auth: HTTPBasicAuth, file_types='all', output_dir='
             # Sequence files (fastq)
             if file_types in ['fastq', 'all'] and col in SEQUENCE_FILE_COLUMNS:
                 accession = row[col]
-                md5_col = f"{col}_md5sum"
+                md5_col = f"{col.replace('_path', '')}_md5sum"
                 expected_md5 = row.get(md5_col)
 
                 if (
