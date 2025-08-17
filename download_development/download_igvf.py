@@ -91,6 +91,7 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
     output_path = os.path.join(download_dir, f"{accession}.{ext}")
     unzipped_filename = os.path.basename(output_path).rstrip('.gz')
     unzipped_path = os.path.join(download_dir, unzipped_filename)
+    gcs_url = None
 
     if args.dry_run:
         colored_print(Color.YELLOW, f"[Dry run] Would download: {download_url}")
@@ -98,20 +99,20 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
 
     # --- 1. Check if file already exists ---
     if os.path.exists(unzipped_path):
-        if expected_md5 is None:
-            colored_print(Color.YELLOW, f"No checksum provided for {accession}. Skipping verification and download.")
-            return
-        else:
+        if expected_md5 is not None:
             colored_print(Color.YELLOW, f"Verifying checksum for {accession}...")
             actual_md5 = calculate_md5(unzipped_path)
-            if actual_md5 == expected_md5:
-                colored_print(Color.GREEN, f"Checksum for existing file {accession} is correct. Skipping download.")
-                return
+            if actual_md5 != expected_md5:
+                colored_print(Color.RED, "Checksum mismatch... Re-downloading...")
             else:
-                colored_print(Color.RED, f"CRITICAL: Checksum mismatch for existing file {accession}!")
-                colored_print(Color.RED, f"  - Expected: {expected_md5}")
-                colored_print(Color.RED, f"  - Got:      {actual_md5}")
-                colored_print(Color.RED, f"Re-downloading {accession}...")
+                colored_print(Color.GREEN, f"Checksum for existing file {accession} is correct. Skipping download.")
+                if args.gcs_upload:
+                    gcs_url = upload_to_gcs(unzipped_path, args)
+        else:
+            colored_print(Color.YELLOW, f"No checksum provided for {accession}. Skipping verification and download.")
+            if args.gcs_upload:
+                gcs_url = upload_to_gcs(unzipped_path, args)
+        return unzipped_path, gcs_url
 
     # --- 2. Download the file with a progress bar ---
     try:
@@ -172,13 +173,8 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
         colored_print(Color.YELLOW, f"No checksum provided for {accession}. Skipping verification.")
 
     # --- 5. Upload to GCS if enabled ---
-    gcs_url = None
     if args.gcs_upload:
-        try:
-            gcs_rel_path = os.path.join(args.gcs_prefix, os.path.basename(unzipped_path))
-            gcs_url = upload_to_gcs(unzipped_path, args.gcs_bucket, gcs_rel_path, force=args.gcs_force_upload)
-        except Exception as e:
-            colored_print(Color.RED, f"Failed to upload {accession} to GCS: {e}")
+        gcs_url = upload_to_gcs(unzipped_path, args)
 
     return unzipped_path, gcs_url
 
@@ -226,24 +222,28 @@ def process_sample_sheet(df, auth: HTTPBasicAuth, file_types='all', output_dir='
 
     return local_paths_df
 
-def upload_to_gcs(local_path: str, bucket_name: str, gcs_path: str, force=False) -> str:
-    """Upload file to GCS if it doesn't already exist or if forced."""
+def upload_to_gcs(local_path, args):
+    """Upload file to GCS if it doesn't already exist or if forced.
+    Returns the full gs:// URL of the uploaded (or existing) object, or None on failure.
+    """
+    gcs_rel_path = os.path.join(args.gcs_prefix, os.path.basename(local_path))
     client = storage.Client()
-    bucket = client.bucket(bucket_name)
-    blob = bucket.blob(gcs_path)
+    bucket = client.bucket(args.gcs_bucket)
+    blob = bucket.blob(gcs_rel_path)
 
-    if blob.exists() and not force:
-        print(f"Skipping GCS upload (already exists): gs://{bucket_name}/{gcs_path}")
-        return f"gs://{bucket_name}/{gcs_path}"
+    full_uri = f"gs://{args.gcs_bucket}/{gcs_rel_path}"
 
-    print(f"Uploading to GCS: gs://{bucket_name}/{gcs_path}")
+    if blob.exists() and not args.gcs_force_upload:
+        print(f"Skipping GCS upload (already exists): {full_uri}")
+        return full_uri
+
+    print(f"Uploading to GCS: {full_uri}")
     try:
         blob.upload_from_filename(local_path)
-        return f"gs://{bucket_name}/{gcs_path}"
+        return full_uri
     except Exception as e:
         print(f"Failed to upload {os.path.basename(local_path)} to GCS: {e}")
         return None
-
 
 
 if __name__ == "__main__":
