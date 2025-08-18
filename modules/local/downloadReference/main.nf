@@ -14,7 +14,7 @@ process downloadReference {
 
     if (use_igvf_reference) {
         """
-        wget -qO igvf_reference.tar.gz ${igvf_url}
+        aria2c -x16 -s16 -k1M -o igvf_reference.tar.gz "${igvf_url}"
         mkdir -p igvf_extracted
         tar -xzf igvf_reference.tar.gz -C igvf_extracted
         mv igvf_extracted/*.idx transcriptome_index.idx
