@@ -86,7 +86,7 @@ inference_sceptre_m <- function(mudata, ...) {
   # extract set of discovery pairs to test
   pairs_to_test <- MultiAssayExperiment::metadata(mudata)$pairs_to_test |>
     as.data.frame()
-  moi <- MultiAssayExperiment::metadata(mudata)$moi
+  moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
 
   discovery_pairs <- pairs_to_test |>
     dplyr::rename(
