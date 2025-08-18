@@ -11,7 +11,6 @@ def main(adata_rna, gname_rna, min_genes, min_cells, pct_mito, reference):
     gname_rna_path = os.path.join(gname_rna, 'counts_unfiltered/cells_x_genes.genes.names.txt')
     gene_df = pd.read_csv(gname_rna_path, header=None)
     gene_names = gene_df[0].tolist()
-
     adata_rna = sc.read(adata_rna)
 
     if len(gene_names) == adata_rna.shape[1]:
@@ -21,6 +20,7 @@ def main(adata_rna, gname_rna, min_genes, min_cells, pct_mito, reference):
         adata_rna.var["symbol"] = gene_names
         # modify the ensembl id in adata_rna.var_names
         adata_rna.var_names = adata_rna.var_names.str.split('.').str[0]
+        adata_rna.var_names_make_unique()
     else:
         raise ValueError("The number of gene names does not match the number of variables in adata_rna")
 
@@ -57,6 +57,8 @@ def main(adata_rna, gname_rna, min_genes, min_cells, pct_mito, reference):
     sc.pp.calculate_qc_metrics(adata_rna, qc_vars=["mt", "ribo"], inplace=True, log1p=True)
 
     # Plot violin
+    print (adata_rna)
+    adata_rna
     sc.pl.violin(
         adata_rna,
         ["n_genes_by_counts", "total_counts", "pct_counts_mt"],
