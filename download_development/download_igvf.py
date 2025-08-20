@@ -222,11 +222,11 @@ def process_sample_sheet(df, auth: HTTPBasicAuth, file_types='all', output_dir='
 
     return local_paths_df
 
-def upload_to_gcs(local_path, args):
+def upload_to_gcs(path, args):
     """Upload file to GCS if it doesn't already exist or if forced.
     Returns the full gs:// URL of the uploaded (or existing) object, or None on failure.
     """
-    gcs_rel_path = os.path.join(args.gcs_prefix, os.path.basename(local_path))
+    gcs_rel_path = os.path.join(args.gcs_prefix, os.path.basename(path))
     client = storage.Client()
     bucket = client.bucket(args.gcs_bucket)
     blob = bucket.blob(gcs_rel_path)
@@ -239,10 +239,10 @@ def upload_to_gcs(local_path, args):
 
     print(f"Uploading to GCS: {full_uri}")
     try:
-        blob.upload_from_filename(local_path)
+        blob.upload_from_filename(path)
         return full_uri
     except Exception as e:
-        print(f"Failed to upload {os.path.basename(local_path)} to GCS: {e}")
+        print(f"Failed to upload {os.path.basename(path)} to GCS: {e}")
         return None
 
 
@@ -312,9 +312,8 @@ if __name__ == "__main__":
         colored_print(Color.GREEN, f"Successfully created sample sheet with updated paths: {updated_paths_filename}")
         if args.gcs_upload:
             try:
-                final_gcs_sample_sheet = os.path.join(args.gcs_prefix, updated_paths_filename)
-                upload_to_gcs(updated_paths_filename, args.gcs_bucket, final_gcs_sample_sheet)
-                colored_print(Color.GREEN, f"Sample sheet uploaded to: gs://{args.gcs_bucket}/{final_gcs_sample_sheet}")
+                gcs_url = upload_to_gcs(updated_paths_filename, args)
+                colored_print(Color.GREEN, f"Sample sheet uploaded to: {gcs_url}")
             except Exception as e:
                 colored_print(Color.RED, f"Failed to upload sample sheet to GCS: {e}")
 
