@@ -5,6 +5,7 @@ import mudata as md
 import pandas as pd
 import numpy as np
 from scipy.sparse import issparse
+from scipy.sparse import issparse, csr_matrix
 
 
 def collapse_guides(
@@ -117,12 +118,23 @@ def collapse_guides(
     )
 
     # Create new guide matrix with collapsed guides
-    guide_dummies = pd.get_dummies(cell_guide_deduped["guide_id"], sparse=True)
+    #guide_dummies = pd.get_dummies(cell_guide_deduped["guide_id"], sparse=False)
+    guide_dummies = pd.get_dummies(cell_guide_deduped["guide_id"], dtype=int)
+    print(
+        f"Value type: {type(guide_dummies.values)}, {guide_dummies.values.dtype}, {issparse(guide_dummies.values)}"
+    )
     print(
         f"Collapsed {len(bc_var_df)} guide assignments into {len(guide_dummies.columns)} unique guide combinations"
     )
 
-    var_new = cell_guide_deduped.groupby("guide_id").first()
+    #var_new = cell_guide_deduped.groupby("guide_id").first()
+    var_new = (
+    cell_guide_deduped.groupby("guide_id").first().reset_index()
+    .set_index("guide_id")  # so guide_id is both index and column
+    )
+    
+    var_new["guide_id"] = var_new.index
+
 
     # Create new AnnData object for collapsed guides
     collapsed_guide_adata = md.AnnData(
@@ -130,6 +142,9 @@ def collapse_guides(
         obs=mdata["guide"].obs.loc[guide_dummies.index],
         var=var_new.loc[guide_dummies.columns],
     )
+
+
+
 
     # Add guide metadata to the new var dataframe
 
@@ -168,6 +183,8 @@ def collapse_guides(
             ].copy()
 
     mdata_collapsed = md.MuData(mdata_dict)
+    mdata_collapsed.uns = mdata.uns.copy()
+    collapsed_guide_adata.uns = guide_adata.uns.copy()
 
     mdata_collapsed.write(mdata_output_fp)
     return mdata_collapsed
