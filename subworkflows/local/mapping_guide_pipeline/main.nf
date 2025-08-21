@@ -27,7 +27,8 @@ workflow mapping_guide_pipeline {
         GuideRef.guide_index,
         GuideRef.t2g_guide,
         SeqSpecResult.parsed_seqspec,
-        SeqSpecResult.barcode_file
+        SeqSpecResult.barcode_file,
+        params.is_10xv3v
     )
 
     ks_guide_out_dir_collected = MappingOut.ks_guide_out_dir.collect()
