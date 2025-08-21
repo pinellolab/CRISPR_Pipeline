@@ -21,6 +21,8 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method):
     adata_guide.var.reset_index(inplace=True)
     # rename gene_id in guide
     adata_guide.var.rename(columns={'gene_id': 'guide_id'}, inplace=True)
+    adata_guide.var.rename(columns={'feature_id': 'guide_id'}, inplace=True)
+
 
     # check if the lengths are the same
     if len(guide_metadata) != len(adata_guide.var):
