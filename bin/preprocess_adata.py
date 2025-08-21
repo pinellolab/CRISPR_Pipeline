@@ -21,7 +21,7 @@ def main(adata_rna, gname_rna, min_genes, min_cells, pct_mito, reference):
         # modify the ensembl id in adata_rna.var_names
         adata_rna.var_names = adata_rna.var_names.str.split('.').str[0]
         adata_rna.var_names_make_unique()
-    else:
+    else: 
         raise ValueError("The number of gene names does not match the number of variables in adata_rna")
 
     # Save knee plot
