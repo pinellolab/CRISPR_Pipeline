@@ -62,7 +62,7 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
     as.data.frame() |>
     tibble::rownames_to_column(var = "grna_id") |>
     dplyr::rename(grna_target = intended_target_name) |>
-    dplyr::mutate(grna_target = ifelse(!targeting & (moi=='low'), "non-targeting", grna_target)) |>
+    # dplyr::mutate(grna_target = ifelse(!targeting & (moi=='low'), "non-targeting", grna_target)) |>
     dplyr::select(grna_id, grna_target)
 
   # assemble information into sceptre object
@@ -185,3 +185,4 @@ if (!exists(".sourced_from_test")) {
   write.csv(results$test_results, file = "test_results.csv", row.names = FALSE)
   # MuData::writeH5MU(object = results$mudata, file = 'inference_mudata.h5mu')
 }
+ 
