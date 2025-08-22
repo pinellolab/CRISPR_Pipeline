@@ -179,54 +179,90 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
     return unzipped_path, gcs_url
 
 def process_sample_sheet(df, auth: HTTPBasicAuth, file_types='all', output_dir='downloads') -> pd.DataFrame:
+    """
+    For each IGVFFI accession in columns, download (if needed), verify (if MD5 provided),
+    gunzip, and optionally upload to GCS. Then update the original columns in-place with the final path:
+      - if --gcs-upload: gs://bucket/prefix/filename
+      - else: local filesystem path
+
+    Columns handled:
+      - FASTQ: R1_path, R2_path (when file_types in ['fastq','all'])
+      - Configuration: seqspec (when file_types in ['other','all'])
+      - Tabular: barcode_onlist, guide_design, barcode_hashtag_map (when file_types in ['other','all'])
+    """
     os.makedirs(output_dir, exist_ok=True)
-    local_paths_df = df.copy()
-    already_downloaded = set()
 
+    cols_to_update = []
+    if file_types in ['fastq', 'all']:
+        cols_to_update.extend(SEQUENCE_FILE_COLUMNS)
+    if file_types in ['other', 'all']:
+        cols_to_update.extend(CONFIGURATION_FILE_COLUMNS)
+        cols_to_update.extend(TABULAR_FILE_COLUMNS)
 
-    # Store local file paths
-    for _, row in tqdm(df.iterrows(), total=df.shape[0], desc="Downloading files per sample"):
-        for col in df.columns:
-            # Sequence files (fastq)
-            if file_types in ['fastq', 'all'] and col in SEQUENCE_FILE_COLUMNS:
-                accession = row[col]
+    col_to_file_type = {}
+    for col in SEQUENCE_FILE_COLUMNS:
+        col_to_file_type[col] = 'sequence'
+    for col in CONFIGURATION_FILE_COLUMNS:
+        col_to_file_type[col] = 'configuration'
+    for col in TABULAR_FILE_COLUMNS:
+        col_to_file_type[col] = 'tabular'
+
+    # Cache: accession -> resolved path (local or gs://) so we don't re-download
+    resolved_path_cache = {}
+
+    # Walk rows and update in-place
+    for idx, row in tqdm(df.iterrows(), total=df.shape[0], desc="Downloading/updating paths"):
+        for col in cols_to_update:
+            if col not in df.columns:
+                continue
+            value = row[col]
+
+            # Only touch IGVF file accessions; leave non-IGVFFI values (already paths) as-is
+            if not (pd.notna(value) and isinstance(value, str) and value.startswith("IGVFFI")):
+                continue
+
+            accession = value
+            # If already processed, reuse the resolved path
+            if accession in resolved_path_cache:
+                df.at[idx, col] = resolved_path_cache[accession]
+                continue
+
+            # For FASTQs, try to pick up MD5 if present
+            expected_md5 = None
+            if col in SEQUENCE_FILE_COLUMNS:
                 md5_col = f"{col.replace('_path', '')}_md5sum"
-                expected_md5 = row.get(md5_col)
+                if md5_col in df.columns:
+                    expected_md5 = row.get(md5_col)
 
-                if (
-                    pd.notna(accession)
-                    and isinstance(accession, str)
-                    and accession.startswith("IGVFFI")
-                    and accession not in already_downloaded
-                ):
-                    already_downloaded.add(accession)
-                    local_path, gcs_path = download_and_verify_file(accession, expected_md5, output_dir, auth, file_type='sequence', args=args)
-                    local_paths_df.at[_, f'local_{col}'] = local_path
-                    if gcs_path:
-                        local_paths_df.at[_, f'gcs_{col}'] = gcs_path
+            file_type = col_to_file_type[col]
+            result = download_and_verify_file(
+                accession,
+                expected_md5,
+                output_dir,
+                auth,
+                file_type=file_type,
+                args=args
+            )
 
-            # Configuration/other files (e.g., YAML, TSV)
-            elif file_types in ['other', 'all'] and col in CONFIGURATION_FILE_COLUMNS:
-                accession = row[col]
-                if (
-                    pd.notna(accession)
-                    and isinstance(accession, str)
-                    and accession.startswith("IGVFFI")
-                    and accession not in already_downloaded
-                ):
-                    already_downloaded.add(accession)
-                    local_path, gcs_path = download_and_verify_file(accession, None, output_dir, auth, file_type='configuration', args=args)
-                    local_paths_df.at[_, f'local_{col}'] = local_path
-                    if gcs_path:
-                        local_paths_df.at[_, f'gcs_{col}'] = gcs_path
+            # In dry-run or error cases, keep original value
+            if not result:
+                continue
 
-    return local_paths_df
+            local_path, gcs_path = result
+            final_path = gcs_path if (args.gcs_upload and gcs_path) else local_path
 
-def upload_to_gcs(local_path, args):
+            # If failed to resolve a final path, don't clobber the accession
+            if final_path:
+                resolved_path_cache[accession] = final_path
+                df.at[idx, col] = final_path
+
+    return df
+
+def upload_to_gcs(path, args):
     """Upload file to GCS if it doesn't already exist or if forced.
     Returns the full gs:// URL of the uploaded (or existing) object, or None on failure.
     """
-    gcs_rel_path = os.path.join(args.gcs_prefix, os.path.basename(local_path))
+    gcs_rel_path = os.path.join(args.gcs_prefix, os.path.basename(path))
     client = storage.Client()
     bucket = client.bucket(args.gcs_bucket)
     blob = bucket.blob(gcs_rel_path)
@@ -239,10 +275,10 @@ def upload_to_gcs(local_path, args):
 
     print(f"Uploading to GCS: {full_uri}")
     try:
-        blob.upload_from_filename(local_path)
+        blob.upload_from_filename(path)
         return full_uri
     except Exception as e:
-        print(f"Failed to upload {os.path.basename(local_path)} to GCS: {e}")
+        print(f"Failed to upload {os.path.basename(path)} to GCS: {e}")
         return None
 
 
@@ -312,9 +348,8 @@ if __name__ == "__main__":
         colored_print(Color.GREEN, f"Successfully created sample sheet with updated paths: {updated_paths_filename}")
         if args.gcs_upload:
             try:
-                final_gcs_sample_sheet = os.path.join(args.gcs_prefix, updated_paths_filename)
-                upload_to_gcs(updated_paths_filename, args.gcs_bucket, final_gcs_sample_sheet)
-                colored_print(Color.GREEN, f"Sample sheet uploaded to: gs://{args.gcs_bucket}/{final_gcs_sample_sheet}")
+                gcs_url = upload_to_gcs(updated_paths_filename, args)
+                colored_print(Color.GREEN, f"Sample sheet uploaded to: {gcs_url}")
             except Exception as e:
                 colored_print(Color.RED, f"Failed to upload sample sheet to GCS: {e}")
 
