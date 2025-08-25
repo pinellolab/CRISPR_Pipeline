@@ -75,7 +75,9 @@ def run_perturbo(
         intended_targets_df = intended_targets_df.drop(control_elements, axis=1)
 
         # filter any cells with >1 guide
-        multi_guide_cells = mdata[guide_modality_name].X.sum(axis=1) > 1
+        multi_guide_cells = (
+            mdata[guide_modality_name].layers["guide_assignment"].sum(axis=1) > 1
+        )
         if multi_guide_cells.any():
             print(
                 f"Removing {multi_guide_cells.sum()} cells with multiple guides. ({multi_guide_cells.sum() / len(mdata) * 100:.1f}% of total)"
