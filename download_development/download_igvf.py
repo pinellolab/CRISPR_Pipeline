@@ -43,13 +43,6 @@ def colored_print(color, message):
 def calculate_md5(filepath: str, chunk_size: int = 8192) -> str:
     """
     Calculate the MD5 checksum of a file.
-
-    Args:
-        filepath: Path to the file.
-        chunk_size: The size of chunks to read from the file.
-
-    Returns:
-        The MD5 checksum in hexadecimal format.
     """
     md5 = hashlib.md5()
     try:
@@ -186,12 +179,10 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
     gcs_url = upload_to_gcs(produced_path, args) if args.gcs_upload else None
     return produced_path, gcs_url
 
-    return unzipped_path, gcs_url
-
-def process_sample_sheet(df, auth: HTTPBasicAuth, file_types='all', output_dir='downloads') -> pd.DataFrame:
+def process_sample_sheet(df, auth: HTTPBasicAuth, args, file_types='all', output_dir='downloads') -> pd.DataFrame:
     """
     For each IGVFFI accession in columns, download (if needed), verify (if MD5 provided),
-    gunzip, and optionally upload to GCS. Then update the original columns in-place with the final path:
+    gunzip (if --gunzip), and optionally upload to GCS. Then update the original columns in-place with the final path:
       - if --gcs-upload: gs://bucket/prefix/filename
       - else: local filesystem path
 
@@ -367,7 +358,10 @@ if __name__ == "__main__":
         if args.gcs_upload:
             try:
                 gcs_url = upload_to_gcs(updated_paths_filename, args)
-                colored_print(Color.GREEN, f"Sample sheet uploaded to: {gcs_url}")
+                if gcs_url:
+                    colored_print(Color.GREEN, f"Sample sheet uploaded to: {gcs_url}")
+                else:
+                    colored_print(Color.RED, "Sample sheet upload to GCS failed.")
             except Exception as e:
                 colored_print(Color.RED, f"Failed to upload sample sheet to GCS: {e}")
 
