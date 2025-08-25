@@ -21,7 +21,7 @@ def run_perturbo(
     gene_modality_name="gene",  # name of the gene modality in the MuData object
     guide_modality_name="guide",  # name of the guide modality in the MuData
     test_all_pairs=False,  # whether to test all pairs or only those in pairs_to_test
-    test_control_guides=True,  # whether to remove control guides from the analysis
+    # test_control_guides=True,  # whether to remove control guides from the analysis
     num_workers=0,  # number of worker processes for data loading
 ):
     scvi.settings.seed = 0
@@ -68,12 +68,21 @@ def run_perturbo(
     intended_targets_df = pd.get_dummies(
         mdata[guide_modality_name].var["intended_target_name"]
     ).astype(float)
-    if not test_control_guides:
+
+    if efficiency_mode == "mixture":
+        # don't test for control guides in low_MOI analysis
         control_elements = intended_targets_df[control_guides].sum(axis=0) > 0
         intended_targets_df = intended_targets_df.drop(control_elements, axis=1)
 
-    mdata[guide_modality_name].varm["intended_targets"] = intended_targets_df
+        # filter any cells with >1 guide
+        multi_guide_cells = mdata[guide_modality_name].X.sum(axis=1) > 1
+        if multi_guide_cells.any():
+            print(
+                f"Removing {multi_guide_cells.sum()} cells with multiple guides. ({multi_guide_cells.sum() / len(mdata) * 100:.1f}% of total)"
+            )
+            mdata = mdata[multi_guide_cells, :].copy()
 
+    mdata[guide_modality_name].varm["intended_targets"] = intended_targets_df
     mdata.uns["intended_target_names"] = intended_targets_df.columns.tolist()
 
     # create element by gene matrix if not testing all pairs
