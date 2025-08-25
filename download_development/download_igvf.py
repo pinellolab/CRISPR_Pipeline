@@ -43,6 +43,12 @@ def colored_print(color, message):
 def calculate_md5(filepath: str, chunk_size: int = 8192) -> str:
     """
     Calculate the MD5 checksum of a file.
+
+    Args:
+        filepath: Path to the file.
+        chunk_size: The size of chunks to read from the file.
+    Returns:
+        The MD5 checksum in hexadecimal format.
     """
     md5 = hashlib.md5()
     try:
@@ -57,8 +63,16 @@ def calculate_md5(filepath: str, chunk_size: int = 8192) -> str:
 def download_and_verify_file(accession: str, expected_md5: str, download_dir: str,
                              auth: HTTPBasicAuth, file_type: str, args):
     """
-    Downloads one file from IGVF, optionally gunzips, verifies checksum (if provided),
-    and optionally uploads the resulting artifact to GCS.
+        Downloads a single file (FASTQ, tabular, or configuration), shows progress,
+        and verifies its MD5 checksum if provided. Skips the download if the file 
+        already exists and is verified (or if no checksum is provided). Optionally unzips the file.
+    Args:
+        accession: The accession ID of the file to download.
+        expected_md5: The expected MD5 checksum for verification.
+        dir: The directory to save the file in.
+        auth: HTTPBasicAuth object for authentication.
+        file_type: file object type being downloaded (i.e. sequence, tabular, or configuration)
+        args: arguments for google cloud upload
 
     Returns:
         (local_target_path, gcs_url_or_None)
@@ -93,7 +107,7 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
                                     f"({'unzipped' if want_unzipped else 'gzipped'})")
         return None, None
 
-    # If target already exists, verify (if requested) and (optionally) upload
+    # --- 1. Check if file already exists ---
     if os.path.exists(target_path):
         if expected_md5:
             colored_print(Color.YELLOW, f"Verifying checksum for existing {accession} "
@@ -112,7 +126,7 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
                 gcs_url = upload_to_gcs(target_path, args)
             return target_path, gcs_url
 
-    # --- Download gz payload first (API serves .gz) ---
+   # --- 2. Download the file with a progress bar ---
     try:
         response = requests.get(download_url, auth=auth, stream=True)
         response.raise_for_status()
@@ -147,7 +161,7 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
 
     colored_print(Color.GREEN, f"Downloaded {accession} to {os.path.basename(output_gz_path)}")
 
-    # --- Optionally gunzip ---
+    # --- 3. Optionally gunzip ---
     produced_path = output_gz_path
     if want_unzipped:
         try:
@@ -160,7 +174,7 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
             colored_print(Color.RED, f"Failed to gunzip {accession}: {e}")
             produced_path = output_gz_path  # fall back to gz
 
-    # --- Verify checksum against produced artifact (if provided) ---
+    # --- 4. Verify checksum against produced artifact (if provided) ---
     if expected_md5:
         artifact_label = 'unzipped' if produced_path == unzipped_path else 'gzipped'
         colored_print(Color.YELLOW, f"Verifying checksum for {accession} ({artifact_label})...")
@@ -175,7 +189,7 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
     else:
         colored_print(Color.YELLOW, f"No checksum provided for {accession}. Skipping verification.")
 
-    # --- Upload to GCS if enabled ---
+    # --- 5. Upload to GCS if enabled ---
     gcs_url = upload_to_gcs(produced_path, args) if args.gcs_upload else None
     return produced_path, gcs_url
 
@@ -291,13 +305,13 @@ if __name__ == "__main__":
         epilog="""
         Example usage:
 
-        # Download everything (FASTQs, seqspecs, etc.), gunzip, and upload to GCS
+        # Download everything (FASTQs, seqspecs, barcode maps, guide designs, etc.)
         python3 download_igvf.py --sample per_sample.tsv --keypair keypair.json --gunzip --gcs-upload --gcs-bucket igvf-bkt --gcs-prefix pipeline_inputs
 
         # Download only FASTQ files and gunzip
         python3 download_igvf.py --sample per_sample.tsv --keypair keypair.json --file-types fastq --gunzip --output-dir ./fastq_dir
 
-        # Download only non-FASTQ files, keep compressed (default)
+        # Download only non-FASTQ files (seqspec, barcode_onlist, guide_design, barcode_hashtag_map) and keep compressed (default)
         python3 download_igvf.py --sample per_sample.tsv --keypair keypair.json --file-types other --output-dir ./reference_files
         """
     )
