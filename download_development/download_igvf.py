@@ -61,19 +61,14 @@ def calculate_md5(filepath: str, chunk_size: int = 8192) -> str:
         return ""
     return md5.hexdigest()
 
-def download_and_verify_file(accession: str, expected_md5: str, download_dir: str, auth: HTTPBasicAuth, file_type: str, args):
+def download_and_verify_file(accession: str, expected_md5: str, download_dir: str,
+                             auth: HTTPBasicAuth, file_type: str, args):
     """
-        Downloads a single file (FASTQ, tabular, or configuration), shows progress,
-        and verifies its MD5 checksum if provided. Skips the download if the file 
-        already exists and is verified (or if no checksum is provided).
+    Downloads one file from IGVF, optionally gunzips, verifies checksum (if provided),
+    and optionally uploads the resulting artifact to GCS.
 
-    Args:
-        accession: The accession ID of the file to download.
-        expected_md5: The expected MD5 checksum for verification.
-        dir: The directory to save the file in.
-        auth: HTTPBasicAuth object for authentication.
-        file_type: file object type being downloaded (i.e. sequence, tabular, or configuration)
-        args: arguments for google cloud upload
+    Returns:
+        (local_target_path, gcs_url_or_None)
     """
     # Determine download URL and file extension based on file type
     file_type_to_url = {
@@ -88,93 +83,108 @@ def download_and_verify_file(accession: str, expected_md5: str, download_dir: st
     route, ext = file_type_to_url[file_type]
     base_url = f"https://api.data.igvf.org/{route}"
     download_url = f"{base_url}/{accession}/@@download/{accession}.{ext}"
-    output_path = os.path.join(download_dir, f"{accession}.{ext}")
-    unzipped_filename = os.path.basename(output_path).rstrip('.gz')
-    unzipped_path = os.path.join(download_dir, unzipped_filename)
+
+    # Paths
+    output_gz_path = os.path.join(download_dir, f"{accession}.{ext}")
+    unzipped_name = f"{accession}.{ext[:-3]}" if ext.endswith('.gz') else f"{accession}.{ext}"
+    unzipped_path = os.path.join(download_dir, unzipped_name)
+
+    # Decide which artifact we want to end up with
+    want_unzipped = bool(args.gunzip)
+    target_path = unzipped_path if want_unzipped else output_gz_path
     gcs_url = None
 
     if args.dry_run:
         colored_print(Color.YELLOW, f"[Dry run] Would download: {download_url}")
+        colored_print(Color.YELLOW, f"[Dry run] Would produce: {target_path} "
+                                    f"({'unzipped' if want_unzipped else 'gzipped'})")
         return None, None
 
-    # --- 1. Check if file already exists ---
-    if os.path.exists(unzipped_path):
-        if expected_md5 is not None:
-            colored_print(Color.YELLOW, f"Verifying checksum for {accession}...")
-            actual_md5 = calculate_md5(unzipped_path)
+    # If target already exists, verify (if requested) and (optionally) upload
+    if os.path.exists(target_path):
+        if expected_md5:
+            colored_print(Color.YELLOW, f"Verifying checksum for existing {accession} "
+                                        f"({'unzipped' if want_unzipped else 'gzipped'})...")
+            actual_md5 = calculate_md5(target_path)
             if actual_md5 != expected_md5:
-                colored_print(Color.RED, "Checksum mismatch... Re-downloading...")
+                colored_print(Color.RED, "Checksum mismatch on existing file... Re-downloading...")
             else:
-                colored_print(Color.GREEN, f"Checksum for existing file {accession} is correct. Skipping download.")
+                colored_print(Color.GREEN, f"Checksum is correct. Skipping download for {accession}.")
                 if args.gcs_upload:
-                    gcs_url = upload_to_gcs(unzipped_path, args)
+                    gcs_url = upload_to_gcs(target_path, args)
+                return target_path, gcs_url
         else:
-            colored_print(Color.YELLOW, f"No checksum provided for {accession}. Skipping verification and download.")
+            colored_print(Color.YELLOW, f"No checksum provided for {accession}. Using existing file.")
             if args.gcs_upload:
-                gcs_url = upload_to_gcs(unzipped_path, args)
-        return unzipped_path, gcs_url
+                gcs_url = upload_to_gcs(target_path, args)
+            return target_path, gcs_url
 
-    # --- 2. Download the file with a progress bar ---
+    # --- Download gz payload first (API serves .gz) ---
     try:
         response = requests.get(download_url, auth=auth, stream=True)
-        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+        response.raise_for_status()
 
         total_size = int(response.headers.get('content-length', 0))
 
-        with open(output_path, 'wb') as f, tqdm(
+        with open(output_gz_path, 'wb') as f, tqdm(
             desc=f"Downloading {accession}",
             total=total_size,
             unit='iB',
             unit_scale=True,
             unit_divisor=1024,
-            leave=False # Prevents this progress bar from staying after completion
+            leave=False
         ) as bar:
             for chunk in response.iter_content(chunk_size=8192):
-                size = f.write(chunk)
-                bar.update(size)
+                if chunk:
+                    size = f.write(chunk)
+                    bar.update(size)
 
-        if total_size != 0 and bar.n != total_size:
+        if total_size != 0 and os.path.getsize(output_gz_path) != total_size:
             raise IOError("Download incomplete: Size mismatch.")
-
     except requests.exceptions.RequestException as e:
         colored_print(Color.RED, f"Failed to download {accession}: {e}")
-        if os.path.exists(output_path):
-            os.remove(output_path) # Clean up partial download
-        return
+        if os.path.exists(output_gz_path):
+            os.remove(output_gz_path)
+        return None, None
     except IOError as e:
         colored_print(Color.RED, f"Error writing file {accession}: {e}")
-        if os.path.exists(output_path):
-            os.remove(output_path) # Clean up partial download
-        return
+        if os.path.exists(output_gz_path):
+            os.remove(output_gz_path)
+        return None, None
 
-    colored_print(Color.GREEN, f"Downloaded {accession} successfully.")
+    colored_print(Color.GREEN, f"Downloaded {accession} to {os.path.basename(output_gz_path)}")
 
-    # --- 3. Gunzip the file ---
-    try:
-        with gzip.open(output_path, 'rb') as f_in, open(unzipped_path, 'wb') as f_out:
-            shutil.copyfileobj(f_in, f_out)
-        os.remove(output_path)
-        colored_print(Color.GREEN, f"Gunzipped {accession} to {os.path.basename(unzipped_path)}")
-    except Exception as e:
-        colored_print(Color.RED, f"Failed to gunzip {accession}: {e}")
+    # --- Optionally gunzip ---
+    produced_path = output_gz_path
+    if want_unzipped:
+        try:
+            with gzip.open(output_gz_path, 'rb') as f_in, open(unzipped_path, 'wb') as f_out:
+                shutil.copyfileobj(f_in, f_out)
+            os.remove(output_gz_path)
+            produced_path = unzipped_path
+            colored_print(Color.GREEN, f"Gunzipped {accession} to {os.path.basename(unzipped_path)}")
+        except Exception as e:
+            colored_print(Color.RED, f"Failed to gunzip {accession}: {e}")
+            produced_path = output_gz_path  # fall back to gz
 
-    # --- 4. Verify the downloaded file if expected_md5 is provided ---
-    if expected_md5 is not None:
-        colored_print(Color.YELLOW, f"Verifying checksum for {accession}...")
-        actual_md5 = calculate_md5(unzipped_path)
+    # --- Verify checksum against produced artifact (if provided) ---
+    if expected_md5:
+        artifact_label = 'unzipped' if produced_path == unzipped_path else 'gzipped'
+        colored_print(Color.YELLOW, f"Verifying checksum for {accession} ({artifact_label})...")
+        actual_md5 = calculate_md5(produced_path)
         if actual_md5 == expected_md5:
             colored_print(Color.GREEN, f"Checksum for {accession} is correct: {actual_md5}")
         else:
             colored_print(Color.RED, f"CRITICAL: Checksum mismatch for {accession}!")
             colored_print(Color.RED, f"  - Expected: {expected_md5}")
             colored_print(Color.RED, f"  - Got:      {actual_md5}")
-            colored_print(Color.RED, f"The downloaded file at {output_path} may be corrupt.")
+            colored_print(Color.RED, f"The downloaded file at {produced_path} may be corrupt.")
     else:
         colored_print(Color.YELLOW, f"No checksum provided for {accession}. Skipping verification.")
 
-    # --- 5. Upload to GCS if enabled ---
-    if args.gcs_upload:
-        gcs_url = upload_to_gcs(unzipped_path, args)
+    # --- Upload to GCS if enabled ---
+    gcs_url = upload_to_gcs(produced_path, args) if args.gcs_upload else None
+    return produced_path, gcs_url
 
     return unzipped_path, gcs_url
 
@@ -284,20 +294,21 @@ def upload_to_gcs(path, args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description='Download and verify FASTQ, configuration, and tabular files from the IGVF portal. Also, optionally upload the files to a google cloud bucket.',
+        description='Download and verify FASTQ, configuration, and tabular files from the IGVF portal. '
+                    'Also, optionally upload the files to a google cloud bucket.',
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="""
         Example usage:
 
-        # Download everything (FASTQs, seqspecs, barcode maps, guide designs, etc.)
-        python3 download_igvf.py --sample per_sample.tsv --keypair keypair.json --output-dir ./pipeline_inputs
+        # Download everything (FASTQs, seqspecs, etc.), gunzip, and upload to GCS
+        python3 download_igvf.py --sample per_sample.tsv --keypair keypair.json --gunzip --gcs-upload --gcs-bucket igvf-bkt --gcs-prefix pipeline_inputs
 
-        # Download only FASTQ files (R1/R2)
-        python3 download_igvf.py --sample per_sample.tsv --keypair keypair.json --file-types fastq --output-dir ./fastq_dir
+        # Download only FASTQ files and gunzip
+        python3 download_igvf.py --sample per_sample.tsv --keypair keypair.json --file-types fastq --gunzip --output-dir ./fastq_dir
 
-        # Download only non-FASTQ files (seqspec, barcode_onlist, guide_design, barcode_hashtag_map)
+        # Download only non-FASTQ files, keep compressed (default)
         python3 download_igvf.py --sample per_sample.tsv --keypair keypair.json --file-types other --output-dir ./reference_files
-    """
+        """
     )
     parser.add_argument('--sample', required=True,
                         help='Path to the TSV file containing sample information.')
@@ -306,17 +317,24 @@ if __name__ == "__main__":
     parser.add_argument('--file-types', choices=['fastq', 'other', 'all'], default='all',
                         help='Which file types to download: fastq, others (including tsvs and yaml files), or all (default).')
     parser.add_argument('--output-dir', default='downloads',
-                    help='Directory to store downloaded files (default: ./downloads)')
+                        help='Directory to store downloaded files (default: ./downloads)')
+
+    parser.add_argument('--gunzip', action='store_true', default=False,
+                        help='Gunzip downloaded files (default: keep compressed).')
+
     parser.add_argument('--gcs-upload', action='store_true',
-                        help='Upload downloaded files to GCS. Requires --gcs-bucket and --gcs-prefix. If specified, the updated paths in the sample sheet will be google bucket paths.')
+                        help='Upload downloaded files to GCS. Requires --gcs-bucket and --gcs-prefix. '
+                             'If specified, the updated paths in the sample sheet will include gs:// URLs.')
     parser.add_argument('--gcs-bucket',
                         help='Name of the GCS bucket to upload to.')
     parser.add_argument('--gcs-prefix',
-                        help='(Required if --gcs-upload) Subfolder inside the GCS bucket (e.g., pipeline_runs/IGVFDS6673ZFFG_2025_08_06).')
+                        help='(Required if --gcs-upload) Subfolder inside the GCS bucket '
+                             '(e.g., pipeline_runs/IGVFDS6673ZFFG_2025_08_06).')
     parser.add_argument('--gcs-force-upload', action='store_true',
                         help='Force upload to GCS even if file already exists in the bucket')
-    parser.add_argument('--dry-run', action='store_true', help='Print actions without performing download/upload.')
 
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Print actions without performing download/upload.')
 
     args = parser.parse_args()
     if args.gcs_upload and (not args.gcs_bucket or not args.gcs_prefix):
@@ -335,17 +353,17 @@ if __name__ == "__main__":
             if missing_cols:
                 raise ValueError(f"TSV file is missing required FASTQ columns: {', '.join(missing_cols)}")
 
-        # Start the download process and get the DataFrame with local paths
-        local_paths_df = process_sample_sheet(df, auth, file_types=args.file_types, output_dir=args.output_dir)
+        # Start the download process and get the DataFrame with local/GCS paths
+        local_paths_df = process_sample_sheet(df, auth, args, file_types=args.file_types, output_dir=args.output_dir)
 
-        # --- Create a new TSV with additional columns for local file paths ---
+        # Create a new TSV with additional columns for local/GCS file paths
         output_basename = os.path.basename(args.sample)
         updated_paths_filename = f"updated_paths_{output_basename}"
-
         local_paths_df.to_csv(updated_paths_filename, sep='\t', index=False)
 
         colored_print(Color.GREEN, "\nAll download and verification tasks complete.")
         colored_print(Color.GREEN, f"Successfully created sample sheet with updated paths: {updated_paths_filename}")
+
         if args.gcs_upload:
             try:
                 gcs_url = upload_to_gcs(updated_paths_filename, args)
@@ -353,16 +371,15 @@ if __name__ == "__main__":
             except Exception as e:
                 colored_print(Color.RED, f"Failed to upload sample sheet to GCS: {e}")
 
-
     except FileNotFoundError as e:
         colored_print(Color.RED, f"[FileNotFoundError] {e}")
         raise
     except pd.errors.EmptyDataError as e:
         colored_print(Color.RED, f"[EmptyDataError] {e}")
         raise
-    except Exception as e:
-        colored_print(Color.RED, f"[Unexpected {type(e).__name__}] {e}")
-        raise
     except RuntimeError as e:
         colored_print(Color.RED, f"Authentication error: {str(e)}")
+        raise
+    except Exception as e:
+        colored_print(Color.RED, f"[Unexpected {type(e).__name__}] {e}")
         raise
