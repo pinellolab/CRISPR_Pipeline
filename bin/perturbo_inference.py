@@ -21,7 +21,7 @@ def run_perturbo(
     gene_modality_name="gene",  # name of the gene modality in the MuData object
     guide_modality_name="guide",  # name of the guide modality in the MuData
     test_all_pairs=False,  # whether to test all pairs or only those in pairs_to_test
-    inference_mode="per-element",  # can be per-guide or per-element
+    inference_type="element",  # can be per-guide or per-element
     num_workers=0,  # number of worker processes for data loading
 ):
     scvi.settings.seed = 0
@@ -65,20 +65,21 @@ def run_perturbo(
                 "Using 'mixture' efficiency mode due to low MOI (max guides per cell <= 1)."
             )
 
-    if inference_mode == "per-guide":
+    if inference_type == "guide":
         element_key = "guide_id"
-    elif inference_mode == "per-element":
+    elif inference_type == "element":
         element_key = "intended_target_name"
     else:
-        raise ValueError("inference_mode must be 'per-guide' or 'per-element'")
+        raise ValueError("inference_type must be 'guide' or 'element'")
 
     intended_targets_df = pd.get_dummies(
         mdata[guide_modality_name].var[element_key]
     ).astype(float)
 
     if efficiency_mode == "mixture":
-        # don't test for control guides in low_MOI analysis
-        control_elements = intended_targets_df[control_guides].sum(axis=0) > 0
+        # don't test for control guides in low_MOI analysis (slightly more robust alternative to just dropping "non-targeting")
+        control_elements_idx = intended_targets_df.loc[control_guides].sum(axis=0) > 0
+        control_elements = intended_targets_df.columns[control_elements_idx].tolist()
         intended_targets_df = intended_targets_df.drop(control_elements, axis=1)
 
         # filter any cells with >1 guide
@@ -296,6 +297,12 @@ def main():
         help="Name of the guide modality in the MuData object (default: 'guide')",
     )
     parser.add_argument(
+        "--inference_type",
+        type=str,
+        default="element",
+        help="Unit to test for effects on each gene: 'guide' or 'element' (default: 'element')",
+    )
+    parser.add_argument(
         "--test_all_pairs",
         action="store_true",
         help="Whether to test all pairs or only those in pairs_to_test (default: False)",
@@ -329,6 +336,7 @@ def main():
         gene_modality_name=args.gene_modality_name,
         guide_modality_name=args.guide_modality_name,
         test_all_pairs=args.test_all_pairs,
+        inference_type=args.inference_type,
     )
 
 
