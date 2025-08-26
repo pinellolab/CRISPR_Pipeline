@@ -192,8 +192,8 @@ def run_perturbo(
         .rename(columns=igvf_name_map)
         .assign(log2_fc=lambda x: x["loc"] / np.log(2))
     )
-    element_effects[element_key] = element_effects[element_key].astype("category")
-    element_effects["gene_id"] = element_effects["gene_id"].astype("category")
+    # element_effects[element_key] = element_effects[element_key].astype("category")
+    # element_effects["gene_id"] = element_effects["gene_id"].astype("category")
 
     mdata.uns["test_results"] = element_effects[
         [
@@ -208,23 +208,23 @@ def run_perturbo(
     # This is to maintain compatibility with the existing workflow, which condenses per-guide output
     # into per-element output in a separate module.
 
-    if not test_all_pairs:
-        mdata.uns["test_results"] = mdata.uns["test_results"].merge(
-            pairs_to_test_df,
-            on=["gene_id", element_key],
-            how="left",
-        )
-    else:
-        mdata.uns["test_results"] = mdata.uns["test_results"].merge(
-            mdata["guide"].var[["intended_target_name", "guide_id"]],
-            how="left",
-            on=[element_key],
-        )
+    # if not test_all_pairs:
+    #     mdata.uns["test_results"] = mdata.uns["test_results"].merge(
+    #         pairs_to_test_df,
+    #         on=["gene_id", element_key],
+    #         how="left",
+    #     )
+    # else:
+    #     mdata.uns["test_results"] = mdata.uns["test_results"].merge(
+    #         mdata["guide"].var[["intended_target_name", "guide_id"]],
+    #         how="left",
+    #         on=[element_key],
+    #     )
 
-    mdata.uns["test_results"].rename(
-        columns={"log2_fc": "perturbo_log2_fc", "p_value": "perturbo_p_value"},
-        inplace=True,
-    )
+    # mdata.uns["test_results"].rename(
+    #     columns={"log2_fc": "perturbo_log2_fc", "p_value": "perturbo_p_value"},
+    #     inplace=True,
+    # )
 
     # Write results table to TSV (required)
     print("Writing results to ", results_tsv_fp)
