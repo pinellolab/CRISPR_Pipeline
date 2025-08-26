@@ -92,12 +92,8 @@ inference_sceptre_m <- function(mudata, ...) {
     dplyr::rename(
       grna_target = intended_target_name,
       response_id = gene_id
-    )
-
-  if (!is.null(moi) && moi == "low") {
-    discovery_pairs <- discovery_pairs |>
-      dplyr::filter(grna_target != "non-targeting")
-  }
+    ) |>
+    dplyr::filter(grna_target != "non-targeting")
 
   # assemble arguments to set_analysis_parameters()
   args_list <- list(...)
