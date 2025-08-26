@@ -9,7 +9,8 @@ import scvi
 
 def run_perturbo(
     mdata_input_fp,
-    mdata_output_fp,
+    results_tsv_fp,
+    mdata_output_fp=None,
     fit_guide_efficacy=True,  # whether to fit guide efficacy (if false, overrides efficiency_mode)
     efficiency_mode="undecided",  # mapping from undecided->auto, low->mixture, high->scaled# can be "mixture" (for low MOI only), "scaled", "undecided" (auto), "low" (mixture), or "high" (scaled)
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
@@ -21,7 +22,7 @@ def run_perturbo(
     gene_modality_name="gene",  # name of the gene modality in the MuData object
     guide_modality_name="guide",  # name of the guide modality in the MuData
     test_all_pairs=False,  # whether to test all pairs or only those in pairs_to_test
-    test_control_guides=True,  # whether to remove control guides from the analysis
+    inference_type="element",  # can be per-guide or per-element
     num_workers=0,  # number of worker processes for data loading
 ):
     scvi.settings.seed = 0
@@ -65,16 +66,35 @@ def run_perturbo(
                 "Using 'mixture' efficiency mode due to low MOI (max guides per cell <= 1)."
             )
 
+    if inference_type == "guide":
+        element_key = "guide_id"
+    elif inference_type == "element":
+        element_key = "intended_target_name"
+    else:
+        raise ValueError("inference_type must be 'guide' or 'element'")
+
     intended_targets_df = pd.get_dummies(
-        mdata[guide_modality_name].var["intended_target_name"]
+        mdata[guide_modality_name].var[element_key]
     ).astype(float)
-    if not test_control_guides:
-        control_elements = intended_targets_df[control_guides].sum(axis=0) > 0
+
+    if efficiency_mode == "mixture":
+        # don't test for control guides in low_MOI analysis (slightly more robust alternative to just dropping "non-targeting")
+        control_elements_idx = intended_targets_df.loc[control_guides].sum(axis=0) > 0
+        control_elements = intended_targets_df.columns[control_elements_idx].tolist()
         intended_targets_df = intended_targets_df.drop(control_elements, axis=1)
 
-    mdata[guide_modality_name].varm["intended_targets"] = intended_targets_df
+        # filter any cells with >1 guide
+        multi_guide_cells = (
+            mdata[guide_modality_name].layers["guide_assignment"].sum(axis=1) > 1
+        )
+        if multi_guide_cells.any():
+            print(
+                f"Removing {multi_guide_cells.sum()} cells with multiple guides. ({multi_guide_cells.sum() / len(mdata) * 100:.1f}% of total)"
+            )
+            mdata = mdata[~multi_guide_cells, :].copy()
 
-    mdata.uns["intended_target_names"] = intended_targets_df.columns.tolist()
+    mdata[guide_modality_name].varm["intended_targets"] = intended_targets_df
+    mdata.uns[element_key] = intended_targets_df.columns.tolist()
 
     # create element by gene matrix if not testing all pairs
     if not test_all_pairs:
@@ -84,19 +104,15 @@ def run_perturbo(
             pairs_to_test_df = pd.DataFrame(mdata.uns["pairs_to_test"])
 
         aggregated_df = (
-            pairs_to_test_df[["gene_id", "intended_target_name"]]
-            .drop_duplicates()
-            .assign(value=1)
+            pairs_to_test_df[["gene_id", element_key]].drop_duplicates().assign(value=1)
         )
 
         # pivot the data
         mdata[gene_modality_name].varm["intended_targets"] = (
-            aggregated_df.pivot(
-                index="gene_id", columns="intended_target_name", values="value"
-            )
+            aggregated_df.pivot(index="gene_id", columns=element_key, values="value")
             .reindex(
                 index=mdata[gene_modality_name].var_names,
-                columns=mdata.uns["intended_target_names"],
+                columns=mdata.uns[element_key],
             )
             .fillna(0)
         )
@@ -166,7 +182,7 @@ def run_perturbo(
 
     # Reformat the output to match IGVF specifications
     igvf_name_map = {
-        "element": "intended_target_name",
+        "element": element_key,
         "gene": "gene_id",
         "q_value": "p_value",
     }
@@ -175,36 +191,34 @@ def run_perturbo(
         model.get_element_effects()
         .rename(columns=igvf_name_map)
         .assign(log2_fc=lambda x: x["loc"] / np.log(2))
-        .assign(
-            gene_id=lambda x: x["gene_id"].astype("category"),
-            intended_target_name=lambda x: x["intended_target_name"].astype("category"),
-        )
     )
+    element_effects[element_key] = element_effects[element_key].astype("category")
+    element_effects["gene_id"] = element_effects["gene_id"].astype("category")
 
     mdata.uns["test_results"] = element_effects[
         [
             "gene_id",
-            "intended_target_name",
+            element_key,
             "log2_fc",
             "p_value",
         ]
     ]
 
-    # NOTE: this part creates a per-guide output table even though we are running per-element inference.
+    # NOTE: this part creates a per-guide output table even when we are running per-element inference.
     # This is to maintain compatibility with the existing workflow, which condenses per-guide output
     # into per-element output in a separate module.
 
     if not test_all_pairs:
         mdata.uns["test_results"] = mdata.uns["test_results"].merge(
             pairs_to_test_df,
-            on=["gene_id", "intended_target_name"],
+            on=["gene_id", element_key],
             how="left",
         )
     else:
         mdata.uns["test_results"] = mdata.uns["test_results"].merge(
             mdata["guide"].var[["intended_target_name", "guide_id"]],
             how="left",
-            on=["intended_target_name"],
+            on=[element_key],
         )
 
     mdata.uns["test_results"].rename(
@@ -212,14 +226,32 @@ def run_perturbo(
         inplace=True,
     )
 
-    mdata.write(mdata_output_fp, compression="gzip")
+    # Write results table to TSV (required)
+    print("Writing results to ", results_tsv_fp)
+    mdata.uns["test_results"].to_csv(results_tsv_fp, index=False, sep="\t")
+
+    # Optionally write the full MuData if an output path was provided
+    if mdata_output_fp:
+        print("Writing mudata to ", mdata_output_fp)
+        mdata.write(mdata_output_fp, compression="gzip")
+
     return mdata
 
 
 def main():
     parser = argparse.ArgumentParser(description="Run PerTurbo analysis on MuData")
     parser.add_argument("mdata_input_fp", type=str, help="Input file path for MuData")
-    parser.add_argument("mdata_output_fp", type=str, help="Output file path for MuData")
+    parser.add_argument(
+        "results_tsv_fp",
+        type=str,
+        help="Output TSV file path for mdata.uns['test_results'] (required)",
+    )
+    parser.add_argument(
+        "--mdata_output_fp",
+        type=str,
+        default=None,
+        help="Optional output file path for MuData; if omitted the MuData will not be written",
+    )
     parser.add_argument(
         "--fit_guide_efficacy",
         type=bool,
@@ -284,6 +316,12 @@ def main():
         help="Name of the guide modality in the MuData object (default: 'guide')",
     )
     parser.add_argument(
+        "--inference_type",
+        type=str,
+        default="element",
+        help="Unit to test for effects on each gene: 'guide' or 'element' (default: 'element')",
+    )
+    parser.add_argument(
         "--test_all_pairs",
         action="store_true",
         help="Whether to test all pairs or only those in pairs_to_test (default: False)",
@@ -305,7 +343,8 @@ def main():
     args = parser.parse_args()
     run_perturbo(
         args.mdata_input_fp,
-        args.mdata_output_fp,
+        args.results_tsv_fp,
+        mdata_output_fp=args.mdata_output_fp,
         fit_guide_efficacy=args.fit_guide_efficacy,
         efficiency_mode=args.efficiency_mode,
         accelerator=args.accelerator,
@@ -317,6 +356,7 @@ def main():
         gene_modality_name=args.gene_modality_name,
         guide_modality_name=args.guide_modality_name,
         test_all_pairs=args.test_all_pairs,
+        inference_type=args.inference_type,
     )
 
 
