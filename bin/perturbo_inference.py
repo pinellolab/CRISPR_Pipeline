@@ -90,7 +90,7 @@ def run_perturbo(
             print(
                 f"Removing {multi_guide_cells.sum()} cells with multiple guides. ({multi_guide_cells.sum() / len(mdata) * 100:.1f}% of total)"
             )
-            mdata = mdata[multi_guide_cells, :].copy()
+            mdata = mdata[~multi_guide_cells, :].copy()
 
     mdata[guide_modality_name].varm["intended_targets"] = intended_targets_df
     mdata.uns[element_key] = intended_targets_df.columns.tolist()
