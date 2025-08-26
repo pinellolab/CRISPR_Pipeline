@@ -15,7 +15,7 @@ process inference_perturbo {
 
     script:
         """
-        perturbo_inference.py ${mudata} per_element_output.tsv --mudata_output_fp inference_mudata.h5mu --efficiency_mode ${efficiency_mode} --inference_type element
+        perturbo_inference.py ${mudata} per_element_output.tsv --mdata_output_fp inference_mudata.h5mu --efficiency_mode ${efficiency_mode} --inference_type element
         perturbo_inference.py ${mudata} per_guide_output.tsv --efficiency_mode ${efficiency_mode} --inference_type guide
         """
 }

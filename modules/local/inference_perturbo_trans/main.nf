@@ -16,7 +16,7 @@ process inference_perturbo_trans {
 
     script:
         """
-        perturbo_inference.py ${mudata} per_element_output.tsv --test_all_pairs --mudata_output_fp inference_mudata.h5mu --efficiency_mode ${efficiency_mode} --inference_type element
+        perturbo_inference.py ${mudata} per_element_output.tsv --test_all_pairs --mdata_output_fp inference_mudata.h5mu --efficiency_mode ${efficiency_mode} --inference_type element
         perturbo_inference.py ${mudata} per_guide_output.tsv --test_all_pairs --efficiency_mode ${efficiency_mode} --inference_type guide
         """
 }
