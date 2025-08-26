@@ -228,7 +228,7 @@ def run_perturbo(
 
     # Write results table to TSV (required)
     print("Writing results to ", results_tsv_fp)
-    mdata.uns["test_results"].to_tsv(results_tsv_fp, index=False, sep="\t")
+    mdata.uns["test_results"].to_csv(results_tsv_fp, index=False, sep="\t")
 
     # Optionally write the full MuData if an output path was provided
     if mdata_output_fp:
