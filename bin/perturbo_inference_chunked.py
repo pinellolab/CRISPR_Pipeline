@@ -56,9 +56,9 @@ def run_perturbo_chunked(
 
     print(f"Starting chunked PerTurbo inference on {mdata_input_fp}...")
     mdata = md.read_h5mu(mdata_input_fp, backed="r")
-    if mdata[gene_modality_name].n_vars < chunk_size:
+    if mdata[gene_modality_name].n_vars <= chunk_size:
         print(
-            "Number of genes is less than chunk size; running standard PerTurbo inference instead."
+            "Number of genes is less than or equal to chunk size; running standard PerTurbo inference instead."
         )
         perturbo_script = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "perturbo_inference.py"
