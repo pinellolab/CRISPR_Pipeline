@@ -9,7 +9,8 @@ import scvi
 
 def run_perturbo(
     mdata_input_fp,
-    mdata_output_fp,
+    results_tsv_fp,
+    mdata_output_fp=None,
     fit_guide_efficacy=True,  # whether to fit guide efficacy (if false, overrides efficiency_mode)
     efficiency_mode="undecided",  # mapping from undecided->auto, low->mixture, high->scaled# can be "mixture" (for low MOI only), "scaled", "undecided" (auto), "low" (mixture), or "high" (scaled)
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
@@ -225,14 +226,32 @@ def run_perturbo(
         inplace=True,
     )
 
-    mdata.write(mdata_output_fp, compression="gzip")
+    # Write results table to TSV (required)
+    print("Writing results to ", results_tsv_fp)
+    mdata.uns["test_results"].to_tsv(results_tsv_fp, index=False, sep="\t")
+
+    # Optionally write the full MuData if an output path was provided
+    if mdata_output_fp:
+        print("Writing mudata to ", mdata_output_fp)
+        mdata.write(mdata_output_fp, compression="gzip")
+
     return mdata
 
 
 def main():
     parser = argparse.ArgumentParser(description="Run PerTurbo analysis on MuData")
     parser.add_argument("mdata_input_fp", type=str, help="Input file path for MuData")
-    parser.add_argument("mdata_output_fp", type=str, help="Output file path for MuData")
+    parser.add_argument(
+        "results_tsv_fp",
+        type=str,
+        help="Output TSV file path for mdata.uns['test_results'] (required)",
+    )
+    parser.add_argument(
+        "--mdata_output_fp",
+        type=str,
+        default=None,
+        help="Optional output file path for MuData; if omitted the MuData will not be written",
+    )
     parser.add_argument(
         "--fit_guide_efficacy",
         type=bool,
@@ -324,7 +343,8 @@ def main():
     args = parser.parse_args()
     run_perturbo(
         args.mdata_input_fp,
-        args.mdata_output_fp,
+        args.results_tsv_fp,
+        mdata_output_fp=args.mdata_output_fp,
         fit_guide_efficacy=args.fit_guide_efficacy,
         efficiency_mode=args.efficiency_mode,
         accelerator=args.accelerator,
