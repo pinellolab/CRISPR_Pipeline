@@ -172,7 +172,7 @@ inference_sceptre_m <- function(mudata, ...) {
   try(
     write.table(
       union_test_results,
-      file = "per_element_output.tsv",
+      file = gzfile("per_element_output.tsv.gz"),
       sep = "\t",
       row.names = FALSE,
       quote = FALSE
@@ -213,7 +213,7 @@ inference_sceptre_m <- function(mudata, ...) {
   try(
     write.table(
       singleton_test_results,
-      file = "per_guide_output.tsv",
+      file = gzfile("per_guide_output.tsv.gz"),
       sep = "\t",
       row.names = FALSE,
       quote = FALSE

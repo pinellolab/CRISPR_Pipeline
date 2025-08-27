@@ -46,6 +46,13 @@ def merge_cis_trans_results(cis_per_guide_path, cis_per_element_path, trans_per_
     print(f"Writing merged MuData to {output_path}...")
     base_mdata.write(output_path, compression="gzip")
     
+    # Write compressed TSV files with .uns field names
+    print("Writing compressed TSV files...")
+    cis_per_guide.to_csv("cis_per_guide_results.tsv.gz", sep='\t', index=False, compression='gzip')
+    cis_per_element.to_csv("cis_per_element_results.tsv.gz", sep='\t', index=False, compression='gzip')
+    trans_per_guide.to_csv("trans_per_guide_results.tsv.gz", sep='\t', index=False, compression='gzip')
+    trans_per_element.to_csv("trans_per_element_results.tsv.gz", sep='\t', index=False, compression='gzip')
+    
     print("Successfully merged cis and trans results!")
     print(f"Output contains:")
     print(f"  - cis_per_guide_results: {len(cis_per_guide)} entries")

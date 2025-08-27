@@ -75,8 +75,8 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     # Write outputs
     print("Writing merged results...")
     base_mdata.write("inference_mudata.h5mu", compression="gzip")
-    merged_guide_df.to_csv("per_guide_output.tsv", sep='\t', index=False)
-    merged_element_df.to_csv("per_element_output.tsv", sep='\t', index=False)
+    merged_guide_df.to_csv("per_guide_output.tsv.gz", sep='\t', index=False, compression='gzip')
+    merged_element_df.to_csv("per_element_output.tsv.gz", sep='\t', index=False, compression='gzip')
     
     print("Successfully merged results from both methods!")
     return base_mdata

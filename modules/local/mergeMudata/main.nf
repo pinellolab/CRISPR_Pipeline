@@ -12,6 +12,10 @@ process mergeMudata {
 
     output:
         path "inference_mudata.h5mu", emit: inference_mudata
+        path "cis_per_guide_results.tsv.gz", emit: cis_per_guide_results
+        path "cis_per_element_results.tsv.gz", emit: cis_per_element_results
+        path "trans_per_guide_results.tsv.gz", emit: trans_per_guide_results
+        path "trans_per_element_results.tsv.gz", emit: trans_per_element_results
 
     script:
     """
