@@ -50,9 +50,9 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     print("Merging per-guide results...")
     # Merge per-guide results
     merged_guide_df = pd.merge(
-        sceptre_guide_df[['gene_id', 'guide_id', 'intended_target_name', 'sceptre_log2_fc', 'sceptre_p_value']],
-        perturbo_guide_df[['gene_id', 'guide_id', 'intended_target_name', 'perturbo_log2_fc', 'perturbo_p_value']],
-        on=['gene_id', 'guide_id', 'intended_target_name'],
+        sceptre_guide_df[['gene_id', 'guide_id', 'sceptre_log2_fc', 'sceptre_p_value']],
+        perturbo_guide_df[['gene_id', 'guide_id', 'perturbo_log2_fc', 'perturbo_p_value']],
+        on=['gene_id', 'guide_id'],
         how='outer'
     )
     

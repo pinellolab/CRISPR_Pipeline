@@ -199,11 +199,10 @@ inference_sceptre_m <- function(mudata, ...) {
   # extract singleton (per-guide) results, preserve grna_id and rename to guide_id
   singleton_results <- sceptre_object |>
     sceptre::get_result(analysis = "run_discovery_analysis") |>
-    dplyr::select(response_id, grna_id, grna_target, p_value, log_2_fold_change) |>
+    dplyr::select(response_id, grna_id, p_value, log_2_fold_change) |>
     dplyr::rename(
       gene_id = response_id,
       guide_id = grna_id,
-      intended_target_name = grna_target,
       log2_fc = log_2_fold_change
     )
 
