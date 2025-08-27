@@ -5,7 +5,9 @@ process inference_sceptre {
     path mudata_fp
 
     output:
-    path "test_results.csv", emit: test_results
+    path "inference_mudata.h5mu", emit: inference_mudata
+    path "per_element_output.tsv", emit: per_element_output
+    path "per_guide_output.tsv", emit: per_guide_output
 
     script:
     """

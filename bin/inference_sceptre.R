@@ -1,5 +1,21 @@
 #!/usr/bin/env Rscript
 
+# Declare known globals used in dplyr pipelines to avoid R CMD check notes
+if (getRversion() >= "2.15.1") {
+  utils::globalVariables(
+    c(
+      "grna_id",
+      "guide_id",
+      "response_id",
+      "grna_target",
+      "p_value",
+      "log_2_fold_change",
+      "gene_id",
+      "intended_target_name",
+      "log2_fc"
+    )
+  )
+}
 convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE) {
   # extract information from MuData
   moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
@@ -92,22 +108,17 @@ inference_sceptre_m <- function(mudata, ...) {
     dplyr::rename(
       grna_target = intended_target_name,
       response_id = gene_id
-    )
+    ) |>
+    dplyr::filter(grna_target != "non-targeting")
 
-  if (!is.null(moi) && moi == "low") {
-    discovery_pairs <- discovery_pairs |>
-      dplyr::filter(grna_target != "non-targeting")
-  }
-
-  # assemble arguments to set_analysis_parameters()
+  # assemble base arguments to set_analysis_parameters()
   args_list <- list(...)
 
   if ("discovery_pairs" %in% names(args_list)) {
     warning("The `discovery_pairs` argument is ignored. The `discovery_pairs` are set from the `pairs_to_test` metadata.")
   }
+  # always use discovery pairs from metadata
   args_list[["discovery_pairs"]] <- discovery_pairs
-  args_list$sceptre_object <- sceptre_object
-
   # construct formula excluding gRNA covariates to avoid multicollinearity
   # (gRNA assignments are binary, making grna_n_nonzero and grna_n_umis identical)
   formula_object <- sceptre:::auto_construct_formula_object(
@@ -116,10 +127,20 @@ inference_sceptre_m <- function(mudata, ...) {
   )
   args_list[["formula_object"]] <- formula_object
 
-  # set analysis parameters with custom formula
-  sceptre_object <- do.call(sceptre::set_analysis_parameters, args_list)
+  # We'll run two analyses on the same sceptre_object to exploit caching:
+  # 1) union (grouped / per-element)
+  # 2) singleton (per-guide)
 
-  # extract gRNA assignment and turn off QC
+  # Prepare a copy of the sceptre_object reference for chaining
+  args_list$sceptre_object <- sceptre_object
+
+  ## 1) Union / grouped (per-element) analysis
+  args_union <- args_list
+  args_union$grna_integration_strategy <- "union"
+  # set analysis parameters for union
+  sceptre_object <- do.call(sceptre::set_analysis_parameters, args_union)
+
+  # assign grnas and run QC (relaxed thresholds to keep all cells; mirror prior behaviour)
   sceptre_object <- sceptre_object |>
     sceptre::assign_grnas(method = "thresholding", threshold = 1) |>
     sceptre::run_qc(
@@ -128,12 +149,12 @@ inference_sceptre_m <- function(mudata, ...) {
       p_mito_threshold = 1
     )
 
-  # run discovery analysis
+  # run discovery analysis (grouped)
   sceptre_object <- sceptre_object |>
     sceptre::run_discovery_analysis()
 
-  # get results
-  discovery_results <- sceptre_object |>
+  # get union (per-element) results
+  union_results <- sceptre_object |>
     sceptre::get_result(analysis = "run_discovery_analysis") |>
     dplyr::select(response_id, grna_target, p_value, log_2_fold_change) |>
     dplyr::rename(
@@ -141,18 +162,71 @@ inference_sceptre_m <- function(mudata, ...) {
       intended_target_name = grna_target,
       log2_fc = log_2_fold_change
     )
+  # use union_results directly (no extra distinct/left_join)
+  union_test_results <- union_results
 
-  discovery_unique <- discovery_results |>
-    dplyr::distinct(gene_id, intended_target_name, .keep_all = TRUE)
+  # store union results in mudata metadata as requested
+  MultiAssayExperiment::metadata(mudata)$test_results <- union_test_results
 
-  # add results to MuData
-  test_results <- pairs_to_test |>
-    dplyr::left_join(discovery_unique, by = c("intended_target_name", "gene_id"))
+  # also write the per-element (union) results to file
+  try(
+    write.table(
+      union_test_results,
+      file = "per_element_output.tsv",
+      sep = "\t",
+      row.names = FALSE,
+      quote = FALSE
+    ),
+    silent = TRUE
+  )
 
-  MultiAssayExperiment::metadata(mudata)$test_results <- test_results
+  ## 2) Singleton (per-guide) analysis — reuse sceptre_object to exploit caching
+  args_singleton <- args_list
+  args_singleton$grna_integration_strategy <- "singleton"
+  # set analysis parameters for singleton (reuse same sceptre_object reference)
+  sceptre_object <- do.call(sceptre::set_analysis_parameters, args_singleton)
 
-  # return
-  return(list(mudata = mudata, test_results = test_results))
+  # run assignment, qc and discovery for singleton
+  sceptre_object <- sceptre_object |>
+    sceptre::assign_grnas(method = "thresholding", threshold = 1) |>
+    sceptre::run_qc(
+      n_nonzero_trt_thresh = 0L,
+      n_nonzero_cntrl_thresh = 0L,
+      p_mito_threshold = 1
+    ) |>
+    sceptre::run_discovery_analysis()
+
+  # extract singleton (per-guide) results, preserve grna_id and rename to guide_id
+  singleton_results <- sceptre_object |>
+    sceptre::get_result(analysis = "run_discovery_analysis") |>
+    dplyr::select(response_id, grna_id, grna_target, p_value, log_2_fold_change) |>
+    dplyr::rename(
+      gene_id = response_id,
+      guide_id = grna_id,
+      intended_target_name = grna_target,
+      log2_fc = log_2_fold_change
+    )
+
+  # use singleton_results directly
+  singleton_test_results <- singleton_results
+
+  try(
+    write.table(
+      singleton_test_results,
+      file = "per_guide_output.tsv",
+      sep = "\t",
+      row.names = FALSE,
+      quote = FALSE
+    ),
+    silent = TRUE
+  )
+
+  # return mudata (with union results in metadata) and both result tables
+  return(list(
+    mudata = mudata,
+    union_test_results = union_test_results,
+    singleton_test_results = singleton_test_results
+  ))
 }
 
 ### Run Command (only execute when script is run directly, not when sourced)
@@ -180,9 +254,14 @@ if (!exists(".sourced_from_test")) {
     control_group = control_group,
     resampling_mechanism = resampling_mechanism
   )
+  # write outputs: per-element (union) and per-guide (singleton)
+  if (!is.null(results$union_test_results)) {
+    try(write.table(results$union_test_results, file = "per_element_output.tsv", sep = "\t", row.names = FALSE, quote = FALSE), silent = TRUE)
+  }
+  if (!is.null(results$singleton_test_results)) {
+    try(write.table(results$singleton_test_results, file = "per_guide_output.tsv", sep = "\t", row.names = FALSE, quote = FALSE), silent = TRUE)
+  }
 
-  # write MuData
-  write.csv(results$test_results, file = "test_results.csv", row.names = FALSE)
-  # MuData::writeH5MU(object = results$mudata, file = 'inference_mudata.h5mu')
+  # write the modified MuData (contains union results in metadata as 'test_results')
+  try(MuData::writeH5MU(object = results$mudata, file = "inference_mudata.h5mu"), silent = TRUE)
 }
- 
