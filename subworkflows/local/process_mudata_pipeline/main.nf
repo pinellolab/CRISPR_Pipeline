@@ -103,15 +103,22 @@ workflow process_mudata_pipeline {
 
     if (params.INFERENCE_method == "sceptre"){
         TestResults = inference_sceptre(PrepareInference.mudata_inference_input)
-        GuideInference = inference_mudata(TestResults.test_results, PrepareInference.mudata_inference_input, params.INFERENCE_method)
+        GuideInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "perturbo"){
-        GuideInference = inference_perturbo(PrepareInference.mudata_inference_input, params.INFERENCE_method, params.Multiplicity_of_infection)
+        TestResults = inference_perturbo(PrepareInference.mudata_inference_input, params.INFERENCE_method, params.Multiplicity_of_infection)
+        GuideInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
         SceptreResults = inference_sceptre(PrepareInference.mudata_inference_input)
         PerturboResults = inference_perturbo(PrepareInference.mudata_inference_input,  "perturbo", params.Multiplicity_of_infection)
-        GuideInference = mergedResults(SceptreResults.test_results, PerturboResults.inference_mudata)
+        GuideInference = mergedResults(
+            SceptreResults.per_guide_output,
+            SceptreResults.per_element_output, 
+            PerturboResults.per_guide_output,
+            PerturboResults.per_element_output,
+            PrepareInference.mudata_inference_input
+        )
     }
     else if (params.INFERENCE_method == "default"){
         if (params.INFERENCE_target_guide_pairing_strategy != 'default') {
@@ -120,7 +127,13 @@ workflow process_mudata_pipeline {
         // Process cis results
         SceptreResults_cis = inference_sceptre(PrepareInference_cis.mudata_inference_input)
         PerturboResults_cis = inference_perturbo(PrepareInference_cis.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
-        GuideInference_cis = mergedResults(SceptreResults_cis.test_results, PerturboResults_cis.inference_mudata)
+        GuideInference_cis = mergedResults(
+            SceptreResults_cis.per_guide_output,
+            SceptreResults_cis.per_element_output,
+            PerturboResults_cis.per_guide_output,
+            PerturboResults_cis.per_element_output,
+            PrepareInference_cis.mudata_inference_input
+        )
         // Process trans results
         GuideInference_trans = inference_perturbo_trans(PrepareInference_trans.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
 
@@ -141,7 +154,13 @@ workflow process_mudata_pipeline {
             file.copyTo(file.parent.resolve('trans_inference_mudata.h5mu'))
         }
 
-        GuideInference = mergeMudata(cis_file, trans_file)
+        GuideInference = mergeMudata(
+            GuideInference_cis.per_guide_output,
+            GuideInference_cis.per_element_output,
+            GuideInference_trans.per_guide_output,
+            GuideInference_trans.per_element_output,
+            PrepareInference_cis.mudata_inference_input
+        )
 
     }
 

@@ -195,7 +195,7 @@ def run_perturbo(
     # element_effects[element_key] = element_effects[element_key].astype("category")
     # element_effects["gene_id"] = element_effects["gene_id"].astype("category")
 
-    mdata.uns["test_results"] = element_effects[
+    test_results = element_effects[
         [
             "gene_id",
             element_key,
@@ -203,6 +203,7 @@ def run_perturbo(
             "p_value",
         ]
     ]
+    mdata.uns[f"per_{inference_type}_results"] = test_results
 
     # NOTE: this part creates a per-guide output table even when we are running per-element inference.
     # This is to maintain compatibility with the existing workflow, which condenses per-guide output
@@ -228,7 +229,10 @@ def run_perturbo(
 
     # Write results table to TSV (required)
     print("Writing results to ", results_tsv_fp)
-    mdata.uns["test_results"].to_csv(results_tsv_fp, index=False, sep="\t")
+    if results_tsv_fp.endswith('.gz'):
+        test_results.to_csv(results_tsv_fp, index=False, sep="\t", compression='gzip')
+    else:
+        test_results.to_csv(results_tsv_fp, index=False, sep="\t")
 
     # Optionally write the full MuData if an output path was provided
     if mdata_output_fp:

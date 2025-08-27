@@ -166,13 +166,13 @@ inference_sceptre_m <- function(mudata, ...) {
   union_test_results <- union_results
 
   # store union results in mudata metadata as requested
-  MultiAssayExperiment::metadata(mudata)$test_results <- union_test_results
+  MultiAssayExperiment::metadata(mudata)$per_element_results <- union_test_results
 
   # also write the per-element (union) results to file
   try(
     write.table(
       union_test_results,
-      file = "per_element_output.tsv",
+      file = gzfile("per_element_output.tsv.gz"),
       sep = "\t",
       row.names = FALSE,
       quote = FALSE
@@ -199,21 +199,21 @@ inference_sceptre_m <- function(mudata, ...) {
   # extract singleton (per-guide) results, preserve grna_id and rename to guide_id
   singleton_results <- sceptre_object |>
     sceptre::get_result(analysis = "run_discovery_analysis") |>
-    dplyr::select(response_id, grna_id, grna_target, p_value, log_2_fold_change) |>
+    dplyr::select(response_id, grna_id, p_value, log_2_fold_change) |>
     dplyr::rename(
       gene_id = response_id,
       guide_id = grna_id,
-      intended_target_name = grna_target,
       log2_fc = log_2_fold_change
     )
 
   # use singleton_results directly
   singleton_test_results <- singleton_results
+  MultiAssayExperiment::metadata(mudata)$per_guide_results <- singleton_test_results
 
   try(
     write.table(
       singleton_test_results,
-      file = "per_guide_output.tsv",
+      file = gzfile("per_guide_output.tsv.gz"),
       sep = "\t",
       row.names = FALSE,
       quote = FALSE

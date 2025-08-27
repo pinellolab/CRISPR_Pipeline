@@ -2,21 +2,21 @@ process publishFiles {
     publishDir './pipeline_outputs', mode: 'copy', overwrite: true
 
     input:
-        path cis_element
-        path cis_guide
-        path trans_element
-        path trans_guide
+        path cis_per_element_results
+        path cis_per_guide_results
+        path trans_per_element_results
+        path trans_per_guide_results
 
     output:
-        path "cis_per_element_output.tsv"
-        path "cis_per_guide_output.tsv"
-        path "trans_per_element_output.tsv"
-        path "trans_per_guide_output.tsv"
+        path "cis_per_element_results.tsv.gz"
+        path "cis_per_guide_results.tsv.gz"
+        path "trans_per_element_results.tsv.gz"
+        path "trans_per_guide_results.tsv.gz"
 
     script:
     """
         # Check all files exist
-        for file in "${cis_element}" "${cis_guide}" "${trans_element}" "${trans_guide}"; do
+        for file in "${cis_per_element_results}" "${cis_per_guide_results}" "${trans_per_element_results}" "${trans_per_guide_results}"; do
             if [[ ! -f "\$file" ]]; then
                 echo "ERROR: File not found: \$file"
                 exit 1
@@ -24,15 +24,11 @@ process publishFiles {
             echo "Found: \$file"
         done
 
-        # Copy  to create actual files from symlinks
-        cp "${cis_element}" cis_per_element_output.tsv
-        cp "${cis_guide}" cis_per_guide_output.tsv
-        cp "${trans_element}" trans_per_element_output.tsv
-        cp "${trans_guide}" trans_per_guide_output.tsv
-
-        # Remove original files from pipeline_outputs
-        rm -f ./pipeline_outputs/per_element_output.tsv
-        rm -f ./pipeline_outputs/per_guide_output.tsv
+        # Copy to create actual files from symlinks
+        cp "${cis_per_element_results}" cis_per_element_results.tsv.gz
+        cp "${cis_per_guide_results}" cis_per_guide_results.tsv.gz
+        cp "${trans_per_element_results}" trans_per_element_results.tsv.gz
+        cp "${trans_per_guide_results}" trans_per_guide_results.tsv.gz
 
         echo "All files copied and ready for publishing"
     """
