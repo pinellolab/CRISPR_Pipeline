@@ -166,7 +166,7 @@ inference_sceptre_m <- function(mudata, ...) {
   union_test_results <- union_results
 
   # store union results in mudata metadata as requested
-  MultiAssayExperiment::metadata(mudata)$test_results <- union_test_results
+  MultiAssayExperiment::metadata(mudata)$per_element_results <- union_test_results
 
   # also write the per-element (union) results to file
   try(
@@ -209,6 +209,7 @@ inference_sceptre_m <- function(mudata, ...) {
 
   # use singleton_results directly
   singleton_test_results <- singleton_results
+  MultiAssayExperiment::metadata(mudata)$per_guide_results <- singleton_test_results
 
   try(
     write.table(
