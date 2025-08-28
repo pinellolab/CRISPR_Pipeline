@@ -132,6 +132,9 @@ workflow process_mudata_pipeline_HASHING {
         PerturboResults = inference_perturbo(PrepareInference.mudata_inference_input,  "perturbo", params.Multiplicity_of_infection)
         GuideInference = mergedResults(SceptreResults.test_results, PerturboResults.inference_mudata)
     }
+
+
+    
     else if (params.INFERENCE_method == "default"){
         if (params.INFERENCE_target_guide_pairing_strategy != 'default') {
             error "INFERENCE_method='default' requires INFERENCE_target_guide_pairing_strategy='default'"

@@ -103,6 +103,11 @@ def create_json_df(json_dir):
         json_df = pd.concat(list_of_params, ignore_index=True)
     return json_df
 
+
+#  base_mdata.uns['per_guide_results'] = merged_guide_df
+#     base_mdata.uns['per_element_results'] = merged_element_df
+
+
 def create_inference_blocks(mudata, use_default=False):
     """Create inference blocks for either single test_results or separate cis/trans results"""
     inference_blocks = []
@@ -110,7 +115,7 @@ def create_inference_blocks(mudata, use_default=False):
     if use_default:
         # Process both cis and trans results
         for analysis_type in ['cis', 'trans']:
-            results_key = f"{analysis_type}_test_results"
+            results_key = f"{analysis_type}_per_guide_results"
 
             if results_key in mudata.uns:
                 inference_table = pd.DataFrame({k: v for k, v in mudata.uns[results_key].items()})
@@ -123,15 +128,15 @@ def create_inference_blocks(mudata, use_default=False):
                 print(f"Warning: {results_key} not found in mudata.uns")
     else:
         # Process single test_results
-        if 'test_results' in mudata.uns:
-            inference_table = pd.DataFrame({k: v for k, v in mudata.uns['test_results'].items()})
+        if 'cis_per_guide_results' in mudata.uns:
+            inference_table = pd.DataFrame({k: v for k, v in mudata.uns['cis_per_guide_results'].items()})
             gi_highlight = f"Total tested sgRNA-gene pairs: {inference_table.shape[0]}"
 
             gi_df = new_block('Inference', '', 'Guide Inference', gi_highlight, True, inference_table,
                     table_description='Inference table (gene, guide, target name, lfc2, p-value, pair-type)')
             inference_blocks.append(gi_df)
         else:
-            print("Warning: test_results not found in mudata.uns")
+            print("Warning: cis_per_guide_results not found in mudata.uns")
 
     return inference_blocks
 
@@ -297,7 +302,7 @@ def main():
     parser.add_argument('--hashing_demux', required=True, help='Path to the hashing demux anndata file')
     parser.add_argument('--hashing_unfiltered_demux', required=True, help='Path to the hashing unfiltered demux anndata file')
     parser.add_argument('--default', action="store_true",
-                      help="Process mudata with cis_test_results and trans_test_results instead of single test_results")
+                      help="Process mudata with cis_per_guide_results and trans_per_guide_results instead of single test_results")
     parser.add_argument('--output', type=str, default='all_df.pkl', help='Path to output pickle file')
 
     args = parser.parse_args()

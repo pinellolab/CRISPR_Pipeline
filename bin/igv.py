@@ -182,7 +182,7 @@ if __name__ == "__main__":
     parser.add_argument("--results_key", type=str, default="test_results",
                       help="Key for test results in mdata.uns")
     parser.add_argument("--default", action="store_true",
-                      help="Process mudata with cis_test_results and trans_test_results instead of single test_results")
+                      help="Process mudata with cis_per_element_results and trans_per_element_results instead of single test_results")
 
     args = parser.parse_args()
 
@@ -193,8 +193,8 @@ if __name__ == "__main__":
     if args.default:
         # Process both cis and trans results
         results_configs = [
-            {"key": "cis_test_results", "type": "cis"},
-            {"key": "trans_test_results", "type": "trans"}
+            {"key": "cis_per_element_results", "type": "cis"},
+            {"key": "trans_per_element_results", "type": "trans"}
         ]
     else:
         # Process single test_results
