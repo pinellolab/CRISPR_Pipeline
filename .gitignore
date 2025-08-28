@@ -6,3 +6,4 @@ inference_mudata.h5mu
 per_element_output.tsv
 per_guide_output.tsv
 nf-*-reports.tsv
+/pipeline_outputs

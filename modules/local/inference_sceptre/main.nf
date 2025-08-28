@@ -6,8 +6,8 @@ process inference_sceptre {
 
     output:
     path "inference_mudata.h5mu", emit: inference_mudata
-    path "per_element_output.tsv.gz", emit: per_element_output
-    path "per_guide_output.tsv.gz", emit: per_guide_output
+    path "sceptre_per_element_output.tsv.gz", emit: per_element_output
+    path "sceptre_per_guide_output.tsv.gz", emit: per_guide_output
 
     script:
     """
@@ -21,5 +21,7 @@ process inference_sceptre {
     EOF
 
     inference_sceptre.R args.txt
+    mv per_element_output.tsv.gz sceptre_per_element_output.tsv.gz
+    mv per_guide_output.tsv.gz sceptre_per_guide_output.tsv.gz
     """
 }
