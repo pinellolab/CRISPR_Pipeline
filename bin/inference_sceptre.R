@@ -172,7 +172,7 @@ inference_sceptre_m <- function(mudata, ...) {
   try(
     write.table(
       union_test_results,
-      file = gzfile("per_element_output.tsv.gz"),
+      file = gzfile("sceptre_per_element_output.tsv.gz"),
       sep = "\t",
       row.names = FALSE,
       quote = FALSE
@@ -213,7 +213,7 @@ inference_sceptre_m <- function(mudata, ...) {
   try(
     write.table(
       singleton_test_results,
-      file = gzfile("per_guide_output.tsv.gz"),
+      file = gzfile("sceptre_per_guide_output.tsv.gz"),
       sep = "\t",
       row.names = FALSE,
       quote = FALSE
@@ -263,5 +263,5 @@ if (!exists(".sourced_from_test")) {
   }
 
   # write the modified MuData (contains union results in metadata as 'test_results')
-  try(MuData::writeH5MU(object = results$mudata, file = "inference_mudata.h5mu"), silent = TRUE)
+  try(MuData::writeH5MU(object = results$mudata, file = "sceptre_inference_mudata.h5mu"), silent = TRUE)
 }
