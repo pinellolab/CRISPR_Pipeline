@@ -74,6 +74,7 @@ Use the `.tsv` output from Step 1 as input here.
 ```bash
 python3 download_igvf.py \
   --sample test_fetch.tsv \
+  --gunzip \
   --keypair igvf_key.json
 ```
 
@@ -132,6 +133,7 @@ Preview download/upload actions without performing them:
 | `--file-types other`  | Download only YAML/TSV configuration files                                  |
 | `--file-types all`    | *(default)* Download everything                                             |
 | `--output-dir`        | Output directory for locally downloaded files (default: `./downloads`)             |
+| `--gunzip`        | Gunzip downloaded files (default: keep compressed).             |
 | `--gcs-upload`        | Enable GCS upload                                                           |
 | `--gcs-bucket`        | Name of the GCS bucket                                                      |
 | `--gcs-prefix`        | Subfolder path inside the GCS bucket (e.g. `pipeline_runs/IGVFDS...`)      |
