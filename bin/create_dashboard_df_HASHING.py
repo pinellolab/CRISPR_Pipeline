@@ -119,6 +119,14 @@ def create_inference_blocks(mudata, use_default=False):
 
             if results_key in mudata.uns:
                 inference_table = pd.DataFrame({k: v for k, v in mudata.uns[results_key].items()})
+                if analysis_type == 'trans':
+                    #sort by lower pavlues
+                    inference_table =   inference_table.sort_values(by='p_value').head(100)
+                    #capture first 1k
+                    
+
+
+
                 gi_highlight = f"Total tested sgRNA-gene pairs ({analysis_type}): {inference_table.shape[0]}"
 
                 gi_df = new_block('Inference', f'{analysis_type.capitalize()} Analysis', 'Guide Inference', gi_highlight, True, inference_table,
@@ -130,6 +138,7 @@ def create_inference_blocks(mudata, use_default=False):
         # Process single test_results
         if 'cis_per_guide_results' in mudata.uns:
             inference_table = pd.DataFrame({k: v for k, v in mudata.uns['cis_per_guide_results'].items()})
+            
             gi_highlight = f"Total tested sgRNA-gene pairs: {inference_table.shape[0]}"
 
             gi_df = new_block('Inference', '', 'Guide Inference', gi_highlight, True, inference_table,
