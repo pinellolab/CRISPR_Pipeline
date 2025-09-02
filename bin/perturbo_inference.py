@@ -102,6 +102,8 @@ def run_perturbo(
             pairs_to_test_df = mdata.uns["pairs_to_test"]
         elif isinstance(mdata.uns["pairs_to_test"], dict):
             pairs_to_test_df = pd.DataFrame(mdata.uns["pairs_to_test"])
+        else:
+            raise ValueError("pairs_to_test must be a DataFrame or dictionary")
 
         aggregated_df = (
             pairs_to_test_df[["gene_id", element_key]].drop_duplicates().assign(value=1)
@@ -117,38 +119,11 @@ def run_perturbo(
             .fillna(0)
         )
 
-        # subset mdata for perturbo speedup
-        tested_guides = pairs_to_test_df["guide_id"].unique()
-        tested_genes = pairs_to_test_df["gene_id"].unique()
-
-        rna_subset = mdata[gene_modality_name][:, tested_genes]
-        grna_feature_ids = (
-            mdata[guide_modality_name].var["guide_id"].isin(tested_guides)
-        )
-        grna_subset = mdata[guide_modality_name][:, grna_feature_ids]
-
-        targeted_cells = grna_subset.X.sum(axis=1) > 0
-        if not targeted_cells.any():
-            raise ValueError("No targeted cells found in the guide modality subset.")
-
-        mdata_dict = {
-            gene_modality_name: rna_subset[targeted_cells],
-            guide_modality_name: grna_subset[targeted_cells],
-        }
-
-        # copy over any additional modalities
-        for mod in mdata.mod.keys():
-            if mod not in mdata_dict:
-                mdata_dict[mod] = mdata[mod][targeted_cells]
-        mdata_subset = md.MuData(mdata_dict).copy()
-    else:
-        mdata_subset = mdata
-
     ########################################
     # Setup MuData for PerTurbo
 
     perturbo.PERTURBO.setup_mudata(
-        mdata_subset,
+        mdata,
         perturbation_layer="guide_assignment",
         batch_key="batch",
         library_size_key="total_gene_umis",
@@ -162,7 +137,7 @@ def run_perturbo(
     )
 
     model = perturbo.PERTURBO(
-        mdata_subset,
+        mdata,
         # control_guides=control_guides, # broken in current PerTurbo version, fix when we update image
         likelihood="nb",
         efficiency_mode=efficiency_mode,

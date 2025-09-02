@@ -82,7 +82,8 @@ workflow process_mudata_pipeline {
         PrepareInference = prepare_guide_inference(
             Mudata_concat.concat_mudata,
             GTF_Reference.gencode_gtf,
-            params.INFERENCE_max_target_distance_bp
+            params.INFERENCE_max_target_distance_bp,
+            false
         )}
     else if (params.INFERENCE_target_guide_pairing_strategy == 'all_by_all') {
         PrepareInference = prepare_all_guide_inference(
@@ -93,7 +94,8 @@ workflow process_mudata_pipeline {
         PrepareInference_cis = prepare_guide_inference(
             Mudata_concat.concat_mudata,
             GTF_Reference.gencode_gtf,
-            params.INFERENCE_max_target_distance_bp
+            params.INFERENCE_max_target_distance_bp,
+            true
         )
         PrepareInference_trans = prepare_all_guide_inference(
             Mudata_concat.concat_mudata,
