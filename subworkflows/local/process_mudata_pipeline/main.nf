@@ -82,42 +82,44 @@ workflow process_mudata_pipeline {
         PrepareInference = prepare_guide_inference(
             Mudata_concat.concat_mudata,
             GTF_Reference.gencode_gtf,
-            params.INFERENCE_max_target_distance_bp
+            params.INFERENCE_max_target_distance_bp,
+            false
         )}
     else if (params.INFERENCE_target_guide_pairing_strategy == 'all_by_all') {
-        PrepareInference = prepare_all_guide_inference(
-            Mudata_concat.concat_mudata,
-            GTF_Reference.gencode_gtf
-        )}
+        // Skip prepare_all_guide_inference and use mudata directly
+        PrepareInference = Mudata_concat
+    }
     else if (params.INFERENCE_target_guide_pairing_strategy == 'default') {
         PrepareInference_cis = prepare_guide_inference(
             Mudata_concat.concat_mudata,
             GTF_Reference.gencode_gtf,
-            params.INFERENCE_max_target_distance_bp
+            params.INFERENCE_max_target_distance_bp,
+            true
         )
-        PrepareInference_trans = prepare_all_guide_inference(
-            Mudata_concat.concat_mudata,
-            GTF_Reference.gencode_gtf
-        )
+        // Skip prepare_all_guide_inference for trans analysis
+        PrepareInference_trans = Mudata_concat
     }
 
     if (params.INFERENCE_method == "sceptre"){
-        TestResults = inference_sceptre(PrepareInference.mudata_inference_input)
+        def mudata_input = params.INFERENCE_target_guide_pairing_strategy == 'all_by_all' ? PrepareInference.concat_mudata : PrepareInference.mudata_inference_input
+        TestResults = inference_sceptre(mudata_input)
         GuideInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "perturbo"){
-        TestResults = inference_perturbo(PrepareInference.mudata_inference_input, params.INFERENCE_method, params.Multiplicity_of_infection)
+        def mudata_input = params.INFERENCE_target_guide_pairing_strategy == 'all_by_all' ? PrepareInference.concat_mudata : PrepareInference.mudata_inference_input
+        TestResults = inference_perturbo(mudata_input, params.INFERENCE_method, params.Multiplicity_of_infection)
         GuideInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
-        SceptreResults = inference_sceptre(PrepareInference.mudata_inference_input)
-        PerturboResults = inference_perturbo(PrepareInference.mudata_inference_input,  "perturbo", params.Multiplicity_of_infection)
+        def mudata_input = params.INFERENCE_target_guide_pairing_strategy == 'all_by_all' ? PrepareInference.concat_mudata : PrepareInference.mudata_inference_input
+        SceptreResults = inference_sceptre(mudata_input)
+        PerturboResults = inference_perturbo(mudata_input,  "perturbo", params.Multiplicity_of_infection)
         GuideInference = mergedResults(
             SceptreResults.per_guide_output,
-            SceptreResults.per_element_output, 
+            SceptreResults.per_element_output,
             PerturboResults.per_guide_output,
             PerturboResults.per_element_output,
-            PrepareInference.mudata_inference_input
+            mudata_input
         )
     }
     else if (params.INFERENCE_method == "default"){
@@ -134,8 +136,8 @@ workflow process_mudata_pipeline {
             PerturboResults_cis.per_element_output,
             PrepareInference_cis.mudata_inference_input
         )
-        // Process trans results
-        GuideInference_trans = inference_perturbo_trans(PrepareInference_trans.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
+        // Process trans results - use concat_mudata directly
+        GuideInference_trans = inference_perturbo_trans(PrepareInference_trans.concat_mudata, "perturbo", params.Multiplicity_of_infection)
 
         // Rename tsv outputs to avoid conflicts
         cis_per_element = GuideInference_cis.per_element_output.map { file -> file.copyTo(file.parent.resolve("cis-${file.name}")) }

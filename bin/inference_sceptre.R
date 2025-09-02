@@ -99,26 +99,35 @@ inference_sceptre_m <- function(mudata, ...) {
   # convert MuData object to sceptre object
   sceptre_object <- convert_mudata_to_sceptre_object_v1(mudata, remove_collinear_covariates = TRUE)
 
-  # extract set of discovery pairs to test
-  pairs_to_test <- MultiAssayExperiment::metadata(mudata)$pairs_to_test |>
-    as.data.frame()
+  # extract set of discovery pairs to test (if available)
   moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
-
-  discovery_pairs <- pairs_to_test |>
-    dplyr::rename(
-      grna_target = intended_target_name,
-      response_id = gene_id
-    ) |>
-    dplyr::filter(grna_target != "non-targeting")
-
-  # assemble base arguments to set_analysis_parameters()
-  args_list <- list(...)
-
-  if ("discovery_pairs" %in% names(args_list)) {
-    warning("The `discovery_pairs` argument is ignored. The `discovery_pairs` are set from the `pairs_to_test` metadata.")
+  
+  # Check if pairs_to_test exists in metadata
+  if (!is.null(MultiAssayExperiment::metadata(mudata)$pairs_to_test)) {
+    pairs_to_test <- MultiAssayExperiment::metadata(mudata)$pairs_to_test |>
+      as.data.frame()
+    
+    discovery_pairs <- pairs_to_test |>
+      dplyr::rename(
+        grna_target = intended_target_name,
+        response_id = gene_id
+      ) |>
+      dplyr::filter(grna_target != "non-targeting")
+    
+    # assemble base arguments to set_analysis_parameters()
+    args_list <- list(...)
+    
+    if ("discovery_pairs" %in% names(args_list)) {
+      warning("The `discovery_pairs` argument is ignored. The `discovery_pairs` are set from the `pairs_to_test` metadata.")
+    }
+    # use discovery pairs from metadata
+    args_list[["discovery_pairs"]] <- discovery_pairs
+  } else {
+    # No pairs_to_test found - use SCEPTRE's construct_trans_pairs for trans analysis
+    args_list <- list(...)
+    discovery_pairs <- sceptre::construct_trans_pairs(sceptre_object)
+    args_list[["discovery_pairs"]] <- discovery_pairs
   }
-  # always use discovery pairs from metadata
-  args_list[["discovery_pairs"]] <- discovery_pairs
   # construct formula excluding gRNA covariates to avoid multicollinearity
   # (gRNA assignments are binary, making grna_n_nonzero and grna_n_umis identical)
   formula_object <- sceptre:::auto_construct_formula_object(
