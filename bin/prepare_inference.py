@@ -120,11 +120,12 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
         # Create new mudata object
         mudata_new = mu.MuData(mdata_dict)
         mudata_new.uns = mudata.uns.copy()
+        mudata=mudata_new
 
     # save the mudata
     output_file = "mudata_inference_input.h5mu"
     print(f"Saving processed mudata to {output_file}...")
-    mudata_new.write(output_file)
+    mudata.write(output_file)
 
 
 if __name__ == "__main__":
