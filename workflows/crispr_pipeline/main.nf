@@ -202,10 +202,16 @@ workflow CRISPR_PIPELINE {
             params.GUIDE_ASSIGNMENT_capture_method
         )
 
-        MuData_Doublets = doublets_scrub(MuData.mudata)
+        // Conditionally run scrublet based on ENABLE_SCRUBLET parameter (defaults to false)
+        if (params.ENABLE_SCRUBLET ?: false) {
+            MuData_Doublets = doublets_scrub(MuData.mudata)
+            mudata_for_processing = MuData_Doublets.mudata_doublet
+        } else {
+            mudata_for_processing = MuData.mudata
+        }
 
         // Shared processing pipeline
-        Mudata_concat = guide_assignment_pipeline(MuData_Doublets.mudata_doublet)
+        Mudata_concat = guide_assignment_pipeline(mudata_for_processing)
         GuideInference = inference_pipeline(Mudata_concat.concat_mudata, Preprocessing.gencode_gtf)
 
         evaluation_pipeline (
