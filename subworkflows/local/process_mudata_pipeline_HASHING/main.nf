@@ -12,16 +12,7 @@ include { guide_assignment_cleanser } from '../../../modules/local/guide_assignm
 include { guide_assignment_sceptre } from '../../../modules/local/guide_assignment_sceptre'
 include { skipGTFDownload } from '../../../modules/local/skipGTFDownload'
 include { downloadGTF } from '../../../modules/local/downloadGTF'
-include { prepare_guide_inference } from '../../../modules/local/prepare_guide_inference'
-include { prepare_all_guide_inference } from '../../../modules/local/prepare_all_guide_inference'
-include { prepare_user_guide_inference } from '../../../modules/local/prepare_user_guide_inference'
-include { inference_sceptre } from '../../../modules/local/inference_sceptre'
-include { inference_perturbo } from '../../../modules/local/inference_perturbo'
-include { inference_perturbo as inference_perturbo_trans } from '../../../modules/local/inference_perturbo'
-include { inference_mudata } from '../../../modules/local/inference_mudata'
-include { mergedResults } from '../../../modules/local/mergedResults'
-include { publishFiles } from '../../../modules/local/publishFiles'
-include { mergeMudata } from '../../../modules/local/mergeMudata'
+include { inference_pipeline } from '../inference_pipeline'
 
 workflow process_mudata_pipeline_HASHING {
 
@@ -92,82 +83,10 @@ workflow process_mudata_pipeline_HASHING {
         Mudata_concat = mudata_concat(guide_assignment_collected, params.QC_min_cells_per_gene, params.DUAL_GUIDE)
         }
 
-    if (params.INFERENCE_target_guide_pairing_strategy == 'predefined_pairs') {
-        PrepareInference = prepare_user_guide_inference(
-            Mudata_concat.concat_mudata,
-            file(params.INFERENCE_predefined_pairs_to_test)
-        )}
-    else if (params.INFERENCE_target_guide_pairing_strategy == 'by_distance') {
-        PrepareInference = prepare_guide_inference(
-            Mudata_concat.concat_mudata,
-            GTF_Reference.gencode_gtf,
-            params.INFERENCE_max_target_distance_bp,
-            false
-        )}
-    else if (params.INFERENCE_target_guide_pairing_strategy == 'all_by_all') {
-        PrepareInference = prepare_all_guide_inference(
-            Mudata_concat.concat_mudata,
-            GTF_Reference.gencode_gtf
-        )}
-    else if (params.INFERENCE_target_guide_pairing_strategy == 'default') {
-        PrepareInference_cis = prepare_guide_inference(
-            Mudata_concat.concat_mudata,
-            GTF_Reference.gencode_gtf,
-            params.INFERENCE_max_target_distance_bp,
-            true
-        )
-        PrepareInference_trans = prepare_all_guide_inference(
-            Mudata_concat.concat_mudata,
-            GTF_Reference.gencode_gtf
-        )
-    }
-
-    if (params.INFERENCE_method == "sceptre"){
-        TestResults = inference_sceptre(PrepareInference.mudata_inference_input)
-        GuideInference = inference_mudata(TestResults.test_results, PrepareInference.mudata_inference_input, params.INFERENCE_method)
-    }
-    else if (params.INFERENCE_method == "perturbo"){
-        GuideInference = inference_perturbo(PrepareInference.mudata_inference_input, params.INFERENCE_method, params.Multiplicity_of_infection)
-    }
-    else if (params.INFERENCE_method == "sceptre,perturbo") {
-        SceptreResults = inference_sceptre(PrepareInference.mudata_inference_input)
-        PerturboResults = inference_perturbo(PrepareInference.mudata_inference_input,  "perturbo", params.Multiplicity_of_infection)
-        GuideInference = mergedResults(SceptreResults.test_results, PerturboResults.inference_mudata)
-    }
-
-
-    
-    else if (params.INFERENCE_method == "default"){
-        if (params.INFERENCE_target_guide_pairing_strategy != 'default') {
-            error "INFERENCE_method='default' requires INFERENCE_target_guide_pairing_strategy='default'"
-        }
-        // Process cis results
-        SceptreResults_cis = inference_sceptre(PrepareInference_cis.mudata_inference_input)
-        PerturboResults_cis = inference_perturbo(PrepareInference_cis.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
-        GuideInference_cis = mergedResults(SceptreResults_cis.test_results, PerturboResults_cis.inference_mudata)
-        // Process trans results
-        GuideInference_trans = inference_perturbo_trans(PrepareInference_trans.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
-
-        // Rename tsv outputs to avoid conflicts
-        cis_per_element = GuideInference_cis.per_element_output.map { file -> file.copyTo(file.parent.resolve("cis-${file.name}")) }
-        cis_per_guide = GuideInference_cis.per_guide_output.map { file -> file.copyTo(file.parent.resolve("cis-${file.name}")) }
-
-        trans_per_element = GuideInference_trans.per_element_output.map { file -> file.copyTo(file.parent.resolve("trans-${file.name}")) }
-        trans_per_guide = GuideInference_trans.per_guide_output.map { file -> file.copyTo(file.parent.resolve("trans-${file.name}")) }
-
-        PublishFiles = publishFiles(cis_per_element, cis_per_guide, trans_per_element, trans_per_guide)
-
-        // Rename h5mu outputs to avoid conflicts
-        cis_file = GuideInference_cis.inference_mudata.map { file ->
-            file.copyTo(file.parent.resolve('cis_inference_mudata.h5mu'))
-        }
-        trans_file = GuideInference_trans.inference_mudata.map { file ->
-            file.copyTo(file.parent.resolve('trans_inference_mudata.h5mu'))
-        }
-
-        GuideInference = mergeMudata(cis_file, trans_file)
-
-    }
+    GuideInference = inference_pipeline(
+        Mudata_concat.concat_mudata,
+        GTF_Reference.gencode_gtf
+    )
 
     emit:
     inference_mudata = GuideInference.inference_mudata
