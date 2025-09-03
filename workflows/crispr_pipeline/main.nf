@@ -167,29 +167,29 @@ workflow CRISPR_PIPELINE {
         Mudata_concat = guide_assignment_pipeline(MuData.mudata)
         GuideInference = inference_pipeline(Mudata_concat.concat_mudata, Preprocessing.gencode_gtf)
 
-        // evaluation_pipeline (
-        //     Preprocessing.gencode_gtf,
-        //     GuideInference.inference_mudata
-        //     )
+        evaluation_pipeline (
+            Preprocessing.gencode_gtf,
+            GuideInference.inference_mudata
+            )
 
-        // dashboard_pipeline_HASHING (
-        //     seqSpecCheck_pipeline_HASHING.out.guide_seqSpecCheck_plots,
-        //     seqSpecCheck_pipeline_HASHING.out.guide_position_table,
-        //     seqSpecCheck_pipeline_HASHING.out.hashing_seqSpecCheck_plots,
-        //     seqSpecCheck_pipeline_HASHING.out.hashing_position_table,
-        //     Preprocessing.adata_rna,
-        //     Preprocessing.filtered_anndata_rna,
-        //     mapping_rna_pipeline.out.ks_transcripts_out_dir_collected,
-        //     MuData.adata_guide,
-        //     mapping_guide_pipeline.out.ks_guide_out_dir_collected,
-        //     Hashing_Filtered.adata_hashing,
-        //     mapping_hashing_pipeline.out.ks_hashing_out_dir_collected,
-        //     Hashing_Concat.concatenated_hashing_demux,
-        //     Hashing_Concat.concatenated_hashing_unfiltered_demux,
-        //     GuideInference.inference_mudata,
-        //     Preprocessing.figures_dir,
-        //     evaluation_pipeline.out.evaluation_output_dir
-        //     )
+        dashboard_pipeline_HASHING (
+            seqSpecCheck_pipeline_HASHING.out.guide_seqSpecCheck_plots,
+            seqSpecCheck_pipeline_HASHING.out.guide_position_table,
+            seqSpecCheck_pipeline_HASHING.out.hashing_seqSpecCheck_plots,
+            seqSpecCheck_pipeline_HASHING.out.hashing_position_table,
+            Preprocessing.adata_rna,
+            Preprocessing.filtered_anndata_rna,
+            mapping_rna_pipeline.out.ks_transcripts_out_dir_collected,
+            MuData.adata_guide,
+            mapping_guide_pipeline.out.ks_guide_out_dir_collected,
+            Hashing_Filtered.adata_hashing,
+            mapping_hashing_pipeline.out.ks_hashing_out_dir_collected,
+            Hashing_Concat.concatenated_hashing_demux,
+            Hashing_Concat.concatenated_hashing_unfiltered_demux,
+            GuideInference.inference_mudata,
+            Preprocessing.figures_dir,
+            evaluation_pipeline.out.evaluation_output_dir
+            )
     }
     else {
         // Create MuData without hashing
@@ -214,23 +214,23 @@ workflow CRISPR_PIPELINE {
         Mudata_concat = guide_assignment_pipeline(mudata_for_processing)
         GuideInference = inference_pipeline(Mudata_concat.concat_mudata, Preprocessing.gencode_gtf)
 
-        // evaluation_pipeline (
-        //     Preprocessing.gencode_gtf,
-        //     GuideInference.inference_mudata
-        //     )
+        evaluation_pipeline (
+            Preprocessing.gencode_gtf,
+            GuideInference.inference_mudata
+            )
 
-        // dashboard_pipeline (
-        //     seqSpecCheck_pipeline.out.guide_seqSpecCheck_plots,
-        //     seqSpecCheck_pipeline.out.guide_position_table,
-        //     Preprocessing.adata_rna,
-        //     Preprocessing.filtered_anndata_rna,
-        //     mapping_rna_pipeline.out.ks_transcripts_out_dir_collected,
-        //     MuData.adata_guide,
-        //     mapping_guide_pipeline.out.ks_guide_out_dir_collected,
-        //     GuideInference.inference_mudata,
-        //     Preprocessing.figures_dir,
-        //     evaluation_pipeline.out.evaluation_output_dir
-        //     )
+        dashboard_pipeline (
+            seqSpecCheck_pipeline.out.guide_seqSpecCheck_plots,
+            seqSpecCheck_pipeline.out.guide_position_table,
+            Preprocessing.adata_rna,
+            Preprocessing.filtered_anndata_rna,
+            mapping_rna_pipeline.out.ks_transcripts_out_dir_collected,
+            MuData.adata_guide,
+            mapping_guide_pipeline.out.ks_guide_out_dir_collected,
+            GuideInference.inference_mudata,
+            Preprocessing.figures_dir,
+            evaluation_pipeline.out.evaluation_output_dir
+            )
     }
 
 
