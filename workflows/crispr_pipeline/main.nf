@@ -10,8 +10,18 @@ include { prepare_mapping_pipeline } from '../../subworkflows/local/prepare_mapp
 include { mapping_rna_pipeline } from '../../subworkflows/local/mapping_rna_pipeline'
 include { mapping_guide_pipeline } from '../../subworkflows/local/mapping_guide_pipeline'
 include { mapping_hashing_pipeline } from '../../subworkflows/local/mapping_hashing_pipeline'
-include { process_mudata_pipeline_HASHING } from '../../subworkflows/local/process_mudata_pipeline_HASHING'
-include { process_mudata_pipeline } from '../../subworkflows/local/process_mudata_pipeline'
+// Import modular subworkflows
+include { preprocessing_pipeline } from '../../subworkflows/local/preprocessing_pipeline'
+include { guide_assignment_pipeline } from '../../subworkflows/local/guide_assignment_pipeline'
+include { inference_pipeline } from '../../subworkflows/local/inference_pipeline'
+
+// Import hashing-specific modules
+include { CreateMuData } from '../../modules/local/CreateMuData'
+include { CreateMuData_HASHING } from '../../modules/local/CreateMuData_HASHING'
+include { doublets_scrub } from '../../modules/local/doublets_scrub'
+include { demultiplex } from '../../modules/local/demultiplex'
+include { filter_hashing } from '../../modules/local/filter_hashing'
+include { hashing_concat } from '../../modules/local/hashing_concat'
 include { evaluation_pipeline } from '../../subworkflows/local/evaluation_pipeline'
 include { dashboard_pipeline_HASHING } from '../../subworkflows/local/dashboard_pipeline_HASHING'
 include { dashboard_pipeline } from '../../subworkflows/local/dashboard_pipeline'
@@ -114,6 +124,12 @@ workflow CRISPR_PIPELINE {
         prepare_mapping_pipeline.out.parsed_covariate_file
         )
 
+    // Common preprocessing for both workflows
+    Preprocessing = preprocessing_pipeline(
+        mapping_rna_pipeline.out.concat_anndata_rna,
+        mapping_rna_pipeline.out.trans_out_dir
+    )
+
     if (params.ENABLE_DATA_HASHING) {
         mapping_hashing_pipeline(
             ch_hash,
@@ -123,20 +139,37 @@ workflow CRISPR_PIPELINE {
             prepare_mapping_pipeline.out.parsed_covariate_file
             )
 
-        process_mudata_pipeline_HASHING(
-            mapping_rna_pipeline.out.concat_anndata_rna,
-            mapping_rna_pipeline.out.trans_out_dir,
+        // Hashing-specific processing
+        Hashing_Filtered = filter_hashing(
+            Preprocessing.filtered_anndata_rna,
+            mapping_hashing_pipeline.out.concat_anndata_hashing
+        )
+
+        Demultiplex = demultiplex(Hashing_Filtered.hashing_filtered_anndata.flatten())
+
+        hashing_demux_anndata_collected = Demultiplex.hashing_demux_anndata.collect()
+        hashing_demux_unfiltered_anndata_collected = Demultiplex.hashing_demux_unfiltered_anndata.collect()
+
+        Hashing_Concat = hashing_concat(hashing_demux_anndata_collected, hashing_demux_unfiltered_anndata_collected)
+
+        // Create MuData with hashing
+        MuData = CreateMuData_HASHING(
+            Preprocessing.filtered_anndata_rna,
             mapping_guide_pipeline.out.concat_anndata_guide,
-            mapping_guide_pipeline.out.guide_out_dir,
-            mapping_hashing_pipeline.out.concat_anndata_hashing,
-            mapping_hashing_pipeline.out.hashing_out_dir,
-            prepare_mapping_pipeline.out.covariate_string,
-            ch_guide_design
-            )
+            Hashing_Concat.concatenated_hashing_demux,
+            ch_guide_design,
+            Preprocessing.gencode_gtf,
+            params.Multiplicity_of_infection,
+            params.GUIDE_ASSIGNMENT_capture_method
+        )
+
+        // Shared processing pipeline
+        Mudata_concat = guide_assignment_pipeline(MuData.mudata)
+        GuideInference = inference_pipeline(Mudata_concat.concat_mudata, Preprocessing.gencode_gtf)
 
         evaluation_pipeline (
-            process_mudata_pipeline_HASHING.out.gencode_gtf,
-            process_mudata_pipeline_HASHING.out.inference_mudata
+            Preprocessing.gencode_gtf,
+            GuideInference.inference_mudata
             )
 
         dashboard_pipeline_HASHING (
@@ -144,44 +177,52 @@ workflow CRISPR_PIPELINE {
             seqSpecCheck_pipeline_HASHING.out.guide_position_table,
             seqSpecCheck_pipeline_HASHING.out.hashing_seqSpecCheck_plots,
             seqSpecCheck_pipeline_HASHING.out.hashing_position_table,
-            process_mudata_pipeline_HASHING.out.adata_rna,
-            process_mudata_pipeline_HASHING.out.filtered_anndata_rna,
+            Preprocessing.adata_rna,
+            Preprocessing.filtered_anndata_rna,
             mapping_rna_pipeline.out.ks_transcripts_out_dir_collected,
-            process_mudata_pipeline_HASHING.out.adata_guide,
+            MuData.adata_guide,
             mapping_guide_pipeline.out.ks_guide_out_dir_collected,
-            process_mudata_pipeline_HASHING.out.adata_hashing,
+            Hashing_Filtered.adata_hashing,
             mapping_hashing_pipeline.out.ks_hashing_out_dir_collected,
-            process_mudata_pipeline_HASHING.out.adata_demux,
-            process_mudata_pipeline_HASHING.out.adata_unfiltered_demux,
-            process_mudata_pipeline_HASHING.out.inference_mudata,
-            process_mudata_pipeline_HASHING.out.figures_dir,
+            Hashing_Concat.concatenated_hashing_demux,
+            Hashing_Concat.concatenated_hashing_unfiltered_demux,
+            GuideInference.inference_mudata,
+            Preprocessing.figures_dir,
             evaluation_pipeline.out.evaluation_output_dir
             )
     }
     else {
-        process_mudata_pipeline(
-            mapping_rna_pipeline.out.concat_anndata_rna,
-            mapping_rna_pipeline.out.trans_out_dir,
+        // Create MuData without hashing
+        MuData = CreateMuData(
+            Preprocessing.filtered_anndata_rna,
             mapping_guide_pipeline.out.concat_anndata_guide,
-            mapping_guide_pipeline.out.guide_out_dir,
-            prepare_mapping_pipeline.out.covariate_string,
-            ch_guide_design
-            )
+            ch_guide_design,
+            Preprocessing.gencode_gtf,
+            params.Multiplicity_of_infection,
+            params.GUIDE_ASSIGNMENT_capture_method
+        )
+
+        MuData_Doublets = doublets_scrub(MuData.mudata)
+
+        // Shared processing pipeline
+        Mudata_concat = guide_assignment_pipeline(MuData_Doublets.mudata_doublet)
+        GuideInference = inference_pipeline(Mudata_concat.concat_mudata, Preprocessing.gencode_gtf)
+
         evaluation_pipeline (
-            process_mudata_pipeline.out.gencode_gtf,
-            process_mudata_pipeline.out.inference_mudata
+            Preprocessing.gencode_gtf,
+            GuideInference.inference_mudata
             )
 
         dashboard_pipeline (
             seqSpecCheck_pipeline.out.guide_seqSpecCheck_plots,
             seqSpecCheck_pipeline.out.guide_position_table,
-            process_mudata_pipeline.out.adata_rna,
-            process_mudata_pipeline.out.filtered_anndata_rna,
+            Preprocessing.adata_rna,
+            Preprocessing.filtered_anndata_rna,
             mapping_rna_pipeline.out.ks_transcripts_out_dir_collected,
-            process_mudata_pipeline.out.adata_guide,
+            MuData.adata_guide,
             mapping_guide_pipeline.out.ks_guide_out_dir_collected,
-            process_mudata_pipeline.out.inference_mudata,
-            process_mudata_pipeline.out.figures_dir,
+            GuideInference.inference_mudata,
+            Preprocessing.figures_dir,
             evaluation_pipeline.out.evaluation_output_dir
             )
     }
