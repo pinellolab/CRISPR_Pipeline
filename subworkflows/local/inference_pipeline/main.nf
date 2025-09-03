@@ -5,7 +5,7 @@ include { prepare_all_guide_inference } from '../../../modules/local/prepare_all
 include { prepare_user_guide_inference } from '../../../modules/local/prepare_user_guide_inference'
 include { inference_sceptre } from '../../../modules/local/inference_sceptre'
 include { inference_perturbo } from '../../../modules/local/inference_perturbo'
-include { inference_perturbo as inference_perturbo_trans } from '../../../modules/local/inference_perturbo'
+include { inference_perturbo_trans } from '../../../modules/local/inference_perturbo_trans'
 include { mergedResults } from '../../../modules/local/mergedResults'
 include { publishFiles } from '../../../modules/local/publishFiles'
 include { mergeMudata } from '../../../modules/local/mergeMudata'

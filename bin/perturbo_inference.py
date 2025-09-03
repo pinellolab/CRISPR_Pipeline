@@ -97,7 +97,8 @@ def run_perturbo(
     mdata.uns[element_key] = intended_targets_df.columns.tolist()
 
     # create element by gene matrix if not testing all pairs
-    if not test_all_pairs and "pairs_to_test" in mdata.uns:
+    if not test_all_pairs:
+        assert "pairs_to_test" in mdata.uns, "pairs_to_test not found in mudata.uns and test_all_pairs is False"
         if isinstance(mdata.uns["pairs_to_test"], pd.DataFrame):
             pairs_to_test_df = mdata.uns["pairs_to_test"]
         elif isinstance(mdata.uns["pairs_to_test"], dict):
