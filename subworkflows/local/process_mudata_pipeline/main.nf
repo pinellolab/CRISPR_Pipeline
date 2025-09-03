@@ -3,10 +3,7 @@ nextflow.enable.dsl=2
 include { PreprocessAnnData } from '../../../modules/local/PreprocessAnnData'
 include { CreateMuData } from '../../../modules/local/CreateMuData'
 include { doublets_scrub } from '../../../modules/local/doublets_scrub'
-include { prepare_assignment } from '../../../modules/local/prepare_assignment'
-include { mudata_concat } from '../../../modules/local/mudata_concat'
-include { guide_assignment_cleanser } from '../../../modules/local/guide_assignment_cleanser'
-include { guide_assignment_sceptre } from '../../../modules/local/guide_assignment_sceptre'
+include { guide_assignment_pipeline } from '../guide_assignment_pipeline'
 include { skipGTFDownload } from '../../../modules/local/skipGTFDownload'
 include { downloadGTF } from '../../../modules/local/downloadGTF'
 include { inference_pipeline } from '../inference_pipeline'
@@ -50,19 +47,7 @@ workflow process_mudata_pipeline {
 
     MuData_Doublets = doublets_scrub(MuData.mudata)
 
-    Prepare_assignment = prepare_assignment{MuData_Doublets.mudata_doublet}
-
-    if (params.GUIDE_ASSIGNMENT_method == "cleanser") {
-        Guide_Assignment = guide_assignment_cleanser(Prepare_assignment.prepare_assignment_mudata.flatten(), params.GUIDE_ASSIGNMENT_cleanser_probability_threshold, params.GUIDE_ASSIGNMENT_capture_method)
-        guide_assignment_collected =  Guide_Assignment.guide_assignment_mudata_output.collect()
-        Mudata_concat = mudata_concat(guide_assignment_collected ,params.QC_min_cells_per_gene, params.DUAL_GUIDE)
-        }
-
-    else if (params.GUIDE_ASSIGNMENT_method == "sceptre") {
-        Guide_Assignment = guide_assignment_sceptre(Prepare_assignment.prepare_assignment_mudata.flatten(), params.GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold,  params.GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep)
-        guide_assignment_collected =  Guide_Assignment.guide_assignment_mudata_output.collect()
-        Mudata_concat = mudata_concat(guide_assignment_collected, params.QC_min_cells_per_gene, params.DUAL_GUIDE)
-        }
+    Mudata_concat = guide_assignment_pipeline(MuData_Doublets.mudata_doublet)
 
     GuideInference = inference_pipeline(
         Mudata_concat.concat_mudata,
