@@ -244,9 +244,23 @@ Within the `pipeline_outputs` directory, you will find:
 
 ```
 📁 pipeline_outputs/
-   ├── 📄 inference_mudata.h5mu    
-   ├── 📄 per_element_output.tsv    
-   └── 📄 per_guide_output.tsv     
+
+   ├── cis_per_element_results.tsv.gz :
+   ├── cis_per_guide_results.tsv.gz :
+   
+   ├── trans_per_element_results.tsv.gz :
+   ├── trans_per_guide_results.tsv.gz :
+
+
+   ├── per_element_output.tsv.gz :
+   ├── per_guide_output.tsv.gz :
+
+
+   ├── perturbo_per_element_output.tsv :
+   ├── perturbo_per_guide_output.tsv :
+
+   ├── inference_mudata.h5mu :
+
 ```
 
 For details, see our [documentation](https://docs.google.com/document/d/1Z1SOlekIE5uGyXW41XxnszxaYdSw0wdAOUVzfy3fj3M/edit?tab=t.0#heading=h.ctbx1w9hj619).
