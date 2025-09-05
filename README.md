@@ -242,24 +242,84 @@ Within the `pipeline_outputs` directory, you will find:
 
 **Structure:**
 
+
+# 📁 `pipeline_outputs/` — README
+
+This folder contains the tabular results produced by the CRISPR inference pipeline.  
+All result files are `tsv.gz` (tab-separated, gzip-compressed) unless noted otherwise.
+
+---
+
+## 🧬 Cis analysis
+
+### Files
+
+| File | Description |
+|---|---|
+| `cis_per_guide_results.tsv.gz` | Inference results for **cis** pairs with guides tested **independently**. |
+| `cis_per_element_results.tsv.gz` | Inference results for **cis** pairs with guides **grouped by intended target element**. |
+
+### Schema
+
+#### `cis_per_guide_results.tsv.gz`
+
+| Column | Description |
+|---|---|
+| `gene_id` | ENSEMBL gene ID and the name/ID of the target element. |
+| `guide_id` | Guide identifier (guide name). |
+| `sceptre_log2_fc` | Effect size (log2 fold-change) from SCEPTRE. |
+| `sceptre_p_value` |is the sceptre (uncorrected) p_value/posterior probability for that pair. |
+| `perturbo_log2_fc` | Effect size (log2 fold-change) from PerTurbo. |
+| `perturbo_p_value` | is the perturbo (uncorrected) p_value/posterior probability for that pair |
+
+#### `cis_per_element_results.tsv.gz`
+
+| Column | Description |
+|---|---|
+| `gene_id` | ENSEMBL gene ID and the name/ID of the target element. |
+| `intended_target_name` | Intended target element name. |
+| `sceptre_log2_fc` | Effect size (log2 fold-change) from SCEPTRE. |
+| `sceptre_p_value` | is the sceptre (uncorrected) p_value/posterior probability for that pair.|
+| `perturbo_log2_fc` | Effect size (log2 fold-change) from PerTurbo. |
+| `perturbo_p_value` |  is the perturbo (uncorrected) p_value/posterior probability for that pair |
+
+---
+
+## 🌐 Trans analysis
+
+### Files
+
+| File | Description |
+|---|---|
+| `trans_per_guide_results.tsv.gz` | PerTurbo inference results for **all genes**, guides tested **independently**. |
+| `trans_per_element_results.tsv.gz` | PerTurbo inference results for **all genes**, guides **grouped by intended target element**. |
+
+### Schema
+
+#### `trans_per_guide_results.tsv.gz`
+
+| Column | Description |
+|---|---|
+| `gene_id` | ENSEMBL gene ID and the name/ID of the target element. |
+| `guide_id` | Guide identifier (guide name). |
+| `log2_fc` | Effect size (log2 fold-change) from PerTurbo. |
+| `p_value` | is the perturbo (uncorrected) p_value/posterior probability for that pair |
+
+#### `trans_per_element_results.tsv.gz`
+
+| Column | Description |
+|---|---|
+| `gene_id` | ENSEMBL gene ID and the name/ID of the target element. |
+| `intended_target_name` | Intended target element name. |
+| `log2_fc` | Effect size (log2 fold-change) from PerTurbo. |
+| `p_value` |  is the perturbo (uncorrected) p_value/posterior probability for that pair|
+
+---
+
+
+## Other files
+
 ```
-📁 pipeline_outputs/
-   
-   ├── cis_per_element_results.tsv.gz :
-   ├── cis_per_guide_results.tsv.gz :
-
-   ├── trans_per_element_results.tsv.gz :
-   ├── trans_per_guide_results.tsv.gz :
-
-   Fields on this files:
-      ├── gene_id :
-      ├── intended_target_name :
-      ├── sceptre_log2_fc :
-      ├── sceptre_p_value  :
-      ├── perturbo_log2_fc  :
-      ├── perturbo_p_value  :
-
-
    ├── per_element_output.tsv.gz :
    ├── per_guide_output.tsv.gz :
 
@@ -268,8 +328,8 @@ Within the `pipeline_outputs` directory, you will find:
    ├── perturbo_per_guide_output.tsv :
 
    ├── inference_mudata.h5mu :
-
 ```
+
 
 For details, see our [documentation](https://docs.google.com/document/d/1Z1SOlekIE5uGyXW41XxnszxaYdSw0wdAOUVzfy3fj3M/edit?tab=t.0#heading=h.ctbx1w9hj619).
 
