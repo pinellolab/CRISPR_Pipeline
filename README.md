@@ -84,14 +84,45 @@ Update the pipeline-specific parameters in the `params` section, for example:
 
 ```groovy
 // Input data paths
-input = "/path/to/your/samplesheet.csv"
+    input = null
 
-// Analysis parameters (adjust for your experiment)
-QC_min_genes_per_cell = 500
-QC_min_cells_per_gene = 3
-QC_pct_mito = 20
-GUIDE_ASSIGNMENT_method = 'sceptre'  // or 'cleanser'
-INFERENCE_method = 'perturbo'        // or 'sceptre'
+    // TO-DO, pipeline parameters
+    ENABLE_DATA_HASHING = false //use for datasets contaning hash
+    ENABLE_SCRUBLET = false //Using scrublet can be chalenge in datasets with hundred of thousands cells (ex: 300k +)
+    use_igvf_reference = true // Download the reference from IGVF to use as gene file annotation, this method when true will overwrite the reference_transcriptome and gtf_download_path
+    is_10x3v3 = true // In case using 10x3v3 use this option to execute the barcode translation operation. Otherwise guides and transcriptomes from the same cell will point for different barcodes and the overlap between modalities will be very small
+    DUAL_GUIDE = false  // Case using Dual Guide system such as Replogle 2022 paper
+    REFERENCE_transcriptome = 'human' // will be used to download the kallisto human index
+    REFERENCE_gtf_download_path = 'https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_46/gencode.v46.annotation.gtf.gz' // Case creating a custom reference from the internet
+    REFERENCE_gtf_local_path = '/path/to/gencode_gtf.gtf.gz' // Case provind your own gtf data.
+
+    QC_min_genes_per_cell = 500 //This parameter will be used to filter cel with low quality (aka: less than X transcript with more than one read)
+    QC_min_cells_per_gene = 0.05 //Fraction of cells a gene should be present to be considered in the inference steps. (0.05 is an number )
+    QC_pct_mito = 20 //Percentage of Mitochondrial reads from a cell total to discard the cell
+
+    Multiplicity_of_infection = 'low' // 'high' or 'low'
+
+    GUIDE_ASSIGNMENT_method = 'sceptre'
+    GUIDE_ASSIGNMENT_capture_method = 'CROP-seq'
+    GUIDE_ASSIGNMENT_cleanser_probability_threshold = 1
+    GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold = 'default'
+    GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep = 'default'
+
+    INFERENCE_method = 'default' // sceptre or perturbo. Default will run sceptre and perturbo in cis and perturbo in trans (for elements and per guide)
+    INFERENCE_target_guide_pairing_strategy = 'default'
+
+    INFERENCE_predefined_pairs_to_test = "path/to/file.csv"
+    INFERENCE_max_target_distance_bp = 1000000
+
+    INFERENCE_SCEPTRE_side = 'both'
+    INFERENCE_SCEPTRE_grna_integration_strategy = 'union'
+    INFERENCE_SCEPTRE_resampling_approximation = 'skew_normal'
+    INFERENCE_SCEPTRE_control_group = 'default'
+    INFERENCE_SCEPTRE_resampling_mechanism = 'default'
+    INFERENCE_SCEPTRE_formula_object = 'default'
+
+    NETWORK_custom_central_nodes = 'undefined'
+    NETWORK_central_nodes_num = 1
 ```
 
 #### 2. Compute Environment Configuration
