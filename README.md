@@ -256,8 +256,8 @@ All result files are `tsv.gz` (tab-separated, gzip-compressed) unless noted othe
 
 | File | Description |
 |---|---|
-| `cis_per_guide_results.tsv.gz` | Inference results for **cis** pairs with guides tested **independently**. |
-| `cis_per_element_results.tsv.gz` | Inference results for **cis** pairs with guides **grouped by intended target element**. |
+| `cis_per_guide_results.tsv.gz` | Inference results for **cis** guide--gene pairs with guides tested **independently**. |
+| `cis_per_element_results.tsv.gz` | Inference results for **cis** element--gene pairs with guides **grouped by intended target element**. |
 
 ### Schema
 
@@ -265,23 +265,23 @@ All result files are `tsv.gz` (tab-separated, gzip-compressed) unless noted othe
 
 | Column | Description |
 |---|---|
-| `gene_id` | ENSEMBL gene ID and the name/ID of the target element. |
-| `guide_id` | Guide identifier (guide name). |
-| `sceptre_log2_fc` | Effect size (log2 fold-change) from SCEPTRE. |
-| `sceptre_p_value` |is the sceptre (uncorrected) p_value/posterior probability for that pair. |
-| `perturbo_log2_fc` | Effect size (log2 fold-change) from PerTurbo. |
-| `perturbo_p_value` | is the perturbo (uncorrected) p_value/posterior probability for that pair |
+| `gene_id` | ENSEMBL gene ID |
+| `guide_id` | Guide identifier (guide name) |
+| `sceptre_log2_fc` | SCEPTRE effect size estimate (log2 fold-change) |
+| `sceptre_p_value` | SCEPTRE (uncorrected) p_value  of differential expression |
+| `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
+| `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
 
 #### `cis_per_element_results.tsv.gz`
 
 | Column | Description |
 |---|---|
-| `gene_id` | ENSEMBL gene ID and the name/ID of the target element. |
-| `intended_target_name` | Intended target element name. |
-| `sceptre_log2_fc` | Effect size (log2 fold-change) from SCEPTRE. |
-| `sceptre_p_value` | is the sceptre (uncorrected) p_value/posterior probability for that pair.|
-| `perturbo_log2_fc` | Effect size (log2 fold-change) from PerTurbo. |
-| `perturbo_p_value` |  is the perturbo (uncorrected) p_value/posterior probability for that pair |
+| `gene_id` | ENSEMBL gene ID |
+| `intended_target_name` | Intended target element name |
+| `sceptre_log2_fc` | SCEPTRE effect size estimate (log2 fold-change) |
+| `sceptre_p_value` | SCEPTRE (uncorrected) p_value |
+| `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
+| `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
 
 ---
 
@@ -291,8 +291,8 @@ All result files are `tsv.gz` (tab-separated, gzip-compressed) unless noted othe
 
 | File | Description |
 |---|---|
-| `trans_per_guide_results.tsv.gz` | PerTurbo inference results for **all genes**, guides tested **independently**. |
-| `trans_per_element_results.tsv.gz` | PerTurbo inference results for **all genes**, guides **grouped by intended target element**. |
+| `trans_per_guide_results.tsv.gz` | PerTurbo inference results for **all guide--gene pairs**, guides tested **independently**. |
+| `trans_per_element_results.tsv.gz` | PerTurbo inference results for **all element--gene pairs**, guides **grouped by intended target element**. |
 
 ### Schema
 
@@ -300,19 +300,19 @@ All result files are `tsv.gz` (tab-separated, gzip-compressed) unless noted othe
 
 | Column | Description |
 |---|---|
-| `gene_id` | ENSEMBL gene ID and the name/ID of the target element. |
+| `gene_id` | ENSEMBL gene ID |
 | `guide_id` | Guide identifier (guide name). |
-| `log2_fc` | Effect size (log2 fold-change) from PerTurbo. |
-| `p_value` | is the perturbo (uncorrected) p_value/posterior probability for that pair |
+| `log2_fc` | PerTurbo effect size (log2 fold-change) |
+| `p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
 
 #### `trans_per_element_results.tsv.gz`
 
 | Column | Description |
 |---|---|
-| `gene_id` | ENSEMBL gene ID and the name/ID of the target element. |
+| `gene_id` | ENSEMBL gene ID |
 | `intended_target_name` | Intended target element name. |
-| `log2_fc` | Effect size (log2 fold-change) from PerTurbo. |
-| `p_value` |  is the perturbo (uncorrected) p_value/posterior probability for that pair|
+| `log2_fc` | PerTurbo effect size (log2 fold-change) |
+| `p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
 
 ---
 
@@ -320,7 +320,7 @@ All result files are `tsv.gz` (tab-separated, gzip-compressed) unless noted othe
 ## Other files
 
 ```
-   ├── per_element_output.tsv.gz :
+   ├── per_element_output.tsv.gz : 
    ├── per_guide_output.tsv.gz :
 
 
