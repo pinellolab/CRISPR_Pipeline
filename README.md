@@ -180,6 +180,8 @@ containers {
     cleanser = 'sjiang9/cleanser:0.3'          // Guide assignment
     sceptre  = 'sjiang9/sceptre-igvf:0.1'     // Guide assignment/Perturbation inference 
     perturbo = 'loganblaine/perturbo:latest'   // Perturbation inference 
+    aria2    = 'biasofpriene/aria2c' // download references in a fast way
+
 }
 ```
 
