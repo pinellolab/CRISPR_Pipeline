@@ -244,12 +244,20 @@ Within the `pipeline_outputs` directory, you will find:
 
 ```
 📁 pipeline_outputs/
-
+   
    ├── cis_per_element_results.tsv.gz :
    ├── cis_per_guide_results.tsv.gz :
-   
+
    ├── trans_per_element_results.tsv.gz :
    ├── trans_per_guide_results.tsv.gz :
+
+   Fields on this files:
+      ├── gene_id :
+      ├── intended_target_name :
+      ├── sceptre_log2_fc :
+      ├── sceptre_p_value  :
+      ├── perturbo_log2_fc  :
+      ├── perturbo_p_value  :
 
 
    ├── per_element_output.tsv.gz :
