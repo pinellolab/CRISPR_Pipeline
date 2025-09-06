@@ -98,7 +98,9 @@ def run_perturbo(
 
     # create element by gene matrix if not testing all pairs
     if not test_all_pairs:
-        assert "pairs_to_test" in mdata.uns, "pairs_to_test not found in mudata.uns and test_all_pairs is False"
+        assert "pairs_to_test" in mdata.uns, (
+            "pairs_to_test not found in mudata.uns and test_all_pairs is False"
+        )
         if isinstance(mdata.uns["pairs_to_test"], pd.DataFrame):
             pairs_to_test_df = mdata.uns["pairs_to_test"]
         elif isinstance(mdata.uns["pairs_to_test"], dict):
@@ -145,6 +147,8 @@ def run_perturbo(
         fit_guide_efficacy=fit_guide_efficacy,
     )
 
+    model.view_anndata_setup(mdata, hide_state_registries=True)
+
     model.train(
         num_epochs,  # max number of epochs
         lr=lr,
@@ -154,6 +158,7 @@ def run_perturbo(
         early_stopping_patience=early_stopping_patience,
         early_stopping_min_delta=1e-5,
         early_stopping_monitor="elbo_train",
+        data_splitter_kwargs={"drop_last": True}, # requires scvi-tools version > 1.2
     )
 
     # Reformat the output to match IGVF specifications
@@ -205,8 +210,8 @@ def run_perturbo(
 
     # Write results table to TSV (required)
     print("Writing results to ", results_tsv_fp)
-    if results_tsv_fp.endswith('.gz'):
-        test_results.to_csv(results_tsv_fp, index=False, sep="\t", compression='gzip')
+    if results_tsv_fp.endswith(".gz"):
+        test_results.to_csv(results_tsv_fp, index=False, sep="\t", compression="gzip")
     else:
         test_results.to_csv(results_tsv_fp, index=False, sep="\t")
 
@@ -321,6 +326,7 @@ def main():
 
     # Parse the arguments
     args = parser.parse_args()
+    print(args)
     run_perturbo(
         args.mdata_input_fp,
         args.results_tsv_fp,
