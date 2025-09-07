@@ -42,7 +42,7 @@ workflow inference_pipeline {
             true
         )
         // Skip prepare_all_guide_inference for trans analysis
-        PrepareInference_trans = Channel.empty()
+        // PrepareInference_trans = Channel.empty()
     }
 
     if (params.INFERENCE_method == "sceptre"){
