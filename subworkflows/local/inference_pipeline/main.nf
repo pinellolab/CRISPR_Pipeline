@@ -82,7 +82,7 @@ workflow inference_pipeline {
             PrepareInference_cis.mudata_inference_input
         )
         // Process trans results - use concat_mudata directly
-        GuideInference_trans = inference_perturbo_trans(mudata_concat, "perturbo", params.Multiplicity_of_infection)
+        GuideInference_trans = inference_perturbo_trans(mudata_concat, "perturbo", params.Multiplicity_of_infection, GuideInference_cis.inference_mudata)
 
         // Rename tsv outputs to avoid conflicts
         cis_per_element = GuideInference_cis.per_element_output.map { file -> file.copyTo(file.parent.resolve("cis-${file.name}")) }

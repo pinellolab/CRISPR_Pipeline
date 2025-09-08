@@ -7,6 +7,7 @@ process inference_perturbo_trans {
     path mudata
     val inference_method
     val efficiency_mode
+    val dummy // fake dependency to force this to run after cis analysis
 
     output:
     path "inference_mudata.h5mu", emit: inference_mudata
