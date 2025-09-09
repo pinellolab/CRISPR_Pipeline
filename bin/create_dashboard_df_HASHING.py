@@ -119,15 +119,16 @@ def create_inference_blocks(mudata, use_default=False):
 
             if results_key in mudata.uns:
                 inference_table = pd.DataFrame({k: v for k, v in mudata.uns[results_key].items()})
-                if analysis_type == 'trans':
-                    #sort by lower pavlues
-                    inference_table =   inference_table.sort_values(by='p_value').head(100)
-                    #capture first 1k
-                    
+                n=10000
+
+                if analysis_type == 'cis':
+                    inference_table =   inference_table.sort_values(by='sceptre_p_value').head(n)
+                else:
+                    inference_table =   inference_table.sort_values(by='p_value').head(n)
 
 
 
-                gi_highlight = f"Total tested sgRNA-gene pairs ({analysis_type}): {inference_table.shape[0]}"
+                gi_highlight = f"Top lowest pvalues  {str(n)} tested sgRNA-gene pairs ({analysis_type}): {inference_table.shape[0]}"
 
                 gi_df = new_block('Inference', f'{analysis_type.capitalize()} Analysis', 'Guide Inference', gi_highlight, True, inference_table,
                         table_description=f'{analysis_type.capitalize()} inference table (gene, guide, target name, lfc2, p-value, pair-type)')
@@ -229,7 +230,7 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
         image_description= ['Knee plot of UMI counts vs. barcode index.', 'Scatterplot of total counts vs. genes detected, colored by mitochondrial content.','Distribution of gene counts, total counts, and mitochondrial content.', 'Number of scRNA barcodes using different\nTotal UMI thresholds.'])
 
     ### Create image_df for guide
-    guide_assignment_matrix = mudata.mod['guide'].layers['guide_assignment'].toarray()
+    guide_assignment_matrix = mudata.mod['guide'].layers['guide_assignment']
     guide_highlight = f"Number of guide barcodes (unfiltered) intersecting with scRNA barcodes (unfiltered): {human_format(intersection_guidebc_scrnabc)}, % of guides barcodes (unfiltered) intersecting with the scRNA barcode (unfiltered): {str(np.round((intersection_guidebc_scrnabc / guide_ann.obs.shape[0]) * 100, 2))}%"
     guide_img_df = new_block('Guide', '', 'Visualization', guide_highlight, True,
                     image = ['figures/guides_per_cell_histogram.png', 'figures/cells_per_guide_histogram.png', 'figures/guides_UMI_thresholds.png'],
