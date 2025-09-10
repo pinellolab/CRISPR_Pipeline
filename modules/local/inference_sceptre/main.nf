@@ -18,6 +18,7 @@ process inference_sceptre {
     ${params.INFERENCE_SCEPTRE_resampling_approximation}
     ${params.INFERENCE_SCEPTRE_control_group}
     ${params.INFERENCE_SCEPTRE_resampling_mechanism}
+    ${task.cpus}
     EOF
 
     inference_sceptre.R args.txt

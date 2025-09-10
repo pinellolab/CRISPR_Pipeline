@@ -30,10 +30,6 @@ workflow inference_pipeline {
             params.INFERENCE_max_target_distance_bp,
             false
         )}
-    else if (params.INFERENCE_target_guide_pairing_strategy == 'all_by_all') {
-        // Skip prepare_all_guide_inference and use mudata directly
-        PrepareInference = Channel.empty()
-    }
     else if (params.INFERENCE_target_guide_pairing_strategy == 'default') {
         PrepareInference_cis = prepare_guide_inference(
             mudata_concat,
@@ -41,22 +37,26 @@ workflow inference_pipeline {
             params.INFERENCE_max_target_distance_bp,
             true
         )
-        // Skip prepare_all_guide_inference for trans analysis
-        // PrepareInference_trans = Channel.empty()
+    }
+
+    // Determine the mudata input once (avoid duplicate variable definitions)
+    def mudata_input
+
+    if (params.INFERENCE_target_guide_pairing_strategy != 'all_by_all') {
+        mudata_input = PrepareInference.mudata_inference_input
+    } else {
+        mudata_input = mudata_concat
     }
 
     if (params.INFERENCE_method == "sceptre"){
-        def mudata_input = params.INFERENCE_target_guide_pairing_strategy == 'all_by_all' ? mudata_concat : PrepareInference.mudata_inference_input
         TestResults = inference_sceptre(mudata_input)
         GuideInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "perturbo"){
-        def mudata_input = params.INFERENCE_target_guide_pairing_strategy == 'all_by_all' ? mudata_concat : PrepareInference.mudata_inference_input
         TestResults = inference_perturbo(mudata_input, params.INFERENCE_method, params.Multiplicity_of_infection)
         GuideInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
-        def mudata_input = params.INFERENCE_target_guide_pairing_strategy == 'all_by_all' ? mudata_concat : PrepareInference.mudata_inference_input
         SceptreResults = inference_sceptre(mudata_input)
         PerturboResults = inference_perturbo(mudata_input,  "perturbo", params.Multiplicity_of_infection)
         GuideInference = mergedResults(
