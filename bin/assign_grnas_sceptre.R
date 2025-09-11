@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 library(Matrix)
 
-assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n_em_rep = "default") {
+assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n_em_rep = "default", n_processors = NA) {
   # convert MuData object to sceptre object, removing multicollinear covariates
   sceptre_object <- convert_mudata_to_sceptre_object_v1(
     mudata,
@@ -27,6 +27,11 @@ assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n
   if (n_em_rep != "default") {
     assign_grnas_args$n_em_rep <- as.integer(n_em_rep)
   }
+  # Parallelization controls inferred from n_processors
+  if (!is.na(n_processors) && as.integer(n_processors) > 1) {
+    assign_grnas_args$parallel <- TRUE
+    assign_grnas_args$n_processors <- as.integer(n_processors)
+  }
   
   sceptre_object <- do.call(sceptre::assign_grnas, assign_grnas_args)
 
@@ -37,7 +42,7 @@ assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n
   colnames(grna_assignment_matrix) <- colnames(MultiAssayExperiment::assay(mudata[['guide']]))
 
   # add gRNA assignment matrix to MuData
-  SummarizedExperiment::assays(mudata[['guide']])[['guide_assignment']] <- grna_assignment_matrix
+  # SummarizedExperiment::assays(mudata[['guide']])[['guide_assignment']] <- grna_assignment_matrix
 
   return(list(mudata = mudata, guide_assignment = grna_assignment_matrix))
 }
@@ -127,11 +132,13 @@ if (!exists(".sourced_from_test")) {
   mudata_input <- args[1]
   probability_threshold <- if(length(args) >= 2) args[2] else "default"
   n_em_rep <- if(length(args) >= 3) args[3] else "default"
+  n_processors <- if(length(args) >= 4) suppressWarnings(as.integer(args[4])) else NA
   
   mudata_in <- MuData::readH5MU(mudata_input)
   results <- assign_grnas_sceptre_v1(mudata = mudata_in, 
                                      probability_threshold = probability_threshold,
-                                     n_em_rep = n_em_rep)
+                                     n_em_rep = n_em_rep,
+                                     n_processors = n_processors)
   guide_assignment <- results$guide_assignment
   
   writeMM(guide_assignment, "guide_assignment.mtx")

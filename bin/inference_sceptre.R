@@ -95,7 +95,7 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 }
 
 
-inference_sceptre_m <- function(mudata, ...) {
+inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
   # convert MuData object to sceptre object
   sceptre_object <- convert_mudata_to_sceptre_object_v1(mudata, remove_collinear_covariates = TRUE)
 
@@ -151,7 +151,12 @@ inference_sceptre_m <- function(mudata, ...) {
 
   # assign grnas and run QC (relaxed thresholds to keep all cells; mirror prior behaviour)
   sceptre_object <- sceptre_object |>
-    sceptre::assign_grnas(method = "thresholding", threshold = 1) |>
+    sceptre::assign_grnas(
+      method = "thresholding",
+      threshold = 1,
+      parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
+      n_processors = if (!is.na(n_processors) && as.integer(n_processors) > 1) as.integer(n_processors) else NULL
+    ) |>
     sceptre::run_qc(
       n_nonzero_trt_thresh = 0L,
       n_nonzero_cntrl_thresh = 0L,
@@ -160,7 +165,10 @@ inference_sceptre_m <- function(mudata, ...) {
 
   # run discovery analysis (grouped)
   sceptre_object <- sceptre_object |>
-    sceptre::run_discovery_analysis()
+    sceptre::run_discovery_analysis(
+      parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
+      n_processors = if (!is.na(n_processors) && as.integer(n_processors) > 1) as.integer(n_processors) else NULL
+    )
 
   # get union (per-element) results
   union_results <- sceptre_object |>
@@ -197,13 +205,21 @@ inference_sceptre_m <- function(mudata, ...) {
 
   # run assignment, qc and discovery for singleton
   sceptre_object <- sceptre_object |>
-    sceptre::assign_grnas(method = "thresholding", threshold = 1) |>
+    sceptre::assign_grnas(
+      method = "thresholding",
+      threshold = 1,
+      parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
+      n_processors = if (!is.na(n_processors) && as.integer(n_processors) > 1) as.integer(n_processors) else NULL
+    ) |>
     sceptre::run_qc(
       n_nonzero_trt_thresh = 0L,
       n_nonzero_cntrl_thresh = 0L,
       p_mito_threshold = 1
     ) |>
-    sceptre::run_discovery_analysis()
+    sceptre::run_discovery_analysis(
+      parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
+      n_processors = if (!is.na(n_processors) && as.integer(n_processors) > 1) as.integer(n_processors) else NULL
+    )
 
   # extract singleton (per-guide) results, preserve grna_id and rename to guide_id
   singleton_results <- sceptre_object |>
@@ -250,6 +266,7 @@ if (!exists(".sourced_from_test")) {
   resampling_approximation <- args[4]
   control_group <- args[5]
   resampling_mechanism <- args[6]
+  n_processors <- if (length(args) >= 7) suppressWarnings(as.integer(args[7])) else NA
 
   # read MuData
   mudata_in <- MuData::readH5MU(mudata_fp)
@@ -261,7 +278,8 @@ if (!exists(".sourced_from_test")) {
     grna_integration_strategy = grna_integration_strategy,
     resampling_approximation = resampling_approximation,
     control_group = control_group,
-    resampling_mechanism = resampling_mechanism
+    resampling_mechanism = resampling_mechanism,
+    n_processors = n_processors
   )
   # write outputs: per-element (union) and per-guide (singleton)
   if (!is.null(results$union_test_results)) {
