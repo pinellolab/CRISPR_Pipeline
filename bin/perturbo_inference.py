@@ -14,7 +14,7 @@ def run_perturbo(
     fit_guide_efficacy=True,  # whether to fit guide efficacy (if false, overrides efficiency_mode)
     efficiency_mode="undecided",  # mapping from undecided->auto, low->mixture, high->scaled# can be "mixture" (for low MOI only), "scaled", "undecided" (auto), "low" (mixture), or "high" (scaled)
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
-    batch_size=4096,  # batch size for training
+    batch_size=None,  # batch size for training
     early_stopping=False,  # whether to use early stopping
     early_stopping_patience=5,  # patience for early stopping
     lr=0.01,  # learning rate for training
@@ -148,7 +148,10 @@ def run_perturbo(
     )
 
     model.view_anndata_setup(mdata, hide_state_registries=True)
-
+    if batch_size is None:
+        # batch_size = int(np.clip(len(mdata) // 20, 128, 4096))
+        batch_size = int(np.clip(len(mdata) // 20, 512, 10_000))
+        print(f"Training using batch size of {batch_size}")
     model.train(
         num_epochs,  # max number of epochs
         lr=lr,
@@ -158,7 +161,7 @@ def run_perturbo(
         early_stopping_patience=early_stopping_patience,
         early_stopping_min_delta=1e-5,
         early_stopping_monitor="elbo_train",
-        data_splitter_kwargs={"drop_last": True}, # requires scvi-tools version > 1.2
+        # data_splitter_kwargs={"drop_last": True},  # requires scvi-tools version > 1.2
     )
 
     # Reformat the output to match IGVF specifications
@@ -258,12 +261,12 @@ def main():
         default="gpu",
         help="Accelerator to use for training (default: gpu)",
     )
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=4096,
-        help="Batch size for training (default: 4096)",
-    )
+    # parser.add_argument(
+    #     "--batch_size",
+    #     type=int,
+    #     default=4096,
+    #     help="Batch size for training (default: 4096)",
+    # )
     parser.add_argument(
         "--early_stopping",
         type=bool,
@@ -326,7 +329,7 @@ def main():
 
     # Parse the arguments
     args = parser.parse_args()
-    print(args)
+
     run_perturbo(
         args.mdata_input_fp,
         args.results_tsv_fp,
@@ -334,7 +337,7 @@ def main():
         fit_guide_efficacy=args.fit_guide_efficacy,
         efficiency_mode=args.efficiency_mode,
         accelerator=args.accelerator,
-        batch_size=args.batch_size,
+        # batch_size=args.batch_size,
         early_stopping=args.early_stopping,
         early_stopping_patience=args.early_stopping_patience,
         lr=args.lr,
