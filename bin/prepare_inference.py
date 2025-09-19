@@ -58,6 +58,13 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
         "pair_type": "pair_type",
     }
 
+    # Set intended_target_name to "non-targeting" for non-targeting guides
+    mudata.mod["guide"].var.loc[
+        (~mudata.mod["guide"].var["targeting"])
+        | (mudata.mod["guide"].var["type"] == "non-targeting"),
+        "intended_target_name",
+    ] = "non-targeting"
+
     # Ensure pairs_to_test is not None before trying to access items
     if mudata.uns.get("pairs_to_test") is None:
         raise ValueError(
@@ -89,7 +96,10 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
             raise ValueError("No tested genes found in gene modality")
 
         # Subset guide modality
-        guide_subset_mask = mudata.mod["guide"].var["guide_id"].isin(tested_guides)
+
+        guide_subset_mask = mudata.mod["guide"].var["guide_id"].isin(tested_guides) | (
+            mudata.mod["guide"].var["intended_target_name"] == "non-targeting"
+        )
         if not guide_subset_mask.any():
             raise ValueError("No tested guides found in guide modality")
 
@@ -120,7 +130,7 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
         # Create new mudata object
         mudata_new = mu.MuData(mdata_dict)
         mudata_new.uns = mudata.uns.copy()
-        mudata=mudata_new
+        mudata = mudata_new
 
     # save the mudata
     output_file = "mudata_inference_input.h5mu"
