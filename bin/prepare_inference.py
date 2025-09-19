@@ -96,10 +96,9 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
             raise ValueError("No tested genes found in gene modality")
 
         # Subset guide modality
-        
-        guide_subset_mask = (
-            mudata.mod["guide"].var["guide_id"].isin(tested_guides)
-            | mudata.mod["guide"].var["intended_target_name"] == "non-targeting"
+
+        guide_subset_mask = mudata.mod["guide"].var["guide_id"].isin(tested_guides) | (
+            mudata.mod["guide"].var["intended_target_name"] == "non-targeting"
         )
         if not guide_subset_mask.any():
             raise ValueError("No tested guides found in guide modality")
