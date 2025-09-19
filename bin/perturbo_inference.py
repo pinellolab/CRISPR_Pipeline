@@ -31,11 +31,12 @@ def run_perturbo(
 
     mdata = md.read(mdata_input_fp)
 
-    control_guide_filter = (~mdata["guide"].var["targeting"]) | (
-        mdata["guide"]
-        .var["type"]
-        .isin(["safe-targeting", "non-targeting", "negative control"])
+    control_guide_filter = (
+        (~mdata["guide"].var["targeting"])
+        | (mdata["guide"].var["type"] == "non-targeting")
+        | mdata["guide"].var["intended_target_name"].str.contains("non-targeting")
     )
+
     if np.any(control_guide_filter):
         control_guides = mdata["guide"].var_names[control_guide_filter].tolist()
     else:
