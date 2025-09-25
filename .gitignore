@@ -8,3 +8,4 @@ per_guide_output.tsv
 nf-*-reports.tsv
 /pipeline_outputs
 /pipeline_dashboard
+pipeline-service-key.json

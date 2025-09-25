@@ -1,6 +1,8 @@
 process mappingGuide {
     cache 'lenient'
     debug true
+    stageOutMode 'copy'
+
 
     input:
     tuple val(meta), path(reads)
