@@ -68,7 +68,14 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
     print(
         f"{n_ntc_guides} non-targeting guides found. {n_ntc_guides / mudata.mod['guide'].var.shape[0] * 100:.2f}% of total"
     )
-    mudata.mod["guide"].var.loc[ntc_guide_idx, "intended_target_name"] = "non-targeting"
+
+    if n_ntc_guides > 0:
+        if "non-targeting" not in mudata.mod["guide"].var["intended_target_name"].unique():
+            mudata.mod["guide"].var["intended_target_name"].cat.add_categories(["non-targeting"], inplace=True)
+
+        mudata.mod["guide"].var.loc[ntc_guide_idx, "intended_target_name"] = "non-targeting"
+    else:
+        print("No non-targeting guides found. Make sure you set up the metadata correctly")
 
     # Ensure pairs_to_test is not None before trying to access items
     if mudata.uns.get("pairs_to_test") is None:
