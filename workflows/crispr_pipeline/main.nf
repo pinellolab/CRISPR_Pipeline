@@ -153,14 +153,14 @@ workflow CRISPR_PIPELINE {
         Hashing_Concat = hashing_concat(hashing_demux_anndata_collected, hashing_demux_unfiltered_anndata_collected)
 
         // Create MuData with hashing
-        MuData = CreateMuData_HASHING(
+        MuData = CreateMuData(
             Preprocessing.filtered_anndata_rna,
             mapping_guide_pipeline.out.concat_anndata_guide,
-            Hashing_Concat.concatenated_hashing_demux,
             ch_guide_design,
             Preprocessing.gencode_gtf,
             params.Multiplicity_of_infection,
-            params.GUIDE_ASSIGNMENT_capture_method
+            params.GUIDE_ASSIGNMENT_capture_method,
+            Hashing_Concat.concatenated_hashing_demux
         )
 
         // Shared processing pipeline
@@ -199,7 +199,8 @@ workflow CRISPR_PIPELINE {
             ch_guide_design,
             Preprocessing.gencode_gtf,
             params.Multiplicity_of_infection,
-            params.GUIDE_ASSIGNMENT_capture_method
+            params.GUIDE_ASSIGNMENT_capture_method,
+            file('NO_FILE') // Dummy file for hashing parameter when not using hashing
         )
 
         // Conditionally run scrublet based on ENABLE_SCRUBLET parameter (defaults to false)

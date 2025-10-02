@@ -9,12 +9,16 @@ from gtfparse import read_gtf
 import matplotlib.pyplot as plt
 import os
 
-def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method):
+def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata_hashing=None):
     # Load the data
     guide_metadata = pd.read_csv(guide_metadata, sep='\t')
     adata_rna = ad.read_h5ad(adata_rna)
     adata_guide = ad.read_h5ad(adata_guide)
     df_gtf = read_gtf(gtf).to_pandas()
+
+    # Load hashing data if provided
+    if adata_hashing is not None:
+        adata_hashing = ad.read_h5ad(adata_hashing)
 
     ## change in adata_guide
     # adding var for guide
@@ -54,6 +58,10 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method):
     # adding number of nonzero guides and batch number
     adata_guide.obs['num_expressed_guides'] = (adata_guide.X > 0).sum(axis=1)
     adata_guide.obs['total_guide_umis'] = adata_guide.X.sum(axis=1)
+
+    # Add batch_number if hashing data is provided
+    if adata_hashing is not None:
+        adata_guide.obs['batch_number'] = adata_guide.obs['batch'].factorize()[0] + 1
     
     ## change in adata_rna; 
     df_gtf['gene_id2'] = df_gtf['gene_id'].str.split('.').str[0]
@@ -98,12 +106,27 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method):
     intersecting_barcodes = list(set(adata_rna.obs_names)
                                 .intersection(adata_guide.obs_names))
 
-    mdata = MuData({
+    # Include hashing barcodes if provided
+    if adata_hashing is not None:
+        intersecting_barcodes = list(set(intersecting_barcodes)
+                                   .intersection(adata_hashing.obs_names))
+
+    # Create MuData with conditional hashing modality
+    mudata_dict = {
         'gene': adata_rna[intersecting_barcodes, :].copy(),
         'guide': adata_guide[intersecting_barcodes, :].copy()
-    })
+    }
 
+    if adata_hashing is not None:
+        mudata_dict['hashing'] = adata_hashing[intersecting_barcodes, :].copy()
+
+    mdata = MuData(mudata_dict)
+
+    # Get intersection of obs columns across all modalities
     obs_names = set(mdata.mod['guide'].obs.columns.tolist()) & set(mdata.mod['gene'].obs.columns.tolist())
+    if adata_hashing is not None:
+        obs_names = obs_names & set(mdata.mod['hashing'].obs.columns.tolist())
+
     mdata.obs = mdata.mod['guide'].obs.loc[:, list(obs_names)]
 
     # Save the MuData object
@@ -117,7 +140,7 @@ if __name__ == "__main__":
     parser.add_argument('gtf', type=str, help='Path to the GTF file.')
     parser.add_argument('moi', default='', help='Multiplicity of infection (MOI) of the screen.')
     parser.add_argument('capture_method', default='', help='Capture Method.')
-    
+    parser.add_argument('--adata_hashing', type=str, default=None, help='Path to the hashing AnnData file (optional).')
 
     args = parser.parse_args()
-    main(args.adata_rna, args.adata_guide, args.guide_metadata, args.gtf, args.moi, args.capture_method)
+    main(args.adata_rna, args.adata_guide, args.guide_metadata, args.gtf, args.moi, args.capture_method, args.adata_hashing)
