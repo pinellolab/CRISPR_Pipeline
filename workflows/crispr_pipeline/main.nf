@@ -17,7 +17,6 @@ include { inference_pipeline } from '../../subworkflows/local/inference_pipeline
 
 // Import hashing-specific modules
 include { CreateMuData } from '../../modules/local/CreateMuData'
-include { CreateMuData_HASHING } from '../../modules/local/CreateMuData_HASHING'
 include { doublets_scrub } from '../../modules/local/doublets_scrub'
 include { demultiplex } from '../../modules/local/demultiplex'
 include { filter_hashing } from '../../modules/local/filter_hashing'
