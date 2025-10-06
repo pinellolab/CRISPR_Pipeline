@@ -22,6 +22,48 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
     print(f"Mudata 'gene' modality contains {mudata.mod['gene'].shape[1]} genes.")
     print(f"Mudata 'guide' modality contains {mudata.mod['guide'].shape[1]} guides.")
 
+    # If any targeting guides in mudata.mod["guide"].var are missing an intended_target_name, add it
+    missing_intended_target_name_guides = (
+        mudata.mod["guide"].var["targeting"]
+        & mudata.mod["guide"].var["intended_target_name"].isna()
+    )
+    if np.any(missing_intended_target_name_guides):
+        mudata.mod["guide"].var.loc[
+            missing_intended_target_name_guides, "intended_target_name"
+        ] = mudata.mod["guide"].var.loc[
+            missing_intended_target_name_guides, "guide_id"
+        ]
+
+    # For non-targeting guides, set intended_target_name to "non-targeting"
+    ntc_guide_idx = (
+        (~mudata.mod["guide"].var["targeting"])
+        | (mudata.mod["guide"].var["type"] == "non-targeting")
+        | (mudata.mod["guide"].var["intended_target_name"] == "non-targeting")
+    )
+    n_ntc_guides = np.sum(ntc_guide_idx)
+    print(
+        f"{n_ntc_guides} non-targeting guides found. {n_ntc_guides / mudata.mod['guide'].var.shape[0] * 100:.2f}% of total"
+    )
+
+    if n_ntc_guides > 0:
+        if (
+            "non-targeting"
+            not in mudata.mod["guide"].var["intended_target_name"].unique()
+        ):
+            mudata.mod["guide"].var["intended_target_name"] = (
+                mudata.mod["guide"]
+                .var["intended_target_name"]
+                .cat.add_categories(["non-targeting"])
+            )
+
+        mudata.mod["guide"].var.loc[ntc_guide_idx, "intended_target_name"] = (
+            "non-targeting"
+        )
+    else:
+        print(
+            "No non-targeting guides found. Make sure you set up the metadata correctly"
+        )
+
     gene_var = (
         mudata.mod["gene"].var.index if mudata.mod["gene"].var.index is not None else []
     )
@@ -48,6 +90,9 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
 
     print(f"Subset contains {len(subset)} rows after filtering.")
 
+    # Remove "non-targeting" guides from pairs_to_test (these need to be handled differently)
+    subset = subset[subset["intended_target_name"] != "non-targeting"]
+
     mudata.uns["pairs_to_test"] = subset.to_dict(orient="list")
 
     # rename keys in uns
@@ -57,25 +102,6 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
         "intended_target_name": "intended_target_name",
         "pair_type": "pair_type",
     }
-
-    # Set intended_target_name to "non-targeting" for non-targeting guides
-    ntc_guide_idx = (
-        (~mudata.mod["guide"].var["targeting"])
-        | (mudata.mod["guide"].var["type"] == "non-targeting")
-        | (mudata.mod["guide"].var["intended_target_name"] == "non-targeting")
-    )
-    n_ntc_guides = np.sum(ntc_guide_idx)
-    print(
-        f"{n_ntc_guides} non-targeting guides found. {n_ntc_guides / mudata.mod['guide'].var.shape[0] * 100:.2f}% of total"
-    )
-
-    if n_ntc_guides > 0:
-        if "non-targeting" not in mudata.mod["guide"].var["intended_target_name"].unique():
-            mudata.mod["guide"].var["intended_target_name"] = mudata.mod["guide"].var["intended_target_name"].cat.add_categories(["non-targeting"])
-
-        mudata.mod["guide"].var.loc[ntc_guide_idx, "intended_target_name"] = "non-targeting"
-    else:
-        print("No non-targeting guides found. Make sure you set up the metadata correctly")
 
     # Ensure pairs_to_test is not None before trying to access items
     if mudata.uns.get("pairs_to_test") is None:
