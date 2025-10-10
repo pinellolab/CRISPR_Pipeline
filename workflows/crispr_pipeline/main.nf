@@ -199,7 +199,7 @@ workflow CRISPR_PIPELINE {
             Preprocessing.gencode_gtf,
             params.Multiplicity_of_infection,
             params.GUIDE_ASSIGNMENT_capture_method,
-            file('NO_FILE') // Dummy file for hashing parameter when not using hashing
+            file('dummy_hash.txt') // Dummy file for hashing parameter when not using hashing
         )
 
         // Conditionally run scrublet based on ENABLE_SCRUBLET parameter (defaults to false)
