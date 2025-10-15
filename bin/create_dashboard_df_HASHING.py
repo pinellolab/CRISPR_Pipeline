@@ -244,7 +244,7 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
     number_of_guide_barcodes_with_positive_call = (positive_calls.sum(axis=1) > 0).sum()
     cell_ids = mudata.mod['guide'].obs.index
     guide_ids = mudata.mod['guide'].var.index
-    df_guide_assignment = pd.DataFrame(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
+    df_guide_assignment = pd.DataFrame.sparse.from_spmatrix(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
     sgRNA_frequencies = (df_guide_assignment > 0).sum(axis=0)
     df_sgRNA_frequencies = sgRNA_frequencies.reset_index()
     df_sgRNA_frequencies.columns = ['sgRNA', 'Frequency']

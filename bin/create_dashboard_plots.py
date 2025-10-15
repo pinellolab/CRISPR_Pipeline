@@ -102,10 +102,29 @@ def plot_guides_umi_threshold(mudata, save_dir):
     plt.close()
 
 def plot_sgRNA_frequencies(mudata, save_dir):
-    cell_ids = mudata.mod['guide'].obs.index
-    guide_ids = mudata.mod['guide'].var.index
+    print (mudata)
+    cell_ids = mudata.mod['guide'].obs.index.to_list()
+
+    #guide_ids = mudata.mod['guide'].var.index
+    guide_ids = mudata.mod['guide'].var.index.to_list()
+    #print (guide_ids)
+    #print (mudata.mod['guide'].var.index)
+    #print(mudata.mod['guide'].var.index.shape)
     guide_assignment_matrix = mudata.mod['guide'].layers['guide_assignment']
-    df_guide_assignment = pd.DataFrame(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
+    
+    #print(mudata.mod['guide'].layers['guide_assignment'].var.index.shape)
+    print ('cells ids')
+
+    print (len(cell_ids))
+    print ('guide ids')
+
+    print (len(guide_ids))
+
+    print ('guide assigment')
+    print(mudata.mod['guide'].layers['guide_assignment'].shape)
+
+    print ('should be sparse matrix')
+    df_guide_assignment = pd.DataFrame.sparse.from_spmatrix(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
 
     plt.figure(figsize=(10, 6))
     plt.rcParams['font.size'] = 12

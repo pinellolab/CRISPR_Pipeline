@@ -112,7 +112,20 @@ def plot_sgRNA_frequencies(mudata, save_dir):
     cell_ids = mudata.mod['guide'].obs.index
     guide_ids = mudata.mod['guide'].var.index
     guide_assignment_matrix = mudata.mod['guide'].layers['guide_assignment'].toarray()
-    df_guide_assignment = pd.DataFrame(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
+        #print(mudata.mod['guide'].layers['guide_assignment'].var.index.shape)
+    print ('cells ids')
+
+    print (len(cell_ids))
+    print ('guide ids')
+
+    print (len(guide_ids))
+
+    print ('guide assigment')
+    print(mudata.mod['guide'].layers['guide_assignment'].shape)
+
+    print ('should be sparse matrix')
+    df_guide_assignment = pd.DataFrame.sparse.from_spmatrix(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
+
 
     plt.figure(figsize=(10, 6))
     plt.rcParams['font.size'] = 12

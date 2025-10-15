@@ -17,6 +17,9 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
     df_gtf = read_gtf(gtf).to_pandas()
 
     # Load hashing data if provided
+    if 'dummy_hash' in adata_hashing:
+        adata_hashing= None
+    
     if adata_hashing is not None:
         adata_hashing = ad.read_h5ad(adata_hashing)
 
