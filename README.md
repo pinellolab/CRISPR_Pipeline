@@ -68,7 +68,6 @@ git clone https://github.com/pinellolab/CRISPR_Pipeline.git
 #### Metadata Files (see example_data/)
 - `guide_metadata.tsv`: Contains guide RNA information and annotations
 - `hash_metadata.tsv`: Cell hashing sample information (required if using cell hashing)
-- `pairs_to_test.csv`: Defines perturbation pairs for comparison analysis (required if testing predefined pairs)
 
 For detailed specifications, see our [documentation](https://docs.google.com/document/d/1Z1SOlekIE5uGyXW41XxnszxaYdSw0wdAOUVzfy3fj3M/edit?tab=t.0#heading=h.ctbx1w9hj619).
 
