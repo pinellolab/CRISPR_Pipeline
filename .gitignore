@@ -10,5 +10,4 @@ nf-*-reports.tsv
 /pipeline_dashboard
 pipeline-service-key.json
 debug_dashboard.ipynb
-
-
+.vscode/
