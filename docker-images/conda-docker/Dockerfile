@@ -1,36 +1,37 @@
 FROM condaforge/miniforge3:24.11.3-2
 
-# Set NUMBA cache directory to /tmp
-ENV NUMBA_CACHE_DIR=/tmp 
+# Keep numba cache writable
+ENV NUMBA_CACHE_DIR=/tmp
 
-# Set working directory
+# Workdir and bring the env spec alongside
 WORKDIR /app
-
-# Copy configuration files
 COPY nextflow.yaml /app/
 
-# Update system and create mamba environment
-RUN apt update 
-SHELL ["mamba", "run", "--no-capture-output", "-n", "base", "/bin/bash", "-c"]
-RUN mamba env create -f nextflow.yaml
-# RUN mamba run -n nfenv pip install "pyseq-align>=1.0.0"
-# RUN mamba run -n nfenv pip install kb-python==0.28.2
-# RUN echo "mamba activate nfenv" >> ~/.bash_profile
-RUN mamba run -n nfenv mamba upgrade scanpy
+# (Optional) OS updates or packages; keep image slim
+RUN apt-get update && \
+    apt-get -y upgrade && \
+    rm -rf /var/lib/apt/lists/*
 
-ENV PATH="/opt/conda/envs/nfenv/bin:$PATH"
+# Create the env from your nextflow.yaml
+# (use absolute path so it works regardless of WORKDIR)
+RUN mamba env create -f /app/nextflow.yaml
 
-# Copy executables (moved towards end of Dockerfile to allow faster rebuilds)
+# Put the env on PATH
+# (assuming the env is named "nfenv" inside nextflow.yaml)
+ENV PATH="/opt/conda/envs/nfenv/bin:${PATH}"
+
+# Example: update a package inside that env
+RUN mamba run -n nfenv mamba upgrade -y scanpy
+
+# Copy any helper scripts/binaries (make sure build context includes ./bin)
+# If you don't have a bin/ in that folder, remove these two lines.
 COPY ./bin /usr/local/bin
+RUN chmod +x /usr/local/bin/* || true
 
-# Make binary file executable
-RUN chmod +x /usr/local/bin/*
+# Symlink kallisto & bustools provided by kb-python (path may vary with Python version)
+# If Python version differs, adjust the 3.12 segment accordingly.
+RUN ln -sf /opt/conda/envs/nfenv/lib/python3.12/site-packages/kb_python/bins/linux/*/kallisto /opt/conda/envs/nfenv/bin/ && \
+    ln -sf /opt/conda/envs/nfenv/lib/python3.12/site-packages/kb_python/bins/linux/*/bustools /opt/conda/envs/nfenv/bin/
 
-# Symlink kallisto and bustools binaries
-RUN ln --force -s /opt/conda/envs/nfenv/lib/python3.12/site-packages/kb_python/bins/linux/*/{kallisto,bustools} /opt/conda/envs/nfenv/bin/
-
-# Set environment variables
-ENV PATH="/opt/conda/envs/nfenv/bin:/usr/local/bin:$PATH"
-
-# Set the default command
+# Default command
 CMD ["/bin/bash", "--login"]
