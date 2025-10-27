@@ -175,12 +175,11 @@ The pipeline uses pre-built containers. Update if you have custom versions:
 
 ```groovy
 containers {
-    base     = 'sjiang9/conda-docker:0.2'      // Main analysis tools
-    cleanser = 'sjiang9/cleanser:0.3'          // Guide assignment
-    sceptre  = 'sjiang9/sceptre-igvf:0.1'     // Guide assignment/Perturbation inference 
-    perturbo = 'loganblaine/perturbo:latest'   // Perturbation inference 
-    aria2    = 'biasofpriene/aria2c' // download references in a fast way
-
+   base     = 'ghcr.io/pinellolab/crispr_pipeline/conda-docker:sha-cce3a78'
+   cleanser = 'ghcr.io/gersbachlab-bioinformatics/cleanser:1.2'
+   sceptre  = 'sjiang9/sceptre-igvf:0.1'
+   perturbo = 'ghcr.io/pinellolab/perturbo:sha-f3dc8ca'
+   aria2    = 'biasofpriene/aria2c'
 }
 ```
 
