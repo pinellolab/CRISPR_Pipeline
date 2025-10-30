@@ -20,13 +20,12 @@ RUN mamba env create -f /app/nextflow.yaml
 # (assuming the env is named "nfenv" inside nextflow.yaml)
 ENV PATH="/opt/conda/envs/nfenv/bin:${PATH}"
 
-# Example: update a package inside that env
 RUN mamba run -n nfenv mamba upgrade -y scanpy
 
-# Copy any helper scripts/binaries (make sure build context includes ./bin)
-# If you don't have a bin/ in that folder, remove these two lines.
-COPY ./bin /usr/local/bin
-RUN chmod +x /usr/local/bin/* || true
+# # Copy any helper scripts/binaries (make sure build context includes ./bin)
+# # If you don't have a bin/ in that folder, remove these two lines.
+# COPY bin /usr/local/bin
+# RUN chmod +x /usr/local/bin/* || true
 
 # Symlink kallisto & bustools provided by kb-python (path may vary with Python version)
 # If Python version differs, adjust the 3.12 segment accordingly.
