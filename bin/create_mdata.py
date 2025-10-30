@@ -17,6 +17,9 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
     df_gtf = read_gtf(gtf).to_pandas()
 
     # Load hashing data if provided
+    if 'dummy_hash' in adata_hashing:
+        adata_hashing= None
+    
     if adata_hashing is not None:
         adata_hashing = ad.read_h5ad(adata_hashing)
 
@@ -36,8 +39,10 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
     adata_guide.var[['intended_target_name', 'spacer', 'targeting', 'guide_chr', 'guide_start', 'guide_end', 'intended_target_chr', 'intended_target_start', 'intended_target_end']] = guide_metadata[['intended_target_name', 'spacer', 'targeting', 'guide_chr', 'guide_start', 'guide_end','intended_target_chr', 'intended_target_start', 'intended_target_end']]
 
     # reset feature_id to var_names (index)
-    guide_metadata['feature_id'] = guide_metadata['guide_id'] + "|" + guide_metadata['spacer']
-    adata_guide.var_names = guide_metadata['feature_id']
+    assert guide_metadata["guide_id"].is_unique, (
+        "guide_id in guide metadata is not unique."
+    )
+    adata_guide.var_names = guide_metadata["guide_id"]
     
     # adding uns for guide 
     adata_guide.uns['capture_method'] = np.array([capture_method], dtype=object)

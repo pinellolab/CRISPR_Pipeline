@@ -226,11 +226,22 @@ def create_dashboard_df(guide_fq_tbl, mudata_path, gene_ann_path, filtered_ann_p
     number_of_guide_barcodes_with_positive_call = (positive_calls.sum(axis=1) > 0).sum()
     cell_ids = mudata.mod['guide'].obs.index
     guide_ids = mudata.mod['guide'].var.index
-    df_guide_assignment = pd.DataFrame(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
+    df_guide_assignment = pd.DataFrame.sparse.from_spmatrix(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
     sgRNA_frequencies = (df_guide_assignment > 0).sum(axis=0)
+
+
+
     df_sgRNA_frequencies = sgRNA_frequencies.reset_index()
     df_sgRNA_frequencies.columns = ['sgRNA', 'Frequency']
-    median_frequency = df_sgRNA_frequencies['Frequency'].median()
+    #median_frequency = df_sgRNA_frequencies['Frequency'].median()
+    median_frequency = pd.to_numeric(
+    (df_sgRNA_frequencies['Frequency']
+        .pipe(lambda s: s.astype(pd.SparseDtype('int8', fill_value=0)) if isinstance(s.dtype, pd.SparseDtype) and s.dtype.subtype is bool else s)
+        .pipe(lambda s: s.sparse.to_dense() if isinstance(s.dtype, pd.SparseDtype) else s)
+        .pipe(lambda s: s.astype('int8') if s.dtype == bool else s)),
+    errors='coerce'
+    ).median()
+        
     gs_highlight=f"Number of Guide barcodes with a positive sgRNA call: {human_format(number_of_guide_barcodes_with_positive_call)}, The median of cells with a positive sgRNA call is: {median_frequency}"
 
     df_sgRNA_table = df_sgRNA_frequencies.copy()
