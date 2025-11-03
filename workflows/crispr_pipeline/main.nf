@@ -152,7 +152,7 @@ workflow CRISPR_PIPELINE {
         Hashing_Concat = hashing_concat(hashing_demux_anndata_collected, hashing_demux_unfiltered_anndata_collected)
 
         // Create MuData with hashing
-        MuData = CreateMuData(
+        MergeMuData = CreateMuData(
             Preprocessing.filtered_anndata_rna,
             mapping_guide_pipeline.out.concat_anndata_guide,
             ch_guide_design,
@@ -163,12 +163,12 @@ workflow CRISPR_PIPELINE {
         )
 
         // Shared processing pipeline
-        Mudata_concat = guide_assignment_pipeline(MuData.mudata)
-        GuideInference = inference_pipeline(Mudata_concat.concat_mudata, Preprocessing.gencode_gtf)
+        GuideAssignment = guide_assignment_pipeline(MergeMuData.mudata)
+        Inference = inference_pipeline(GuideAssignment.concat_mudata, Preprocessing.gencode_gtf)
 
         evaluation_pipeline (
             Preprocessing.gencode_gtf,
-            GuideInference.inference_mudata
+            Inference.inference_mudata
             )
 
         dashboard_pipeline_HASHING (
@@ -179,20 +179,20 @@ workflow CRISPR_PIPELINE {
             Preprocessing.adata_rna,
             Preprocessing.filtered_anndata_rna,
             mapping_rna_pipeline.out.ks_transcripts_out_dir_collected,
-            MuData.adata_guide,
+            MergeMuData.adata_guide,
             mapping_guide_pipeline.out.ks_guide_out_dir_collected,
             Hashing_Filtered.adata_hashing,
             mapping_hashing_pipeline.out.ks_hashing_out_dir_collected,
             Hashing_Concat.concatenated_hashing_demux,
             Hashing_Concat.concatenated_hashing_unfiltered_demux,
-            GuideInference.inference_mudata,
+            Inference.inference_mudata,
             Preprocessing.figures_dir,
             evaluation_pipeline.out.evaluation_output_dir
             )
     }
     else {
         // Create MuData without hashing
-        MuData = CreateMuData(
+        MergeMuData = CreateMuData(
             Preprocessing.filtered_anndata_rna,
             mapping_guide_pipeline.out.concat_anndata_guide,
             ch_guide_design,
@@ -204,19 +204,19 @@ workflow CRISPR_PIPELINE {
 
         // Conditionally run scrublet based on ENABLE_SCRUBLET parameter (defaults to false)
         if (params.ENABLE_SCRUBLET ?: false) {
-            MuData_Doublets = doublets_scrub(MuData.mudata)
+            MuData_Doublets = doublets_scrub(MergeMuData.mudata)
             mudata_for_processing = MuData_Doublets.mudata_doublet
         } else {
-            mudata_for_processing = MuData.mudata
+            mudata_for_processing = MergeMuData.mudata
         }
 
         // Shared processing pipeline
-        Mudata_concat = guide_assignment_pipeline(mudata_for_processing)
-        GuideInference = inference_pipeline(Mudata_concat.concat_mudata, Preprocessing.gencode_gtf)
+        GuideAssignment = guide_assignment_pipeline(mudata_for_processing)
+        Inference = inference_pipeline(GuideAssignment.concat_mudata, Preprocessing.gencode_gtf)
 
         evaluation_pipeline (
             Preprocessing.gencode_gtf,
-            GuideInference.inference_mudata
+            Inference.inference_mudata
             )
 
         dashboard_pipeline (
@@ -225,9 +225,9 @@ workflow CRISPR_PIPELINE {
             Preprocessing.adata_rna,
             Preprocessing.filtered_anndata_rna,
             mapping_rna_pipeline.out.ks_transcripts_out_dir_collected,
-            MuData.adata_guide,
+            MergeMuData.adata_guide,
             mapping_guide_pipeline.out.ks_guide_out_dir_collected,
-            GuideInference.inference_mudata,
+            Inference.inference_mudata,
             Preprocessing.figures_dir,
             evaluation_pipeline.out.evaluation_output_dir
             )
