@@ -106,7 +106,7 @@ workflow inference_pipeline {
             MergedInference_cis.per_element_output,
             MergedInference_trans.per_guide_output,
             MergedInference_trans.per_element_output,
-            PrepareInference.mudata_inference_input
+            PrepareInference.mudata_concat,
         )
 
     }
