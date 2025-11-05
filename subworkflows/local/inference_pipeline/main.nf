@@ -48,24 +48,28 @@ workflow inference_pipeline {
         mudata_input = mudata_concat
     }
 
+    // Initialize variable to hold final inference mudata
+    def FinalInference
+    
     if (params.INFERENCE_method == "sceptre"){
         TestResults = inference_sceptre(mudata_input)
-        GuideInference = TestResults.inference_mudata
+        FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "perturbo"){
         TestResults = inference_perturbo(mudata_input, params.INFERENCE_method, params.Multiplicity_of_infection)
-        GuideInference = TestResults.inference_mudata
+        FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
         SceptreResults = inference_sceptre(mudata_input)
         PerturboResults = inference_perturbo(mudata_input,  "perturbo", params.Multiplicity_of_infection)
-        GuideInference = mergedResults(
+        MergedInference = mergedResults(
             SceptreResults.per_guide_output,
             SceptreResults.per_element_output,
             PerturboResults.per_guide_output,
             PerturboResults.per_element_output,
             mudata_input
         )
+        FinalInference = MergedInference.inference_mudata
     }
     else if (params.INFERENCE_method == "default"){
         if (params.INFERENCE_target_guide_pairing_strategy != 'default') {
@@ -106,12 +110,13 @@ workflow inference_pipeline {
             MergedInference_cis.per_element_output,
             MergedInference_trans.per_guide_output,
             MergedInference_trans.per_element_output,
-            PrepareInference.mudata_inference_input
+            PrepareInference.mudata_concat,
         )
+        FinalInference = MergedInference.inference_mudata
 
     }
 
     emit:
-    inference_mudata = MergedInference.inference_mudata
+    inference_mudata = FinalInference
 
 }
