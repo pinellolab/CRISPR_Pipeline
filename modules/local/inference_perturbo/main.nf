@@ -1,7 +1,6 @@
 
 process inference_perturbo {
     cache 'lenient'
-    publishDir './pipeline_outputs'
 
     input:
     path mudata
