@@ -37,6 +37,8 @@ workflow inference_pipeline {
             params.INFERENCE_max_target_distance_bp,
             true
         )
+    } else{
+        error("Invalid INFERENCE_target_guide_pairing_strategy: ${params.INFERENCE_target_guide_pairing_strategy}")
     }
 
     // Determine the mudata input once (avoid duplicate variable definitions)
@@ -48,9 +50,6 @@ workflow inference_pipeline {
         mudata_input = mudata_concat
     }
 
-    // Initialize variable to hold final inference mudata
-    def FinalInference
-    
     if (params.INFERENCE_method == "sceptre"){
         TestResults = inference_sceptre(mudata_input)
         FinalInference = TestResults.inference_mudata
@@ -88,32 +87,16 @@ workflow inference_pipeline {
         // Process trans results - use concat_mudata directly
         MergedInference_trans = inference_perturbo_trans(mudata_concat, "perturbo", params.Multiplicity_of_infection, PerturboResults_cis.inference_mudata)
 
-        // Rename tsv outputs to avoid conflicts
-        cis_per_element = MergedInference_cis.per_element_output.map { file -> file.copyTo(file.parent.resolve("cis-${file.name}")) }
-        cis_per_guide = MergedInference_cis.per_guide_output.map { file -> file.copyTo(file.parent.resolve("cis-${file.name}")) }
-
-        trans_per_element = MergedInference_trans.per_element_output.map { file -> file.copyTo(file.parent.resolve("trans-${file.name}")) }
-        trans_per_guide = MergedInference_trans.per_guide_output.map { file -> file.copyTo(file.parent.resolve("trans-${file.name}")) }
-
-        PublishFiles = publishFiles(cis_per_element, cis_per_guide, trans_per_element, trans_per_guide)
-
-        // Rename h5mu outputs to avoid conflicts
-        cis_file = MergedInference_cis.inference_mudata.map { file ->
-            file.copyTo(file.parent.resolve('cis_inference_mudata.h5mu'))
-        }
-        trans_file = MergedInference_trans.inference_mudata.map { file ->
-            file.copyTo(file.parent.resolve('trans_inference_mudata.h5mu'))
-        }
-
         MergedInference = mergeMudata(
             MergedInference_cis.per_guide_output,
             MergedInference_cis.per_element_output,
             MergedInference_trans.per_guide_output,
             MergedInference_trans.per_element_output,
-            PrepareInference.mudata_concat,
+            mudata_concat,
         )
         FinalInference = MergedInference.inference_mudata
-
+    } else {
+        error("Invalid INFERENCE_method: ${params.INFERENCE_method}. Valid options: sceptre, perturbo, sceptre,perturbo, default")
     }
 
     emit:
