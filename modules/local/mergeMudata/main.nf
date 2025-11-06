@@ -1,8 +1,8 @@
 process mergeMudata {
     cache 'lenient'
     debug true
-    publishDir './pipeline_outputs', mode: 'copy', overwrite: true
-    
+    publishDir "${params.outdir}", mode: 'copy', overwrite: true
+
     input:
         path cis_per_guide
         path cis_per_element
