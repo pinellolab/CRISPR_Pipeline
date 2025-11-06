@@ -37,6 +37,8 @@ workflow inference_pipeline {
             params.INFERENCE_max_target_distance_bp,
             true
         )
+    } else{
+        error("Invalid INFERENCE_target_guide_pairing_strategy: ${params.INFERENCE_target_guide_pairing_strategy}")
     }
 
     // Determine the mudata input once (avoid duplicate variable definitions)
@@ -48,9 +50,6 @@ workflow inference_pipeline {
         mudata_input = mudata_concat
     }
 
-    // Initialize variable to hold final inference mudata
-    def FinalInference
-    
     if (params.INFERENCE_method == "sceptre"){
         TestResults = inference_sceptre(mudata_input)
         FinalInference = TestResults.inference_mudata
@@ -110,10 +109,11 @@ workflow inference_pipeline {
             MergedInference_cis.per_element_output,
             MergedInference_trans.per_guide_output,
             MergedInference_trans.per_element_output,
-            PrepareInference.mudata_concat,
+            mudata_concat,
         )
         FinalInference = MergedInference.inference_mudata
-
+    } else {
+        error("Invalid INFERENCE_method: ${params.INFERENCE_method}. Valid options: sceptre, perturbo, sceptre,perturbo, default")
     }
 
     emit:
