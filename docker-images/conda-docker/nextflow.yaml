@@ -26,5 +26,5 @@ dependencies:
     - kb-python==0.28.2  
     - pyseq-align
     - openpyxl
-    - seqspec
+    # - seqspec
     - igraph
