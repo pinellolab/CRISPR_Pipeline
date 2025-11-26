@@ -21,6 +21,8 @@ RUN mamba env create -f /app/nextflow.yaml
 ENV PATH="/opt/conda/envs/nfenv/bin:${PATH}"
 
 RUN mamba run -n nfenv mamba upgrade -y scanpy
+RUN mamba run -n nfenv pip install --no-cache-dir \
+  "git+https://github.com/IGVF-DACC/seqspec.git@v25-09-23"
 
 # # Copy any helper scripts/binaries (make sure build context includes ./bin)
 # # If you don't have a bin/ in that folder, remove these two lines.
