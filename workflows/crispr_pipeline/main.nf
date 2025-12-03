@@ -120,7 +120,8 @@ workflow CRISPR_PIPELINE {
         ch_guide_seqspec,
         ch_barcode_onlist,
         ch_guide_design,
-        prepare_mapping_pipeline.out.parsed_covariate_file
+        prepare_mapping_pipeline.out.parsed_covariate_file,
+        params.reverse_complement_guides
         )
 
     // Common preprocessing for both workflows

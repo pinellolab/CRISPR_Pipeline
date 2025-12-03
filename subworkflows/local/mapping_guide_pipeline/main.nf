@@ -12,6 +12,7 @@ workflow mapping_guide_pipeline {
     ch_barcode_onlist
     ch_guide_design
     parsed_covariate_file
+    reverse_complement_flag
 
     main:
     SeqSpecResult = seqSpecParser(
@@ -20,7 +21,7 @@ workflow mapping_guide_pipeline {
         'guide'
     )
 
-    GuideRef = createGuideRef(ch_guide_design)
+    GuideRef = createGuideRef(ch_guide_design, reverse_complement_flag)
 
     MappingOut = mappingGuide(
         ch_guide,
