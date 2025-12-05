@@ -19,7 +19,7 @@ assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n
 
   # assign gRNAs
   assign_grnas_args <- list(sceptre_object, method = "mixture")
-  
+
   # Add optional parameters if they are not "default"
   if (probability_threshold != "default") {
     assign_grnas_args$probability_threshold <- as.numeric(probability_threshold)
@@ -32,40 +32,40 @@ assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n
     assign_grnas_args$parallel <- TRUE
     assign_grnas_args$n_processors <- as.integer(n_processors)
   }
-  
+
   sceptre_object <- do.call(sceptre::assign_grnas, assign_grnas_args)
 
   # extract sparse logical matrix of gRNA assignments
   grna_assignment_matrix <- sceptre_object |>
     sceptre::get_grna_assignments() |>
     methods::as("dsparseMatrix")
-  colnames(grna_assignment_matrix) <- colnames(MultiAssayExperiment::assay(mudata[['guide']]))
+  colnames(grna_assignment_matrix) <- colnames(MultiAssayExperiment::assay(mudata[["guide"]]))
 
   # add gRNA assignment matrix to MuData
-  # SummarizedExperiment::assays(mudata[['guide']])[['guide_assignment']] <- grna_assignment_matrix
+  SummarizedExperiment::assays(mudata[["guide"]])[["guide_assignment"]] <- grna_assignment_matrix
 
   return(list(mudata = mudata, guide_assignment = grna_assignment_matrix))
 }
 
-convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE){
+convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE) {
   # extract information from MuData
-  moi <- MultiAssayExperiment::metadata(mudata[['guide']])$moi
-  if(is.null(SummarizedExperiment::assayNames(mudata[['gene']]))){
-    SummarizedExperiment::assayNames(mudata[['gene']]) <- 'counts'
-  } else{
-    SummarizedExperiment::assayNames(mudata[['gene']])[[1]] <- 'counts'
+  moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
+  if (is.null(SummarizedExperiment::assayNames(mudata[["gene"]]))) {
+    SummarizedExperiment::assayNames(mudata[["gene"]]) <- "counts"
+  } else {
+    SummarizedExperiment::assayNames(mudata[["gene"]])[[1]] <- "counts"
   }
-  if(is.null(SummarizedExperiment::assayNames(mudata[['guide']]))){
-    SummarizedExperiment::assayNames(mudata[['guide']]) <- 'counts'
-  } else{
-    SummarizedExperiment::assayNames(mudata[['guide']])[[1]] <- 'counts'
+  if (is.null(SummarizedExperiment::assayNames(mudata[["guide"]]))) {
+    SummarizedExperiment::assayNames(mudata[["guide"]]) <- "counts"
+  } else {
+    SummarizedExperiment::assayNames(mudata[["guide"]])[[1]] <- "counts"
   }
 
   scRNA_data <- mudata@ExperimentList$gene
   guides_data <- mudata@ExperimentList$guide
   response_matrix <- scRNA_data@assays@data@listData[["counts"]]
 
-  if(!is.null(SummarizedExperiment::colData(mudata))){
+  if (!is.null(SummarizedExperiment::colData(mudata))) {
     covariates <- SummarizedExperiment::colData(mudata) |> as.data.frame()
     covariates[] <- lapply(covariates, as.factor)
     # Check and remove factor variables with fewer than two levels
@@ -73,39 +73,39 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
     multi_level_factors <- number_of_levels > 1
     covariates_clean <- covariates[, multi_level_factors, drop = FALSE]
 
-    if(ncol(covariates_clean) == 0){
+    if (ncol(covariates_clean) == 0) {
       remove_collinear_covariates <- FALSE
     }
-    
-    if(remove_collinear_covariates){
-      model_matrix <- stats::model.matrix(object = ~ ., data = covariates_clean)
+
+    if (remove_collinear_covariates) {
+      model_matrix <- stats::model.matrix(object = ~., data = covariates_clean)
       multicollinear <- Matrix::rankMatrix(model_matrix) < ncol(model_matrix)
-      if(multicollinear){
+      if (multicollinear) {
         extra_covariates <- data.frame()
-      } else{
+      } else {
         extra_covariates <- covariates_clean
       }
-    } else{
+    } else {
       extra_covariates <- covariates_clean
     }
-  } else{
+  } else {
     extra_covariates <- data.frame()
   }
 
   # if guide assignments not present, then extract guide counts
-  if(length(guides_data@assays@data@listData) == 1){
+  if (length(guides_data@assays@data@listData) == 1) {
     grna_matrix <- guides_data@assays@data@listData[["counts"]]
     # otherwise, extract guide assignments
-  } else{
+  } else {
     grna_matrix <- guides_data@assays@data@listData[["guide_assignment"]]
   }
 
-  grna_ids <- rownames(SingleCellExperiment::rowData(mudata[['guide']]))
+  grna_ids <- rownames(SingleCellExperiment::rowData(mudata[["guide"]]))
   rownames(grna_matrix) <- grna_ids
 
-  gene_ids <- rownames(SingleCellExperiment::rowData(mudata[['gene']]))
+  gene_ids <- rownames(SingleCellExperiment::rowData(mudata[["gene"]]))
   rownames(response_matrix) <- gene_ids
-  grna_target_data_frame <- SingleCellExperiment::rowData(mudata[['guide']]) |>
+  grna_target_data_frame <- SingleCellExperiment::rowData(mudata[["guide"]]) |>
     as.data.frame() |>
     tibble::rownames_to_column(var = "grna_id") |>
     dplyr::rename(grna_target = intended_target_name) |>
@@ -126,20 +126,22 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 
 # Run Command (only execute when script is run directly, not when sourced)
 if (!exists(".sourced_from_test")) {
-  
   args <- commandArgs(trailingOnly = TRUE)
-  
+
   mudata_input <- args[1]
-  probability_threshold <- if(length(args) >= 2) args[2] else "default"
-  n_em_rep <- if(length(args) >= 3) args[3] else "default"
-  n_processors <- if(length(args) >= 4) suppressWarnings(as.integer(args[4])) else NA
-  
+  probability_threshold <- if (length(args) >= 2) args[2] else "default"
+  n_em_rep <- if (length(args) >= 3) args[3] else "default"
+  n_processors <- if (length(args) >= 4) suppressWarnings(as.integer(args[4])) else NA
+
   mudata_in <- MuData::readH5MU(mudata_input)
-  results <- assign_grnas_sceptre_v1(mudata = mudata_in, 
-                                     probability_threshold = probability_threshold,
-                                     n_em_rep = n_em_rep,
-                                     n_processors = n_processors)
-  guide_assignment <- results$guide_assignment
-  
-  writeMM(guide_assignment, "guide_assignment.mtx")
+  results <- assign_grnas_sceptre_v1(
+    mudata = mudata_in,
+    probability_threshold = probability_threshold,
+    n_em_rep = n_em_rep,
+    n_processors = n_processors
+  )
+  MuData::writeH5MU(results$mudata, "mudata_out.h5mu")
+  # guide_assignment <- results$guide_assignment
+
+  # writeMM(guide_assignment, "guide_assignment.mtx")
 }
