@@ -61,13 +61,14 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
     extra_covariates <- data.frame()
   }
 
-  # if guide assignments not present, then extract guide counts
-  if (length(guides_data@assays@data@listData) == 1) {
-    grna_matrix <- guides_data@assays@data@listData[["counts"]]
-    # otherwise, extract guide assignments
-  } else {
-    grna_matrix <- guides_data@assays@data@listData[["guide_assignment"]]
-  }
+  # # if guide assignments not present, then extract guide counts
+  # if (length(guides_data@assays@data@listData) == 1) {
+  #   grna_matrix <- guides_data@assays@data@listData[["counts"]]
+  #   # otherwise, extract guide assignments
+  # } else {
+
+  # }
+  grna_matrix <- guides_data@assays@data@listData[["guide_assignment"]]
 
   grna_ids <- rownames(SingleCellExperiment::rowData(mudata[["guide"]]))
   rownames(grna_matrix) <- grna_ids
@@ -96,6 +97,8 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 
 
 inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
+  use_parallel <- !is.na(n_processors) && as.integer(n_processors) > 1
+  n_processors <- if (use_parallel) as.integer(n_processors) else NULL
   # convert MuData object to sceptre object
   sceptre_object <- convert_mudata_to_sceptre_object_v1(mudata, remove_collinear_covariates = TRUE)
 
@@ -163,26 +166,11 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
   args_union$grna_integration_strategy <- "union"
   # set analysis parameters for union
   sceptre_object <- do.call(sceptre::set_analysis_parameters, args_union)
-  # assign grnas and run QC (relaxed thresholds to keep all cells; mirror prior behaviour)
-  sceptre_object <- sceptre_object |>
-    sceptre::assign_grnas(
-      method = "thresholding",
-      threshold = 1,
-      parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
-      n_processors = if (!is.na(n_processors) && as.integer(n_processors) > 1) as.integer(n_processors) else NULL
-    ) |>
-    sceptre::run_qc(
-      n_nonzero_trt_thresh = 0L,
-      n_nonzero_cntrl_thresh = 0L,
-      p_mito_threshold = 1
-    )
 
   # run discovery analysis (grouped)
   sceptre_object <- sceptre_object |>
-    sceptre::run_discovery_analysis(
-      parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
-      n_processors = if (!is.na(n_processors) && as.integer(n_processors) > 1) as.integer(n_processors) else NULL
-    )
+    sceptre::run_discovery_analysis(parallel = use_parallel, n_processors = n_processors) |>
+    sceptre::run_calibration_check(parallel = use_parallel, n_processors = n_processors)
 
   # get union (per-element) results
   union_results <- sceptre_object |>
@@ -193,14 +181,6 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
       intended_target_name = grna_target,
       log2_fc = log_2_fold_change
     )
-
-  # run calibration check
-  sceptre_object <- sceptre_object |>
-    sceptre::run_calibration_check(
-      parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
-      n_processors = if (!is.na(n_processors) && as.integer(n_processors) > 1) as.integer(n_processors) else NULL
-    )
-
 
   # get calibration results
   calibration_results <- sceptre_object |>
@@ -213,10 +193,6 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
     )
 
   union_test_results <- rbind(union_results, calibration_results)
-
-
-
-  # store union results in mudata metadata as requested
   MultiAssayExperiment::metadata(mudata)$per_element_results <- union_test_results
 
   # also write the per-element (union) results to file
@@ -231,34 +207,16 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
     silent = TRUE
   )
 
-  ## 2) Singleton (per-guide) analysis — reuse sceptre_object to exploit caching
+  ## 2) Singleton (per-guide) analysis
   args_singleton <- args_list
   args_singleton$grna_integration_strategy <- "singleton"
+
   # set analysis parameters for singleton (reuse same sceptre_object reference)
   sceptre_object <- do.call(sceptre::set_analysis_parameters, args_singleton)
 
-  # run assignment, qc and discovery for singleton
   sceptre_object <- sceptre_object |>
-    sceptre::assign_grnas(
-      method = "thresholding",
-      threshold = 1,
-      parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
-      n_processors = if (!is.na(n_processors) && as.integer(n_processors) > 1) as.integer(n_processors) else NULL
-    ) |>
-    sceptre::run_qc(
-      n_nonzero_trt_thresh = 0L,
-      n_nonzero_cntrl_thresh = 0L,
-      p_mito_threshold = 1
-    ) |>
-    sceptre::run_calibration_check(
-      parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
-      n_processors = if (!is.na(n_processors) && as.integer(n_processors) > 1) as.integer(n_processors) else NULL
-    )
-
-  sceptre::run_discovery_analysis(
-    parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
-    n_processors = if (!is.na(n_processors) && as.integer(n_processors) > 1) as.integer(n_processors) else NULL
-  )
+    sceptre::run_discovery_analysis(parallel = use_parallel, n_processors = n_processors) |>
+    sceptre::run_calibration_check(parallel = use_parallel, n_processors = n_processors)
 
   # extract singleton (per-guide) results, preserve grna_id and rename to guide_id
   singleton_results <- sceptre_object |>
@@ -270,7 +228,6 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
       log2_fc = log_2_fold_change
     )
 
-
   # extract singleton calibration results
   singleton_calibration_results <- sceptre_object |>
     sceptre::get_result(analysis = "run_calibration_check") |>
@@ -281,7 +238,6 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
       log2_fc = log_2_fold_change
     )
 
-  # use singleton_results directly
   singleton_test_results <- rbind(singleton_results, singleton_calibration_results)
   MultiAssayExperiment::metadata(mudata)$per_guide_results <- singleton_test_results
 
