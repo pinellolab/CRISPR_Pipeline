@@ -146,7 +146,10 @@ if (!exists(".sourced_from_test")) {
     n_em_rep = n_em_rep,
     n_processors = n_processors
   )
-  MuData::writeH5MU(results$mudata, "mudata_out.h5mu")
+
+  output_file <- sub("(\\.h5mu)$", "_out\\1", mudata_input)
+
+  MuData::writeH5MU(results$mudata, output_file)
   # guide_assignment <- results$guide_assignment
 
   # writeMM(guide_assignment, "guide_assignment.mtx")
