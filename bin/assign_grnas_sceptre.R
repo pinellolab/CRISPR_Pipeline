@@ -39,10 +39,16 @@ assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n
   grna_assignment_matrix <- sceptre_object |>
     sceptre::get_grna_assignments() |>
     methods::as("dsparseMatrix")
-  colnames(grna_assignment_matrix) <- colnames(MultiAssayExperiment::assay(mudata[["guide"]]))
+  
+  # reorder columns to match original mudata order
+  original_colnames <- colnames(
+    MultiAssayExperiment::assay(mudata[["guide"]])
+  )
+  grna_assignment_matrix <- grna_assignment_matrix[, original_colnames]
 
   # add gRNA assignment matrix to MuData
-  SummarizedExperiment::assays(mudata[["guide"]])[["guide_assignment"]] <- grna_assignment_matrix
+  assays(mudata[["guide"]])$guide_assignment <-
+    grna_assignment_matrix
 
   return(list(mudata = mudata, guide_assignment = grna_assignment_matrix))
 }
