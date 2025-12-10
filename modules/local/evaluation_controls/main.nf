@@ -8,7 +8,7 @@ process evaluation_controls {
 
 
     output:
-    path "plots" , emit: evaluation_output
+    path "plots" , emit: evaluation_controls
 
     script:
             """

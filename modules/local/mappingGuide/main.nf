@@ -37,7 +37,7 @@ process mappingGuide {
         else
             echo "Detected non-10x V3 chemistry, running standard processing"
 
-            kb count -i ${guide_index} -g ${t2g_guide} --verbose -w ${barcode_file} \\
+            kb count -i ${guide_index} -g ${t2g_guide} --verbose -w ${barcode_file}  --workflow kite  \\
                 --h5ad --kallisto "\$k_bin" --bustools "\$bustools_bin" -x "\$chemistry" \\
                 -o ${batch}_ks_guide_out -t ${task.cpus} \\
                 ${fastq_files} --overwrite

@@ -44,7 +44,7 @@ def perform_binary_evaluation(label_controls, infered_significance_col, outdir, 
         plt.tight_layout()
 
         # Save
-        savefig(os.path.join(outdir, "precision_recall_roc.png"))
+        savefig(os.path.join(outdir, "trans_perturbo_precision_recall_roc.png"))
         plt.show()
 
 
@@ -95,7 +95,7 @@ def plot_volcano(
     plt.tight_layout()
 
     # Save
-    savefig(os.path.join(outdir, "volcano_plot.png"))
+    savefig(os.path.join(outdir, "trans_perturbo_volcano_plot.png"))
     plt.show()
 
 
@@ -162,7 +162,7 @@ def run_evaluation_controls(md_read, outdir):
     plt.title("Direct targets vs random control guides")
     plt.tight_layout()
 
-    savefig(os.path.join(outdir, "barplot_direct_vs_control.png"))
+    savefig(os.path.join(outdir, "trans_perturbo_barplot_direct_vs_control.png"))
     plt.show()
 
 
