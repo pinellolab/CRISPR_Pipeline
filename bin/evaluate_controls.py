@@ -21,10 +21,10 @@ def perform_binary_evaluation(label_controls, infered_significance_col, outdir, 
     true_label = label_controls
     pred_value = infered_significance_col
 
-    pre, rec, _ = precision_recall_curve(true_label, pred_value)
+    pre, rec, _ = precision_recall_curve(true_label, 1-pred_value)
     auprc = auc(rec, pre)
 
-    fpr, tpr, _ = roc_curve(true_label, pred_value)
+    fpr, tpr, _ = roc_curve(true_label, 1-pred_value)
     auroc = auc(fpr, tpr)
 
     print(f"Area under Precision-Recall Curve : {auprc:.3f}")
