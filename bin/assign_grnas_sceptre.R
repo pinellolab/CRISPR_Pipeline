@@ -34,22 +34,11 @@ assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n
   }
 
   sceptre_object <- do.call(sceptre::assign_grnas, assign_grnas_args)
-
   # extract sparse logical matrix of gRNA assignments
   grna_assignment_matrix <- sceptre_object |>
     sceptre::get_grna_assignments() |>
     methods::as("dsparseMatrix")
   
-  # reorder columns to match original mudata order
-  original_colnames <- colnames(
-    MultiAssayExperiment::assay(mudata[["guide"]])
-  )
-  grna_assignment_matrix <- grna_assignment_matrix[, original_colnames]
-
-  # add gRNA assignment matrix to MuData
-  assays(mudata[["guide"]])$guide_assignment <-
-    grna_assignment_matrix
-
   return(list(mudata = mudata, guide_assignment = grna_assignment_matrix))
 }
 
@@ -147,7 +136,9 @@ if (!exists(".sourced_from_test")) {
   mudata_input <- args[1]
   probability_threshold <- if (length(args) >= 2) args[2] else "default"
   n_em_rep <- if (length(args) >= 3) args[3] else "default"
-  n_processors <- if (length(args) >= 4) suppressWarnings(as.integer(args[4])) else NA
+  n_processors <- NA
+  # n_processors <- if (length(args) >= 4) suppressWarnings(as.integer(args[4])) else NA
+
 
   mudata_in <- MuData::readH5MU(mudata_input)
   results <- assign_grnas_sceptre_v1(
@@ -157,10 +148,5 @@ if (!exists(".sourced_from_test")) {
     n_processors = n_processors
   )
 
-  output_file <- sub("(\\.h5mu)$", "_out\\1", mudata_input)
-
-  MuData::writeH5MU(results$mudata, output_file)
-  # guide_assignment <- results$guide_assignment
-
-  # writeMM(guide_assignment, "guide_assignment.mtx")
+  writeMM(guide_assignment, "guide_assignment.mtx")
 }
