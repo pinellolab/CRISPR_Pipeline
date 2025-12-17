@@ -102,8 +102,8 @@ def run_crispr_mapping(args):
     guide_whitelist_input_df = pd.DataFrame(guide_set_df["spacer"])
     guide_whitelist_input_df.columns = ["protospacer"]
     print(f"Loaded {len(guide_whitelist_input_df)} unique protospacers from guide set.")
-    print ('forcing downsample REMOVE IT')
-    args.downsample_reads = 500_000
+    #print ('forcing downsample REMOVE IT')
+    #args.downsample_reads = 500_000
     # --- 2. Downsample FASTQ Files ---
     if args.downsample_reads > 0:
         print(f"Downsampling to {args.downsample_reads} read pairs...")
