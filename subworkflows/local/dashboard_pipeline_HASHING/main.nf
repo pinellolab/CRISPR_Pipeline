@@ -21,6 +21,7 @@ workflow dashboard_pipeline_HASHING {
     mdata
     figures_dir
     evaluation_output_dir
+    controls_evaluation_output_dir
 
     main:
 
@@ -44,7 +45,8 @@ workflow dashboard_pipeline_HASHING {
             evaluation_output_dir,
             file(params.css),
             file(params.js),
-            file(params.svg)
+            file(params.svg),
+            controls_evaluation_output_dir
         )
     } else {
         createDashboard_HASHING(
@@ -66,7 +68,8 @@ workflow dashboard_pipeline_HASHING {
             evaluation_output_dir,
             file(params.css),
             file(params.js),
-            file(params.svg)
+            file(params.svg),
+            controls_evaluation_output_dir
         )
     }
 

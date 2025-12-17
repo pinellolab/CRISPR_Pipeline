@@ -22,9 +22,9 @@ include { demultiplex } from '../../modules/local/demultiplex'
 include { filter_hashing } from '../../modules/local/filter_hashing'
 include { hashing_concat } from '../../modules/local/hashing_concat'
 include { evaluation_pipeline } from '../../subworkflows/local/evaluation_pipeline'
+
 include { dashboard_pipeline_HASHING } from '../../subworkflows/local/dashboard_pipeline_HASHING'
 include { dashboard_pipeline } from '../../subworkflows/local/dashboard_pipeline'
-
 include { softwareVersionsToYAML } from '../../subworkflows/nf-core/utils_nfcore_pipeline'
 include { methodsDescriptionText } from '../../subworkflows/local/utils_nfcore_crispr_pipeline'
 
@@ -188,7 +188,9 @@ workflow CRISPR_PIPELINE {
             Hashing_Concat.concatenated_hashing_unfiltered_demux,
             Inference.inference_mudata,
             Preprocessing.figures_dir,
-            evaluation_pipeline.out.evaluation_output_dir
+            evaluation_pipeline.out.evaluation_output_dir,
+            evaluation_pipeline.out.control_output_dir
+
             )
     }
     else {
@@ -230,7 +232,8 @@ workflow CRISPR_PIPELINE {
             mapping_guide_pipeline.out.ks_guide_out_dir_collected,
             Inference.inference_mudata,
             Preprocessing.figures_dir,
-            evaluation_pipeline.out.evaluation_output_dir
+            evaluation_pipeline.out.evaluation_output_dir,
+            evaluation_pipeline.out.control_output_dir
             )
     }
 

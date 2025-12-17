@@ -29,8 +29,8 @@ assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n
   }
   # Parallelization controls inferred from n_processors
   if (!is.na(n_processors) && as.integer(n_processors) > 1) {
-    assign_grnas_args$parallel <- TRUE
-    assign_grnas_args$n_processors <- as.integer(n_processors)
+    assign_grnas_args$parallel <- FALSE
+    assign_grnas_args$n_processors <- as.integer(2)
   }
 
   sceptre_object <- do.call(sceptre::assign_grnas, assign_grnas_args)
@@ -125,7 +125,17 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
     moi = moi,
     extra_covariates = extra_covariates
   )
+  print ("Check rownames match:")
+  print(all(rownames(guides_data) == rownames(grna_matrix)))
+  print(all(rownames(scRNA_data) == rownames(response_matrix)))
+  print ('grna_matrix')
+  print (
+      identical(
+      rownames(grna_matrix),
+      rownames(SingleCellExperiment::rowData(mudata[['guide']]))
+      )
 
+)
   # return sceptre object
   return(sceptre_object)
 }
