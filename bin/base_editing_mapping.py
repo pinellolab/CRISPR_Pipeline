@@ -27,13 +27,15 @@ def parse_seqspec_string(chemistry: str):
     Strict parser for 'a:b:c,d:e:f,g:h:i' describing bc:umi:seq (in that order).
     Returns: protospacer_start, protospacer_len, umi_start, umi_len, barcode_start, barcode_len
     """
-    s = chemistry.strip()
-    parts = [p.strip() for p in s.split(',')]
+    s = chemistry.strip(':')
+    print (s, 'strip')
+    parts = [p.strip() for p in s.split(':')]
+    print (parts)
     if len(parts) != 3:
         raise ValueError("Expected 3 triplets separated by commas: bc,umi,seq")
 
     def parse_triplet(tri: str):
-        fields = [x.strip() for x in tri.split(':')]
+        fields = [x.strip() for x in tri.split(',')]
         if len(fields) != 3:
             raise ValueError(f"Invalid triplet '{tri}'. Use 'file:start:stop'.")
         f, start, stop = (int(fields[0]), int(fields[1]), int(fields[2]))
@@ -89,21 +91,19 @@ def run_crispr_mapping(args):
     fastq_r1_fn, fastq_r2_fn = extract_fasta_sequences(args.fastq)
 
     # --- 1. Load Input Files ---
-    try:
-        guide_set_df = pd.read_csv(args.guide_set_fn, header=1)
-        barcode_inclusion_df = pd.read_csv(args.barcode_inclusion_list_fn, header=None)
-        barcode_inclusion_df.columns = ["barcode"]
-    except FileNotFoundError as e:
-        print(f"Error: Required file not found: {e.filename}")
-        return
-    except Exception as e:
-        print(f"An error occurred while reading input files: {e}")
-        return
+    
+    print (args.guide_set_fn, ' this is the name')
+    guide_set_df = pd.read_csv(str(args.guide_set_fn), sep='\t')
+    print ('after pd.read_csv')
+    barcode_inclusion_df = pd.read_csv(args.barcode_inclusion_list_fn, header=None)
+    barcode_inclusion_df.columns = ["barcode"]
 
+    
     guide_whitelist_input_df = pd.DataFrame(guide_set_df["spacer"])
     guide_whitelist_input_df.columns = ["protospacer"]
     print(f"Loaded {len(guide_whitelist_input_df)} unique protospacers from guide set.")
-
+    print ('forcing downsample REMOVE IT')
+    args.downsample_reads = 500_000
     # --- 2. Downsample FASTQ Files ---
     if args.downsample_reads > 0:
         print(f"Downsampling to {args.downsample_reads} read pairs...")
@@ -132,7 +132,7 @@ def run_crispr_mapping(args):
     
     # --- 3. Run CRISPR-Correct Mapping ---
     print("Running get_whitelist_reporter_counts_from_fastq...")
-
+    #print (crispr_ambiguous_mapping.__version__, 'version')
     cellbarcode_crisprcorrect_results = crispr_ambiguous_mapping.mapping.get_whitelist_reporter_counts_from_fastq(
         whitelist_guide_reporter_df=guide_whitelist_input_df,
         fastq_r1_fns =r1_input ,
@@ -161,12 +161,13 @@ def run_crispr_mapping(args):
         
         cores=args.cores
     )
-
+    print ('starting saving')
     # --- 4. Save Results (Example) ---
     cell_barcode_result = cellbarcode_crisprcorrect_results.all_match_set_whitelist_reporter_counter_series_results.protospacer_match.ambiguous_spread_umi_collapsed_counterseries
 
     anndata_test = series_to_anndata(cell_barcode_result)
-    anndata_test.write_h5ad('base_editing.h5ad')
+    os.makedirs(f'{args.output_prefix}/counts_unfiltered/', exist_ok=True)
+    anndata_test.write_h5ad(f'{args.output_prefix}/counts_unfiltered/adata.h5ad')
     # Clean up downsampled files
     if args.downsample_reads > 0:
         os.remove(fastq_r1_downsampled_fn)
@@ -174,6 +175,7 @@ def run_crispr_mapping(args):
         print("Cleaned up temporary downsampled files.")
 
 def main():
+    print ('its the main')
     parser = argparse.ArgumentParser(
         description="CRISPR guide mapping using crispr_ambiguous_mapping (CRISPR-Correct).",
         formatter_class=argparse.RawTextHelpFormatter

@@ -8,12 +8,12 @@ process mappingGuideBaseEditing {
     path parsed_seqSpec_file
     path barcode_file
     val  is_10xv3v   // should be "true" or "false"
-    val metadata_file
+    path metadata_file
     
 
     output:
     path "*_ks_guide_out", emit: ks_guide_out_dir
-    path "*_ks_guide_out/base_editing.h5ad", emit: ks_guide_out_adata
+    path "*_ks_guide_out/counts_unfiltered/adata.h5ad", emit: ks_guide_out_adata
 
     script:
         def batch       = meta.measurement_sets
@@ -22,11 +22,13 @@ process mappingGuideBaseEditing {
         set -euo pipefail
         echo "Processing $batch with $fastq_files"
 
-        k_bin=\$(type -p kallisto)
-        bustools_bin=\$(type -p bustools)
         chemistry=\$(extract_parsed_seqspec.py --file ${parsed_seqSpec_file})
+        echo "chemistry"
+
         mkdir -p ${batch}_ks_guide_out
-        cd ${batch}_ks_guide_out
+        #cd ${batch}_ks_guide_out
+        echo "base editing script will start"
+        pip list
 
         base_editing_mapping.py \\
         --barcode_inclusion_list_fn ${barcode_file} \\
@@ -34,7 +36,7 @@ process mappingGuideBaseEditing {
         --guide_set_fn ${metadata_file} \\
         --chemistry "\$chemistry" \\
         --cores ${task.cpus} \\
-        --downsample_reads 400000 \\
+        --downsample_reads 0 \\
         --output_prefix ${batch}_ks_guide_out
         echo "gRNA KB mapping Complete"
         """
