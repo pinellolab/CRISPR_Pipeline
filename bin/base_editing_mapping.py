@@ -59,7 +59,7 @@ def parse_seqspec_string(chemistry: str):
 # protospacer_start, protospacer_len, umi_start, umi_len, barcode_start, barcode_len = parse_seqspec_string(chemistry)
 
 
-def series_to_anndata(count_series: pd.Series) -> anndata.AnnData:
+def series_to_anndata(count_series: pd.Series, args) -> anndata.AnnData:
     """
     Convert a multi-indexed Series (CellBarcode, protospacer) to an AnnData object.
 
@@ -78,7 +78,9 @@ def series_to_anndata(count_series: pd.Series) -> anndata.AnnData:
 
     # Create AnnData
     adata = anndata.AnnData(X=df.values, obs=pd.DataFrame(index=df.index), var=pd.DataFrame(index=df.columns))
-    adata.var['guide_id'] = adata.var.index
+    #print(adata.var)
+    #print (adata)
+    adata.var['guide_id'] = pd.read_csv(str(args.guide_set_fn), sep='\t')['guide_id'].values.tolist()
     return adata
 
 def run_crispr_mapping(args):
@@ -94,6 +96,7 @@ def run_crispr_mapping(args):
     
     print (args.guide_set_fn, ' this is the name')
     guide_set_df = pd.read_csv(str(args.guide_set_fn), sep='\t')
+    
     print ('after pd.read_csv')
     barcode_inclusion_df = pd.read_csv(args.barcode_inclusion_list_fn, header=None)
     barcode_inclusion_df.columns = ["barcode"]
@@ -103,7 +106,7 @@ def run_crispr_mapping(args):
     guide_whitelist_input_df.columns = ["protospacer"]
     print(f"Loaded {len(guide_whitelist_input_df)} unique protospacers from guide set.")
     #print ('forcing downsample REMOVE IT')
-    #args.downsample_reads = 500_000
+    #args.downsample_reads = 10000_000
     # --- 2. Downsample FASTQ Files ---
     if args.downsample_reads > 0:
         print(f"Downsampling to {args.downsample_reads} read pairs...")
@@ -165,7 +168,7 @@ def run_crispr_mapping(args):
     # --- 4. Save Results (Example) ---
     cell_barcode_result = cellbarcode_crisprcorrect_results.all_match_set_whitelist_reporter_counter_series_results.protospacer_match.ambiguous_spread_umi_collapsed_counterseries
 
-    anndata_test = series_to_anndata(cell_barcode_result)
+    anndata_test = series_to_anndata(cell_barcode_result, args)
     os.makedirs(f'{args.output_prefix}/counts_unfiltered/', exist_ok=True)
     anndata_test.write_h5ad(f'{args.output_prefix}/counts_unfiltered/adata.h5ad')
     # Clean up downsampled files
