@@ -14,6 +14,8 @@ workflow mapping_guide_pipeline {
     ch_barcode_onlist
     ch_guide_design
     parsed_covariate_file
+    reverse_complement_flag
+    spacer_tag
     
 
     when:
@@ -25,7 +27,7 @@ workflow mapping_guide_pipeline {
         'guide'
     )
 
-    GuideRef = createGuideRef(ch_guide_design)
+    GuideRef = createGuideRef(ch_guide_design, reverse_complement_flag, spacer_tag)
 
     if( params.is_BaseEditing ) {
             MappingOut = mappingGuideBaseEditing(
@@ -33,7 +35,8 @@ workflow mapping_guide_pipeline {
                 SeqSpecResult.parsed_seqspec,
                 SeqSpecResult.barcode_file,
                 params.is_10x3v3,
-                ch_guide_design
+                ch_guide_design,
+                
 
             )
         }
@@ -44,7 +47,8 @@ workflow mapping_guide_pipeline {
                 GuideRef.t2g_guide,
                 SeqSpecResult.parsed_seqspec,
                 SeqSpecResult.barcode_file,
-                params.is_10x3v3
+                params.is_10x3v3,
+                spacer_tag
             )
         }
 

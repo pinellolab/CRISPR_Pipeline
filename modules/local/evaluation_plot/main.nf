@@ -5,7 +5,6 @@ process evaluation_plot {
     input:
 
     path mdata
-    val user_central_nodes
     path gencode_gtf
 
     output:
@@ -13,8 +12,9 @@ process evaluation_plot {
 
     script:
             """
-            #network_plot.py ${mdata} --central_nodes ${user_central_nodes} --min_weight 0.1
             #volcano_plot.py ${mdata} --log2_fc 1 --p_value 0.05
-            igv.py ${mdata} --gtf ${gencode_gtf}
+            
+            igv.py ${mdata} --gtf ${gencode_gtf} --default
+
             """
 }

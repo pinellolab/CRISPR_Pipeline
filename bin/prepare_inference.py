@@ -12,6 +12,24 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
     guide_inference = pd.read_csv(guide_inference)
     print(f"Reading mudata file from {mudata_path}...")
     mudata = mu.read_h5mu(mudata_path)
+    gvar = mudata.mod["guide"].var
+
+    # Ensure the column exists
+    if "intended_target_name" not in gvar.columns:
+        # create it from guide_id for targeting rows, else "non-targeting"
+        base_vals = np.where(gvar.get("targeting", False), gvar["guide_id"].astype(str), "non-targeting")
+        gvar["intended_target_name"] = base_vals
+
+    # Drop categorical dtype to allow arbitrary strings
+    if pd.api.types.is_categorical_dtype(gvar["intended_target_name"]):
+        gvar["intended_target_name"] = gvar["intended_target_name"].astype("object")
+
+    # Also make sure guide_id is stringy (avoids category/NA mismatches)
+    if pd.api.types.is_categorical_dtype(gvar["guide_id"]):
+        gvar["guide_id"] = gvar["guide_id"].astype("object")
+    else:
+        gvar["guide_id"] = gvar["guide_id"].astype(str)
+
 
     # Check if mudata.mod contains 'gene' and 'guide'
     if "gene" not in mudata.mod or "guide" not in mudata.mod:
@@ -21,25 +39,24 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
     print(f"Tested pairs dataset contains {len(guide_inference)} rows.")
     print(f"Mudata 'gene' modality contains {mudata.mod['gene'].shape[1]} genes.")
     print(f"Mudata 'guide' modality contains {mudata.mod['guide'].shape[1]} guides.")
-
-    # If any targeting guides in mudata.mod["guide"].var are missing an intended_target_name, add it
     missing_intended_target_name_guides = (
-        mudata.mod["guide"].var["targeting"]
-        & mudata.mod["guide"].var["intended_target_name"].isna()
+        gvar["targeting"] & gvar["intended_target_name"].isna()
     )
     if np.any(missing_intended_target_name_guides):
-        mudata.mod["guide"].var.loc[
-            missing_intended_target_name_guides, "intended_target_name"
-        ] = mudata.mod["guide"].var.loc[
+        gvar.loc[missing_intended_target_name_guides, "intended_target_name"] = gvar.loc[
             missing_intended_target_name_guides, "guide_id"
         ]
 
-    # For non-targeting guides, set intended_target_name to "non-targeting"
     ntc_guide_idx = (
-        (~mudata.mod["guide"].var["targeting"])
-        | (mudata.mod["guide"].var["type"] == "non-targeting")
-        | (mudata.mod["guide"].var["intended_target_name"] == "non-targeting")
+        (~gvar["targeting"])
+        | (gvar.get("type", pd.Series(index=gvar.index, dtype=object)) == "non-targeting")
+        | (gvar["intended_target_name"] == "non-targeting")
     )
+    if ntc_guide_idx.any():
+        gvar.loc[ntc_guide_idx, "intended_target_name"] = "non-targeting"
+    else:
+        print("No non-targeting guides found. Make sure you set up the metadata correctly")
+
     n_ntc_guides = np.sum(ntc_guide_idx)
     print(
         f"{n_ntc_guides} non-targeting guides found. {n_ntc_guides / mudata.mod['guide'].var.shape[0] * 100:.2f}% of total"

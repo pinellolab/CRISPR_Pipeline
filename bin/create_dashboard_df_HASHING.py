@@ -7,6 +7,8 @@ import muon as mu
 import anndata as ad
 import numpy as np
 import pickle
+from scipy import sparse
+
 
 def human_format(num):
     num = float('{:.3g}'.format(num))
@@ -156,6 +158,12 @@ def collect_evaluation_plots(use_default=False):
     network_descs = []
     volcano_plots = []
     volcano_descs = []
+    precission_plots = []
+    precission_desc = []
+    bar_plot_direct_x_control_plots = []
+    bar_plot_direct_x_control_desc = []
+
+    
 
     if use_default:
         # Look for cis and trans specific plots
@@ -173,11 +181,27 @@ def collect_evaluation_plots(use_default=False):
                 network_plots.append(network_path)
                 network_descs.append(f'{plot_desc} network plot')
 
+
+
+            #original names plot names barplot_direct_vs_control.png , precision_recall_roc.png, volcano_plot.png
             # Volcano plots
             volcano_path = f'evaluation_output/{plot_prefix}_volcano_plot.png'
             if os.path.exists(volcano_path):
                 volcano_plots.append(volcano_path)
-                volcano_descs.append(f'{plot_desc} volcano plot')
+                volcano_descs.append(f'{plot_desc} direct targets x controls volcano plot')
+
+            precission_recall_path = f'evaluation_output/{plot_prefix}_precision_recall_roc.png'
+            if os.path.exists(precission_recall_path):
+                precission_plots.append(precission_recall_path)
+                precission_desc.append(f'{plot_desc} precision recall roc plot of direct targets x controls')
+
+
+
+            bar_plot_direct_x_control_path = f'evaluation_output/{plot_prefix}_barplot_direct_vs_control.png'
+            if os.path.exists(bar_plot_direct_x_control_path):
+                bar_plot_direct_x_control_plots.append(bar_plot_direct_x_control_path)
+                bar_plot_direct_x_control_desc.append(f'{plot_desc} bar plot direct targets vs control plot')
+            
     else:
         # Look for standard plots
         plot_configs = [
@@ -197,8 +221,11 @@ def collect_evaluation_plots(use_default=False):
             if os.path.exists(volcano_path):
                 volcano_plots.append(volcano_path)
                 volcano_descs.append(f'{plot_desc} volcano plot')
+            # Volcano plots
 
-    return network_plots, network_descs, volcano_plots, volcano_descs
+            
+
+    return network_plots, network_descs, volcano_plots, volcano_descs,precission_plots ,precission_desc, bar_plot_direct_x_control_plots ,bar_plot_direct_x_control_desc
 
 def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path, filtered_ann_path, guide_ann_path, hashing_ann_path, hashing_demux_path, hashing_unfiltered_demux_path, use_default=False):
     ### Create df for cell statistics
@@ -244,10 +271,19 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
     number_of_guide_barcodes_with_positive_call = (positive_calls.sum(axis=1) > 0).sum()
     cell_ids = mudata.mod['guide'].obs.index
     guide_ids = mudata.mod['guide'].var.index
-    df_guide_assignment = pd.DataFrame.sparse.from_spmatrix(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
+
+    if sparse.issparse(mudata.mod['guide'].layers['guide_assignment']):
+        df_guide_assignment = pd.DataFrame.sparse.from_spmatrix(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
+    else:
+        df_guide_assignment = pd.DataFrame(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
+
     sgRNA_frequencies = (df_guide_assignment > 0).sum(axis=0)
     df_sgRNA_frequencies = sgRNA_frequencies.reset_index()
     df_sgRNA_frequencies.columns = ['sgRNA', 'Frequency']
+    #check if sparse
+
+    # if sparse.issparse(df_guide_assignment):
+ 
     median_frequency = pd.to_numeric(
     (df_sgRNA_frequencies['Frequency']
         .pipe(lambda s: s.astype(pd.SparseDtype('int8', fill_value=0)) if isinstance(s.dtype, pd.SparseDtype) and s.dtype.subtype is bool else s)
@@ -255,6 +291,10 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
         .pipe(lambda s: s.astype('int8') if s.dtype == bool else s)),
     errors='coerce'
     ).median()
+    # else:
+    #     median_frequency = df_sgRNA_frequencies['Frequency'].median()
+
+
     gs_highlight=f"Number of Cells with at least one sgRNA assigned: {human_format(number_of_guide_barcodes_with_positive_call)}, The median of cells with a positive sgRNA call is: {median_frequency}"
 
     df_sgRNA_table = df_sgRNA_frequencies.copy()
@@ -275,11 +315,20 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
     iv_highlight = f"Mean guides per cell: {human_format(mean_guides_per_cell)}, Mean cells per guide: {human_format(mean_cells_per_guide)}"
 
     # Collect evaluation plots based on use_default flag
-    network_plots, network_descs, volcano_plots, volcano_descs = collect_evaluation_plots(use_default)
-
+    (
+        network_plots, 
+        network_descs, 
+        volcano_plots, 
+        volcano_descs, 
+        precission_plots,
+        precission_desc, 
+        bar_plot_direct_x_control_plots,
+        bar_plot_direct_x_control_desc
+    ) = collect_evaluation_plots(use_default)
     # Combine network + volcano
-    all_plots = network_plots + volcano_plots
-    all_descs = network_descs + volcano_descs
+    all_plots = network_plots + volcano_plots + precission_plots + bar_plot_direct_x_control_plots
+    all_descs = network_descs + volcano_descs + precission_desc + bar_plot_direct_x_control_desc
+
 
     inf_img_df = new_block('Inference', '', 'Visualization', iv_highlight, True, image=all_plots, image_description=all_descs)
 

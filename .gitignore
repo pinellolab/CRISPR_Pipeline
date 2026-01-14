@@ -8,7 +8,7 @@ per_guide_output.tsv
 nf-*-reports.tsv
 /pipeline_outputs
 /pipeline_dashboard
+/results
 pipeline-service-key.json
 debug_dashboard.ipynb
-
-
+.vscode/

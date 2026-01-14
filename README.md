@@ -68,7 +68,6 @@ git clone https://github.com/pinellolab/CRISPR_Pipeline.git
 #### Metadata Files (see example_data/)
 - `guide_metadata.tsv`: Contains guide RNA information and annotations
 - `hash_metadata.tsv`: Cell hashing sample information (required if using cell hashing)
-- `pairs_to_test.csv`: Defines perturbation pairs for comparison analysis (required if testing predefined pairs)
 
 For detailed specifications, see our [documentation](https://docs.google.com/document/d/1Z1SOlekIE5uGyXW41XxnszxaYdSw0wdAOUVzfy3fj3M/edit?tab=t.0#heading=h.ctbx1w9hj619).
 
@@ -91,6 +90,8 @@ Update the pipeline-specific parameters in the `params` section, for example:
     ENABLE_SCRUBLET = false //Using scrublet can be chalenge in datasets with hundred of thousands cells (ex: 300k +)
     use_igvf_reference = true // Download the reference from IGVF to use as gene file annotation, this method when true will overwrite the reference_transcriptome and gtf_download_path
     is_10x3v3 = true // In case using 10x3v3 use this option to execute the barcode translation operation. Otherwise guides and transcriptomes from the same cell will point for different barcodes and the overlap between modalities will be very small
+    reverse_complement_guides = false // Use true to reverse complement your guides while mapping it. The metadata info will be preserved and will use the original complementariety and direction
+
     DUAL_GUIDE = false  // Case using Dual Guide system such as Replogle 2022 paper
     REFERENCE_transcriptome = 'human' // will be used to download the kallisto human index
     REFERENCE_gtf_download_path = 'https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_46/gencode.v46.annotation.gtf.gz' // Case creating a custom reference from the internet

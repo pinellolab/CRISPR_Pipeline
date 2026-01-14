@@ -1,7 +1,6 @@
 
 process mergedResults {
     cache 'lenient'
-    publishDir './pipeline_outputs', mode: 'copy', overwrite: true
 
     input:
     path sceptre_per_guide

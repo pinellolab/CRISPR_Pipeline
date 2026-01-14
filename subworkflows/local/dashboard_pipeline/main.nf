@@ -15,6 +15,8 @@ workflow dashboard_pipeline {
     mdata
     figures_dir
     evaluation_output_dir
+    controls_evaluation_output_dir
+
 
     main:
 
@@ -32,7 +34,8 @@ workflow dashboard_pipeline {
             evaluation_output_dir,
             file(params.css),
             file(params.js),
-            file(params.svg)
+            file(params.svg),
+            controls_evaluation_output_dir
         )
     } else {
         createDashboard(
@@ -48,7 +51,8 @@ workflow dashboard_pipeline {
             evaluation_output_dir,
             file(params.css),
             file(params.js),
-            file(params.svg)
+            file(params.svg),
+            controls_evaluation_output_dir
         )
     }
 
