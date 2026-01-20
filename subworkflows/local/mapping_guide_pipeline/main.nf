@@ -39,7 +39,8 @@ workflow mapping_guide_pipeline {
 
     AnndataConcatenate = anndata_concat(
         parsed_covariate_file,
-        ks_guide_out_dir_collected
+        ks_guide_out_dir_collected,
+        "guide"
     )
 
     emit:

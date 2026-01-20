@@ -25,6 +25,8 @@ workflow mapping_rna_pipeline {
         ch_rna,
         DownloadRefResult.transcriptome_idx,
         DownloadRefResult.t2g_transcriptome_index,
+        DownloadRefResult.cdna,
+        DownloadRefResult.nascent_index,
         SeqSpecResult.parsed_seqspec,
         SeqSpecResult.barcode_file
     )
@@ -34,7 +36,8 @@ workflow mapping_rna_pipeline {
 
     AnndataConcatenate = anndata_concat(
         parsed_covariate_file,
-        ks_transcripts_out_dir_collected
+        ks_transcripts_out_dir_collected,
+        "GEX"
     )
 
     emit:
