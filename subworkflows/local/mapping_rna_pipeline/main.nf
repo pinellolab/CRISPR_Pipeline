@@ -35,8 +35,8 @@ workflow mapping_rna_pipeline {
     ks_transcripts_out_dir_collected.view()
 
     AnndataConcatenate = anndata_concat(
-        parsed_covariate_file,
         ks_transcripts_out_dir_collected,
+        parsed_covariate_file,
         "GEX"
     )
 

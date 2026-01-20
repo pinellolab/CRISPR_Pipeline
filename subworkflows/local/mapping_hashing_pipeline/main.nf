@@ -35,8 +35,9 @@ workflow mapping_hashing_pipeline {
     ks_hashing_out_dir_collected.view()
 
     AnndataConcatenate = anndata_concat(
-        parsed_covariate_file,
         ks_hashing_out_dir_collected
+        parsed_covariate_file,
+        'hashing'
     )
 
     emit:

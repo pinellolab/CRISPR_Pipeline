@@ -109,11 +109,11 @@ workflow CRISPR_PIPELINE {
 
     // Run mapping pipelines for each modality
     mapping_rna_pipeline(
-            ch_rna,
-            ch_rna_seqspec,
-            ch_barcode_onlist,
-            prepare_mapping_pipeline.out.parsed_covariate_file
-        )
+        ch_rna,
+        ch_rna_seqspec,
+        ch_barcode_onlist,
+        prepare_mapping_pipeline.out.parsed_covariate_file
+    )
 
     mapping_guide_pipeline(
         ch_guide,
@@ -123,7 +123,7 @@ workflow CRISPR_PIPELINE {
         prepare_mapping_pipeline.out.parsed_covariate_file,
         params.reverse_complement_guides,
         params.spacer_tag
-        )
+    )
 
     // Common preprocessing for both workflows
     Preprocessing = preprocessing_pipeline(
@@ -171,7 +171,7 @@ workflow CRISPR_PIPELINE {
         evaluation_pipeline (
             Preprocessing.gencode_gtf,
             Inference.inference_mudata
-            )
+        )
 
         dashboard_pipeline_HASHING (
             seqSpecCheck_pipeline_HASHING.out.guide_seqSpecCheck_plots,
@@ -191,8 +191,7 @@ workflow CRISPR_PIPELINE {
             Preprocessing.figures_dir,
             evaluation_pipeline.out.evaluation_output_dir,
             evaluation_pipeline.out.control_output_dir
-
-            )
+        )
     }
     else {
         // Create MuData without hashing
@@ -221,7 +220,7 @@ workflow CRISPR_PIPELINE {
         evaluation_pipeline (
             Preprocessing.gencode_gtf,
             Inference.inference_mudata
-            )
+        )
 
         dashboard_pipeline (
             seqSpecCheck_pipeline.out.guide_seqSpecCheck_plots,
@@ -235,7 +234,7 @@ workflow CRISPR_PIPELINE {
             Preprocessing.figures_dir,
             evaluation_pipeline.out.evaluation_output_dir,
             evaluation_pipeline.out.control_output_dir
-            )
+        )
     }
 
 
