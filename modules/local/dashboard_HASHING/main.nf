@@ -1,6 +1,18 @@
 process createDashboard_HASHING {
     cache 'lenient'
-    publishDir './pipeline_dashboard', mode: 'copy'
+    publishDir path: {
+        def out = params.outdir?.toString() ?: './pipeline_outputs'
+        out = out.replaceAll('/$','')
+        return "${out}/pipeline_dashboard"
+    }, mode: 'copy'
+    publishDir path: {
+        def out = params.outdir?.toString() ?: './pipeline_outputs'
+        out = out.replaceAll('/$','')
+        if (out == 'pipeline_outputs' || out.endsWith('/pipeline_outputs')) {
+            return out
+        }
+        return "${out}/pipeline_outputs"
+    }, mode: 'copy', overwrite: true, pattern: 'inference_mudata.h5mu'
 
     input:
         path guide_seqSpecCheck_plots

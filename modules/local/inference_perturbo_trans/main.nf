@@ -1,7 +1,14 @@
 
 process inference_perturbo_trans {
     cache 'lenient'
-    publishDir './pipeline_outputs'
+    publishDir path: {
+        def out = params.outdir?.toString() ?: './pipeline_outputs'
+        out = out.replaceAll('/$','')
+        if (out == 'pipeline_outputs' || out.endsWith('/pipeline_outputs')) {
+            return out
+        }
+        return "${out}/pipeline_outputs"
+    }
 
     input:
     path mudata
