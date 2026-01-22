@@ -46,6 +46,7 @@ process mappingGuide {
             echo "Spacer detected ('${spacer_tag}'). Modifying chemistry..."
             CHEM=\$(echo "\$RAW_CHEM" | awk -F: 'BEGIN{OFS=":"} {
                 split(\$3, t, ","); 
+                t[1]=t[1] || "1";
                 t[2]=0; 
                 t[3]=0; 
                 \$3=t[1]","t[2]","t[3]; 
