@@ -106,16 +106,28 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
   if (!is.null(MultiAssayExperiment::metadata(mudata)$pairs_to_test)) {
     pairs_to_test <- MultiAssayExperiment::metadata(mudata)$pairs_to_test |>
       as.data.frame()
-    
     discovery_pairs <- pairs_to_test |>
       dplyr::rename(
         grna_target = intended_target_name,
         response_id = gene_id
       ) |>
       dplyr::filter(grna_target != "non-targeting")
-    
     # assemble base arguments to set_analysis_parameters()
     args_list <- list(...)
+
+  discovery_pairs <- discovery_pairs |>
+    dplyr::mutate(grna_target = replace(grna_target, tolower(trimws(as.character(grna_target))) == "nan", NA_character_)) |>
+    dplyr::filter(!is.na(grna_target))
+
+  tmp_allowed <- unique(sceptre_object@grna_target_data_frame$grna_target)
+  tmp_bad     <- setdiff(unique(discovery_pairs$grna_target), tmp_allowed)
+
+  print('Diferences:')
+  print (tmp_bad)
+  
+  print (setdiff(unique(discovery_pairs$grna_target), unique(sceptre_object@grna_target_data_frame$grna_target)))
+
+
     
     if ("discovery_pairs" %in% names(args_list)) {
       warning("The `discovery_pairs` argument is ignored. The `discovery_pairs` are set from the `pairs_to_test` metadata.")
@@ -128,6 +140,9 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
     discovery_pairs <- sceptre::construct_trans_pairs(sceptre_object)
     args_list[["discovery_pairs"]] <- discovery_pairs
   }
+  #print (discovery_pairs)
+
+
   # construct formula excluding gRNA covariates to avoid multicollinearity
   # (gRNA assignments are binary, making grna_n_nonzero and grna_n_umis identical)
   formula_object <- sceptre:::auto_construct_formula_object(
@@ -148,7 +163,6 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
   args_union$grna_integration_strategy <- "union"
   # set analysis parameters for union
   sceptre_object <- do.call(sceptre::set_analysis_parameters, args_union)
-
   # assign grnas and run QC (relaxed thresholds to keep all cells; mirror prior behaviour)
   sceptre_object <- sceptre_object |>
     sceptre::assign_grnas(

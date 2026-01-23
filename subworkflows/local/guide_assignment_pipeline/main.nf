@@ -28,6 +28,8 @@ workflow guide_assignment_pipeline {
         )
         guide_assignment_collected = Guide_Assignment.guide_assignment_mudata_output.collect()
         Mudata_concat = mudata_concat(guide_assignment_collected, params.QC_min_cells_per_gene, params.DUAL_GUIDE)
+    } else {
+        error("Invalid GUIDE_ASSIGNMENT_method: ${params.GUIDE_ASSIGNMENT_method}")
     }
 
     emit:

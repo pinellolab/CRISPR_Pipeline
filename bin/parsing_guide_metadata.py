@@ -28,7 +28,7 @@ def process_reads(yaml_file):
 def get_info_from_yaml(modality, yaml_file, whitelist):
     reads = process_reads(yaml_file)
     print('reads out', reads)
-    cmd = f"seqspec index -m {modality} -t kb -i {reads} {yaml_file}"
+    cmd = f'seqspec index -m {modality} -t kb -i "{reads}" {yaml_file}'
     print(cmd)
     output, error = system_call(cmd)
 

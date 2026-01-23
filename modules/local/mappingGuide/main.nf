@@ -1,8 +1,8 @@
 process mappingGuide {
+    tag "$meta.measurement_sets"
     cache 'lenient'
     debug true
     stageOutMode 'copy'
-
 
     input:
     tuple val(meta), path(reads)
@@ -10,39 +10,67 @@ process mappingGuide {
     path t2g_guide
     path parsed_seqSpec_file
     path barcode_file
-    val  is_10xv3v   // should be "true" or "false"
+    val is_10xv3v
+    val spacer_tag
 
     output:
-    path "*_ks_guide_out", emit: ks_guide_out_dir
-    path "*_ks_guide_out/counts_unfiltered/adata.h5ad", emit: ks_guide_out_adata
+    path "*_ks_guide_out"                              , emit: ks_guide_out_dir
+    path "*_ks_guide_out/counts_unfiltered/adata.h5ad" , emit: ks_guide_out_adata
 
     script:
-        def batch       = meta.measurement_sets
-        def fastq_files = reads.join(' ')
-        """
-        set -euo pipefail
-        echo "Processing $batch with $fastq_files"
+    def batch = meta.measurement_sets
+    def fastq_files = reads.join(' ')
+    // Check if spacer is valid (not null/empty and length > 1)
+    def has_spacer  = (spacer_tag && spacer_tag.length() > 1) ? "true" : "false"
 
-        k_bin=\$(type -p kallisto)
-        bustools_bin=\$(type -p bustools)
-        chemistry=\$(extract_parsed_seqspec.py --file ${parsed_seqSpec_file})
+    """
+    set -euo pipefail
+    echo "Processing $batch"
 
-        if [ '${is_10xv3v}' = 'true' ]; then
-            echo "Detected 10x V3 chemistry, running additional processing"
-
-            kb count -i ${guide_index} -g ${t2g_guide} --verbose -w ${barcode_file} --workflow kite:10xFB \\
-                --h5ad --kallisto "\$k_bin" --bustools "\$bustools_bin" -x 10XV3 \\
-                -o ${batch}_ks_guide_out -t ${task.cpus} \\
-                ${fastq_files} --overwrite
+    # 1. Determine the Base Chemistry
+    # If it is 10xV3, we force that string. 
+    # Otherwise, we extract it from the seqspec file.
+    if [ "${is_10xv3v}" == "true" ]; then
+        CHEM="10XV3"
+        WORKFLOW="kite:10xFB"
+    else
+        RAW_CHEM=\$(extract_parsed_seqspec.py --file ${parsed_seqSpec_file})
+        WORKFLOW="kite"
+        
+        # 2. Apply Spacer Logic (Modify Chemistry) if needed
+        # Logic: If spacer exists, take the 3rd part of the string (transcript),
+        # and set its 2nd and 3rd values to 0.
+        # Ex: 0,0,16:0,16,26:1,20,30 -> 0,0,16:0,16,26:1,0,0
+        
+        if [ "${has_spacer}" == "true" ]; then
+            echo "Spacer detected ('${spacer_tag}'). Modifying chemistry..."
+            CHEM=\$(echo "\$RAW_CHEM" | awk -F: 'BEGIN{OFS=":"} {
+                split(\$3, t, ","); 
+                t[2]=0; 
+                t[3]=0; 
+                \$3=t[1]","t[2]","t[3]; 
+                print 
+            }')
         else
-            echo "Detected non-10x V3 chemistry, running standard processing"
-
-            kb count -i ${guide_index} -g ${t2g_guide} --verbose -w ${barcode_file} \\
-                --h5ad --kallisto "\$k_bin" --bustools "\$bustools_bin" -x "\$chemistry" \\
-                -o ${batch}_ks_guide_out -t ${task.cpus} \\
-                ${fastq_files} --overwrite
+            CHEM="\$RAW_CHEM"
         fi
+    fi
 
-        echo "gRNA KB mapping Complete"
-        """
+    echo "Final Chemistry: \$CHEM"
+
+    # 3. Run kb count
+    # We use the calculated \$CHEM and \$WORKFLOW variables
+    kb count \\
+        -i ${guide_index} \\
+        -g ${t2g_guide} \\
+        -w ${barcode_file} \\
+        --workflow \$WORKFLOW \\
+        -x \$CHEM \\
+        --h5ad \\
+        -o ${batch}_ks_guide_out \\
+        -t ${task.cpus} \\
+        --verbose \\
+        --overwrite \\
+        ${fastq_files}
+    """
 }

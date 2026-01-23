@@ -1,6 +1,18 @@
 process createDashboard {
     cache 'lenient'
-    publishDir './pipeline_dashboard', mode: 'copy'
+    publishDir path: {
+        def out = params.outdir?.toString() ?: './pipeline_outputs'
+        out = out.replaceAll('/$','')
+        return "${out}/pipeline_dashboard"
+    }, mode: 'copy'
+    publishDir path: {
+        def out = params.outdir?.toString() ?: './pipeline_outputs'
+        out = out.replaceAll('/$','')
+        if (out == 'pipeline_outputs' || out.endsWith('/pipeline_outputs')) {
+            return out
+        }
+        return "${out}/pipeline_outputs"
+    }, mode: 'copy', overwrite: true, pattern: 'inference_mudata.h5mu'
 
     input:
         path guide_seqSpecCheck_plots
@@ -16,6 +28,8 @@ process createDashboard {
         path css
         path js
         path svg
+        path controls_evaluation_output_dir
+        
 
     output:
         tuple path("evaluation_output"), path("figures"), path("guide_seqSpec_plots"), path("dashboard.html"), path("svg"), path("inference_mudata.h5mu")
@@ -28,6 +42,8 @@ process createDashboard {
         [[ -e evaluation_output ]] && mv evaluation_output input_evaluation_output
         [[ -e svg ]] && mv svg input_svg
         [[ -e ${mudata} ]] && mv ${mudata} input_mudata.h5mu
+        [[ -e plots ]] && mv plots input_controls_evaluation_output_dir
+
 
         # Create new output directories with actual content
         echo "=== CREATING OUTPUT DIRECTORIES ==="
@@ -50,6 +66,10 @@ process createDashboard {
             cp -L input_mudata.h5mu inference_mudata.h5mu
         fi
 
+        if [[ -L input_controls_evaluation_output_dir ]]; then
+            cp -rL input_controls_evaluation_output_dir/* evaluation_output/ 2>/dev/null || true
+        fi
+  
         export MPLCONFIGDIR="./tmp/mplconfigdir"
         mkdir -p \${MPLCONFIGDIR}
 

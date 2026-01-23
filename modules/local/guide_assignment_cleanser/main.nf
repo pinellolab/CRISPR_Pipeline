@@ -15,7 +15,8 @@ process guide_assignment_cleanser {
         """
         export CMDSTAN=/root/.cmdstan/cmdstan-2.36.0
         export PATH=\$PATH:\$CMDSTAN/bin
-
+        export TMPDIR='./tmp'
+        mkdir -p ./tmp
         cleanser -i ${mudata_input} --posteriors-output ${mudata_input.simpleName}_output.h5mu --modality guide --${capture_method} --output-layer guide_assignment ${thresh_opt}
         """
 }
