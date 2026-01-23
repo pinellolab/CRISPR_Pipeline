@@ -16,7 +16,7 @@ dependencies:
   - muon
   - mudata
   - seaborn
-  - scrublet
+  # - scrublet
   - networkx
   - umap-learn
   - scikit-learn
@@ -26,5 +26,5 @@ dependencies:
     - kb-python==0.28.2  
     - pyseq-align
     - openpyxl
-    - seqspec
+    - git+https://github.com/IGVF-DACC/seqspec.git
     - igraph
