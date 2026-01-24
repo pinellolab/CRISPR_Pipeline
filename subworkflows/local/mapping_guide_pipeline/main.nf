@@ -23,13 +23,18 @@ workflow mapping_guide_pipeline {
     )
 
     GuideRef = createGuideRef(ch_guide_design, reverse_complement_flag, spacer_tag)
-
+    
+    bc_replacement_ch = params.replace_barcodes ? 
+        Channel.fromPath(params.bc_replacement_file) : 
+        Channel.fromPath("NO_FILE")
+    
     MappingOut = mappingGuide(
         ch_guide,
         GuideRef.guide_index,
         GuideRef.t2g_guide,
         SeqSpecResult.parsed_seqspec,
         SeqSpecResult.barcode_file,
+        bc_replacement_ch,
         params.is_10x3v3,
         spacer_tag
     )

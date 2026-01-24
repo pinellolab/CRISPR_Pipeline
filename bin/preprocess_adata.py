@@ -8,7 +8,7 @@ import os
 
 def main(adata_rna, gname_rna, min_genes, min_cells, pct_mito, reference):
 
-    gname_rna_path = os.path.join(gname_rna, 'counts_unfiltered/cells_x_genes.genes.names.txt')
+    gname_rna_path = os.path.join(gname_rna, 'counts_unfiltered_modified/cells_x_genes.genes.names.txt')
     gene_df = pd.read_csv(gname_rna_path, header=None)
     gene_names = gene_df[0].tolist()
     adata_rna = sc.read(adata_rna)

@@ -89,11 +89,29 @@ def main():
     print(sorted_file_path_list)
     
     for idx, file_path in enumerate(sorted_file_path_list):
-        h5ad_path = os.path.join(file_path, "counts_unfiltered/adata.h5ad")
+        h5ad_path = os.path.join(file_path, "counts_unfiltered_modified/adata.h5ad")
         print(f"Processing {h5ad_path}")
         
         adata = ad.read_h5ad(h5ad_path)
+        adata.X = adata.X.astype(np.float32)
+        if all(layer in adata.layers for layer in ['mature', 'nascent', 'ambiguous']):
+            adata.X = (
+                adata.layers['mature'].astype(np.float32) + 
+                adata.layers['nascent'].astype(np.float32) + 
+                adata.layers['ambiguous'].astype(np.float32)
+            )
+            adata.layers['mature'] = adata.layers['mature'].astype(np.float32)
+            adata.layers['nascent'] = adata.layers['nascent'].astype(np.float32)
+            adata.layers['ambiguous'] = adata.layers['ambiguous'].astype(np.float32)
+            print("Nascent (nac) workflow detected: combining mature, nascent, and ambiguous counts into .X")
+            if hasattr(adata.X, 'toarray'):
+                adata.X.data = np.round(adata.X.data)
+            else:
+                adata.X = np.round(adata.X)
+        else:
+            print("Standard workflow detected: Using existing .X matrix")
         
+
         if idx == 0 and adata.var_names.name is not None:
             var_index_name = adata.var_names.name
             print(f"Captured var index name: {var_index_name}")

@@ -10,26 +10,24 @@ process mappingGuide {
     path t2g_guide
     path parsed_seqSpec_file
     path barcode_file
+    path bc_replacement_file
     val is_10xv3v   // should be "true" or "false"
     val spacer_tag
 
     output:
     path "*_ks_guide_out", emit: ks_guide_out_dir
-    path "*_ks_guide_out/counts_unfiltered/adata.h5ad", emit: ks_guide_out_adata
+    path "*_ks_guide_out/counts_unfiltered_modified/adata.h5ad", emit: ks_guide_out_adata
 
     script:
         def batch = meta.measurement_sets
         def fastq_files = reads.join(' ')
-        def replacement_args = (params.replace_barcodes && params.bc_replacement_file != '') ?
-            "-r ${params.bc_replacement_file}" : ""
+        def replacement_args = (params.replace_barcodes && bc_replacement_file != "NO_FILE") ?
+            "-r ${bc_replacement_file}" : ""
         // Check if spacer is valid (not null/empty and length > 1)
         def has_spacer  = (spacer_tag && spacer_tag.length() > 1) ? "true" : "false"
         """
         set -euo pipefail
         echo "Processing $batch"
-
-        k_bin=\$(type -p kallisto)
-        bustools_bin=\$(type -p bustools)
 
         # 1. Determine the Base Chemistry
         # If it is 10xV3, we force that string. 
@@ -67,17 +65,15 @@ process mappingGuide {
         kb count \\
             -i ${guide_index} \\
             -g ${t2g_guide} \\
-            -w ${barcode_file} \\
-            -x \$CHEM \\
             -o ${batch}_ks_guide_out \\
+            -x \$CHEM \\
             -t ${task.cpus} \\
-            ${replacement_args} \\
             --workflow \$WORKFLOW \\
             --h5ad \\
-            --kallisto "\$k_bin" \\
-            --bustools "\$bustools_bin" \\
             --overwrite \\
             --verbose \\
+            -w ${barcode_file} \\
+            ${replacement_args} \\
             ${fastq_files}
 
         echo "gRNA KB mapping Complete"
