@@ -21,6 +21,9 @@ dependencies:
   - umap-learn
   - scikit-learn
   - cmdstanpy
+  - pybiomart
+  - pyranges
+  - statsmodels
   - gtfparse
   - pip:
     - kb-python==0.28.2  
