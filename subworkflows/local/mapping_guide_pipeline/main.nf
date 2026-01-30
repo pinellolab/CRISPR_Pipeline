@@ -13,6 +13,7 @@ workflow mapping_guide_pipeline {
     ch_guide_design
     parsed_covariate_file
     reverse_complement_flag
+    spacer_tag
 
     main:
     SeqSpecResult = seqSpecParser(
@@ -21,7 +22,7 @@ workflow mapping_guide_pipeline {
         'guide'
     )
 
-    GuideRef = createGuideRef(ch_guide_design, reverse_complement_flag)
+    GuideRef = createGuideRef(ch_guide_design, reverse_complement_flag, spacer_tag)
 
     MappingOut = mappingGuide(
         ch_guide,
@@ -29,7 +30,8 @@ workflow mapping_guide_pipeline {
         GuideRef.t2g_guide,
         SeqSpecResult.parsed_seqspec,
         SeqSpecResult.barcode_file,
-        params.is_10x3v3
+        params.is_10x3v3,
+        spacer_tag
     )
 
     ks_guide_out_dir_collected = MappingOut.ks_guide_out_dir.collect()

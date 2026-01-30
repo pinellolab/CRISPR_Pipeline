@@ -1,5 +1,12 @@
 process publishFiles {
-    publishDir './pipeline_outputs', mode: 'copy', overwrite: true
+    publishDir path: {
+        def out = params.outdir?.toString() ?: './pipeline_outputs'
+        out = out.replaceAll('/$','')
+        if (out == 'pipeline_outputs' || out.endsWith('/pipeline_outputs')) {
+            return out
+        }
+        return "${out}/pipeline_outputs"
+    }, mode: 'copy', overwrite: true
 
     input:
         path cis_per_element_results

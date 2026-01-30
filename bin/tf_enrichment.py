@@ -4,21 +4,23 @@ import pyranges as pr
 from pybiomart import Dataset
 from statsmodels.stats.multitest import multipletests
 from scipy.stats import fisher_exact
+from typing import Literal
 
 
 def run_tf_enrichment(
-    results_df,
-    peak_file_paths_df,
-    genes=None,
-    element_col="element",
-    pval_col="p_value",
-    method_col="method",
-    gene_col="gene",
-    use_gene_ids="auto",
-    fdr_corrected=False,
-    promoter_window_width=5000,
-    chipseq_threshold=0.75,
-    fdr_cutoff=0.1,
+    results_df: pd.DataFrame,
+    peak_file_paths_df: dict[str, str],
+    genes: list[str] | None = None,
+    element_col: str = "element",
+    pval_col: str = "p_value",
+    method_col: str = "method",
+    gene_col: str = "gene",
+    use_gene_ids: bool | Literal["auto"] = "auto",
+    fdr_corrected: bool = False,
+    promoter_window_width: int = 5000,
+    chipseq_threshold: float = 0.75,
+    fdr_cutoff: float = 0.1,
+    reference: Literal["hg19", "hg38"] = "hg38",
 ):
     """
     Run TF target enrichment analysis.
@@ -40,6 +42,8 @@ def run_tf_enrichment(
     fdr_cutoff : float, optional
         FDR cutoff for significance. Default is 0.1.
     """
+    print(f"Starting TF enrichment analysis using reference genome {reference}...")
+
     if use_gene_ids == "auto":
         use_gene_ids = any(results_df[gene_col].str.startswith("ENSG"))
 
@@ -63,6 +67,7 @@ def run_tf_enrichment(
         use_ids=use_gene_ids,
         promoter_window_width=promoter_window_width,
         gene_col=gene_col,
+        reference=reference,
     )
     # print(promoter_gr)
     # print(chipseq_gr.as_df().head())
@@ -160,10 +165,15 @@ def get_tss_info(
     reference="hg19",
 ):
     """Query Ensembl for TSS positions and define promoter windows."""
-    if reference != "hg19":
-        raise NotImplementedError("Only hg19 reference is currently supported.")
 
-    dataset = Dataset(name="hsapiens_gene_ensembl", host="http://grch37.ensembl.org")
+    if reference == "hg19":
+        dataset = Dataset(
+            name="hsapiens_gene_ensembl", host="http://grch37.ensembl.org"
+        )
+    elif reference == "hg38":
+        dataset = Dataset(name="hsapiens_gene_ensembl", host="http://ensembl.org")
+    else:
+        raise ValueError(f"Unsupported reference genome: {reference}")
     attrs = [
         "ensembl_gene_id",
         "external_gene_name",
@@ -282,3 +292,12 @@ def summarize_results(
     #         }
     #     )
     return pd.DataFrame(rows)
+
+
+# Example usage:
+# gene_by_element_counts = compute_gene_by_element_counts(mdata)
+# filtered_test_pairs = filter_test_pairs(gene_by_element_counts, mdata, effective_sample_size_threshold)
+# chipseq_gr = process_chipseq_data({"STAT1": stat1_txt, "IRF1": irf1_txt}, CHIPSEQ_THRESH)
+# promoter_gr = get_tss_info(mdata["rna"].var_names.tolist(), PROMOTER_WINDOW_WIDTH)
+# tf_targets = find_tf_targets(chipseq_gr, promoter_gr, ["STAT1", "IRF1"])
+# results = summarize_results(df, tf_targets, q)
