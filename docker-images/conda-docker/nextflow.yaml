@@ -16,13 +16,16 @@ dependencies:
   - muon
   - mudata
   - seaborn
-  # - scrublet
+  - scrublet
   - networkx
   - umap-learn
   - scikit-learn
   - cmdstanpy
+  - pybiomart
+  - pyranges
+  - statsmodels
   - gtfparse
-  - pip:
+   - pip:
     - kb-python==0.28.2  
     - pyseq-align
     - openpyxl
