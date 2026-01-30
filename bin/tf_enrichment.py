@@ -1,10 +1,11 @@
+import os
 import pandas as pd
 import numpy as np
 import pyranges as pr
-from pybiomart import Dataset
 from statsmodels.stats.multitest import multipletests
 from scipy.stats import fisher_exact
 from typing import Literal
+from pybiomart import Dataset
 
 
 def run_tf_enrichment(
@@ -21,6 +22,7 @@ def run_tf_enrichment(
     chipseq_threshold: float = 0.75,
     fdr_cutoff: float = 0.1,
     reference: Literal["hg19", "hg38"] = "hg38",
+    return_all_tables: bool = False,
 ):
     """
     Run TF target enrichment analysis.
@@ -29,7 +31,7 @@ def run_tf_enrichment(
     ----------
     results_df : pd.DataFrame
         DataFrame with method results. Required columns: gene_col, method_col, element_col, pval_col.
-    peak_file_paths_df : dict
+    peak_file_paths_df : dict[str, str]
         Dictionary mapping TF names to their ChIP-seq peak file paths.
     genes : list, optional
         List of gene names to consider as potential targets. If None, all genes are used.
@@ -41,8 +43,18 @@ def run_tf_enrichment(
         Whether the p-values in results_df are already FDR corrected. Default is False.
     fdr_cutoff : float, optional
         FDR cutoff for significance. Default is 0.1.
+    reference : str, optional
+        Reference genome to use ("hg19" or "hg38") or path to GTF file. Default is "hg38".
     """
-    print(f"Starting TF enrichment analysis using reference genome {reference}...")
+    if reference not in ["hg19", "hg38"] and not os.path.exists(reference):
+        raise ValueError(f"Reference genome {reference} not recognized.")
+    if reference not in ["hg19", "hg38"]:
+        print("Using custom GTF, use_gene_ids set to True.")
+        use_gene_ids = True
+
+    print(
+        f"Starting TF enrichment analysis using reference gene annotation {reference}..."
+    )
 
     if use_gene_ids == "auto":
         use_gene_ids = any(results_df[gene_col].str.startswith("ENSG"))
@@ -89,7 +101,10 @@ def run_tf_enrichment(
         pval_col=pval_col,
         q=fdr_cutoff,
     )
-    return final_summarized_df
+    if return_all_tables:
+        return final_summarized_df, df_final_input, promoter_gr, tf_targets
+    else:
+        return final_summarized_df
 
 
 # def compute_gene_by_element_counts(mdata):
@@ -166,14 +181,6 @@ def get_tss_info(
 ):
     """Query Ensembl for TSS positions and define promoter windows."""
 
-    if reference == "hg19":
-        dataset = Dataset(
-            name="hsapiens_gene_ensembl", host="http://grch37.ensembl.org"
-        )
-    elif reference == "hg38":
-        dataset = Dataset(name="hsapiens_gene_ensembl", host="http://ensembl.org")
-    else:
-        raise ValueError(f"Unsupported reference genome: {reference}")
     attrs = [
         "ensembl_gene_id",
         "external_gene_name",
@@ -182,21 +189,61 @@ def get_tss_info(
         "end_position",
         "strand",
     ]
+
+    if reference == "hg19":
+        dataset = Dataset(
+            name="hsapiens_gene_ensembl", host="http://grch37.ensembl.org"
+        )
+        tss_info = dataset.query(attributes=attrs, use_attr_names=True)
+
+    elif reference == "hg38":
+        dataset = Dataset(
+            name="hsapiens_gene_ensembl",
+            host="http://ensembl.org",
+        )
+        tss_info = dataset.query(attributes=attrs, use_attr_names=True)
+
+    else:
+        print("reading gtf...")
+        gtf = pr.read_gtf(reference, as_df=True)
+        print("finished reading gtf")
+
+        gtf = gtf[gtf.Feature == "gene"]
+        gtf["ensembl_gene_id"] = gtf["gene_id"].str.split(".").str[0]
+        gtf = gtf.drop_duplicates(subset=["ensembl_gene_id"], keep="first")
+
+        tss_info = gtf.rename(
+            columns={
+                "Chromosome": "chromosome_name",
+                "Start": "start_position",
+                "End": "end_position",
+                "Strand": "strand",
+            },
+        )
+
     if use_ids:
         ensembl_gene_key = "ensembl_gene_id"
     else:
         ensembl_gene_key = "external_gene_name"
 
-    tss_info = dataset.query(attributes=attrs, use_attr_names=True)
     if gene_names is not None:
         tss_info = tss_info[tss_info[ensembl_gene_key].isin(gene_names)]
+        assert len(tss_info) > 0, (
+            "No genes found after filtering by provided gene list."
+        )
 
-    valid_chr = [str(i) for i in range(1, 23)] + ["X", "Y"]
-    tss_info = tss_info[tss_info["chromosome_name"].isin(valid_chr)]
+    if reference in ["hg19", "hg38"]:
+        valid_chr = [str(i) for i in range(1, 23)] + ["X", "Y"]
+        tss_info = tss_info[tss_info["chromosome_name"].isin(valid_chr)]
+        tss_info["chr"] = "chr" + tss_info["chromosome_name"]
+    else:
+        valid_chr = ["chr" + str(i) for i in range(1, 23)] + ["chrX", "chrY"]
+        tss_info = tss_info[tss_info["chromosome_name"].isin(valid_chr)]
+        tss_info["chr"] = tss_info["chromosome_name"].astype(str)
+
     tss_info["TSS"] = np.where(
         tss_info["strand"] == 1, tss_info["start_position"], tss_info["end_position"]
     )
-    tss_info["chr"] = "chr" + tss_info["chromosome_name"]
     tss_df = tss_info[[ensembl_gene_key, "chr", "TSS"]].rename(
         columns={ensembl_gene_key: gene_col}
     )
@@ -217,6 +264,7 @@ def find_tf_targets(
     chipseq_gr, promoter_gr, tf_list, element_col="TF", gene_col="gene"
 ):
     """Find transcription factor targets by overlap."""
+
     target_matrix = pd.DataFrame(
         False, index=promoter_gr.df[gene_col].unique(), columns=tf_list
     )
@@ -268,12 +316,17 @@ def summarize_results(
                 alternative="greater",
             )
         num_rej = int(significant.sum())
+        num_targets = int(target_flags.sum())
+        num_overlap = int((significant & target_flags).sum())
+
         power = int((significant & target_flags).sum()) / int(target_flags.sum())
         rows.append(
             {
                 "TF": tf,
                 "Method": method,
                 "num_rejections": num_rej,
+                "num_targets": num_targets,
+                "num_overlapping": num_overlap,
                 "odds_ratio": or_val,
                 "pvalue": pval,
                 "recall": power,
