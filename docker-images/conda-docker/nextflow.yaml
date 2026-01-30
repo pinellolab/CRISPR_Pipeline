@@ -25,9 +25,9 @@ dependencies:
   - pyranges
   - statsmodels
   - gtfparse
-  - pip:
+   - pip:
     - kb-python==0.28.2  
     - pyseq-align
     - openpyxl
-    - seqspec
+    - git+https://github.com/IGVF-DACC/seqspec.git
     - igraph
