@@ -15,7 +15,7 @@ process mappingscRNA {
 
     output:
     path "*_ks_transcripts_out", emit: ks_transcripts_out_dir
-    path "*_ks_transcripts_out/counts_unfiltered_modified/adata.h5ad", emit: ks_transcripts_out_adata
+    path "*_ks_transcripts_out/counts_unfiltered*/adata.h5ad", emit: ks_transcripts_out_adata
 
     script:
     def batch = meta.measurement_sets
@@ -24,9 +24,6 @@ process mappingscRNA {
     def workflow_args = params.scrna_workflow == "standard" ? 
         "--workflow standard" : 
         "--workflow nac -c1 ${cdna} -c2 ${nascent_idx}"
-    
-    def replacement_args = (params.replace_barcodes && bc_replacement_file != "NO_FILE") ?
-        "-r ${bc_replacement_file}" : ""
 
     def mm_flag = (params.use_multimapping) ? "--mm" : ""
 
@@ -36,6 +33,12 @@ process mappingscRNA {
     k_bin=\$(type -p kallisto)
     bustools_bin=\$(type -p bustools)
     chemistry=\$(extract_parsed_seqspec.py --file ${parsed_seqSpec_file})
+
+    if [ -f "${bc_replacement_file}" ] && [ -s "${bc_replacement_file}" ]; then
+        replacement_args="-r ${bc_replacement_file}"
+    else
+        replacement_args=""
+    fi
     
     kb count \\
         -i ${transcriptome_idx} \\
@@ -52,7 +55,7 @@ process mappingscRNA {
         --sum total \\
         --verbose \\
         -w ${barcode_file} \\
-        ${replacement_args} \\
+        \$replacement_args \\
         ${fastq_files}
 
     echo "scRNA KB mapping Complete"

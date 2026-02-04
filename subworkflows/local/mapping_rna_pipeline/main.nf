@@ -23,7 +23,7 @@ workflow mapping_rna_pipeline {
 
     bc_replacement_ch = params.replace_barcodes ? 
         Channel.fromPath(params.bc_replacement_file) : 
-        Channel.fromPath("NO_FILE")
+        Channel.fromPath("dummy_bc_replacement.txt")
     
     MappingOut = mappingscRNA(
         ch_rna,

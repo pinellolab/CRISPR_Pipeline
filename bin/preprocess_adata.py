@@ -6,9 +6,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-def main(adata_rna, gname_rna, min_genes, min_cells, pct_mito, reference):
+def main(adata_rna, gname_rna, min_genes, min_cells, pct_mito, reference, bc_replacement):
 
-    gname_rna_path = os.path.join(gname_rna, 'counts_unfiltered_modified/cells_x_genes.genes.names.txt')
+    bc_replacement_ = bc_replacement.lower() in ['true', '1', 'yes']
+    if bc_replacement_:
+        folder_ = "counts_unfiltered_modified"
+    else:
+        folder_ = "counts_unfiltered"
+
+    gname_rna_path = os.path.join(gname_rna, folder_,'cells_x_genes.genes.names.txt')
     gene_df = pd.read_csv(gname_rna_path, header=None)
     gene_names = gene_df[0].tolist()
     adata_rna = sc.read(adata_rna)
@@ -98,6 +104,9 @@ if __name__ == "__main__":
     parser.add_argument('--min_cells', type=float, default=0.05, help='Minimum number of cells per gene.')
     parser.add_argument('--pct_mito', type=float, default=0.2, help='Minimum percent of proportion of mitochondrial reads in cells.')
     parser.add_argument('--reference', type=str, required=True, help='Reference species')
+    parser.add_argument('--bc_replacement', type=str, default='false')
+
 
     args = parser.parse_args()
-    main(args.adata_rna, args.gname_rna, args.min_genes, args.min_cells, args.pct_mito, args.reference)
+    main(args.adata_rna, args.gname_rna, args.min_genes, args.min_cells, args.pct_mito, args.reference, args.bc_replacement)
+    

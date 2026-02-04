@@ -18,7 +18,7 @@ process PreprocessAnnData {
 
     script:
         """
-        preprocess_adata.py ${adata_rna} ${gname_rna} --min_genes ${min_genes} --min_cells ${min_cells} --pct_mito ${pct_mito} --reference ${reference}
+        preprocess_adata.py ${adata_rna} ${gname_rna} --min_genes ${min_genes} --min_cells ${min_cells} --pct_mito ${pct_mito} --reference ${reference} --bc_replacement ${params.replace_barcodes}
         mv concatenated_adata.h5ad rna_concatenated_adata.h5ad
         
         """

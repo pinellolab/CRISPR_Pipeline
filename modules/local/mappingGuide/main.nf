@@ -16,13 +16,14 @@ process mappingGuide {
 
     output:
     path "*_ks_guide_out", emit: ks_guide_out_dir
-    path "*_ks_guide_out/counts_unfiltered_modified/adata.h5ad", emit: ks_guide_out_adata
+    path "*_ks_guide_out/counts_unfiltered*/adata.h5ad", emit: ks_guide_out_adata
 
     script:
         def batch = meta.measurement_sets
         def fastq_files = reads.join(' ')
-        def replacement_args = (params.replace_barcodes && bc_replacement_file != "NO_FILE") ?
-            "-r ${bc_replacement_file}" : ""
+        // def replacement_args = (params.replace_barcodes && bc_replacement_file) ?
+        //     "-r ${bc_replacement_file}" : ""
+
         // Check if spacer is valid (not null/empty and length > 1)
         def has_spacer  = (spacer_tag && spacer_tag.length() > 1) ? "true" : "false"
         """
@@ -62,6 +63,13 @@ process mappingGuide {
 
         # 3. Run kb count
         # We use the calculated \$CHEM and \$WORKFLOW variables
+
+        if [ -f "${bc_replacement_file}" ] && [ -s "${bc_replacement_file}" ]; then
+            replacement_args="-r ${bc_replacement_file}"
+        else
+            replacement_args=""
+        fi
+
         kb count \\
             -i ${guide_index} \\
             -g ${t2g_guide} \\
@@ -73,7 +81,7 @@ process mappingGuide {
             --overwrite \\
             --verbose \\
             -w ${barcode_file} \\
-            ${replacement_args} \\
+            \$replacement_args \\
             ${fastq_files}
 
         echo "gRNA KB mapping Complete"

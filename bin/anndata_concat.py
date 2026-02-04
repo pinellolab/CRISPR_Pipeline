@@ -74,6 +74,7 @@ def main():
     parser.add_argument('--output', type=str, default='combined_adata.h5ad', help='Output file name (default: combined_adata.h5ad)')
     parser.add_argument('--temp_dir', type=str, default='./temp_processed', help='Directory for processed files')
     parser.add_argument('--modality', type=str, help='Modality')
+    parser.add_argument('--bc_replacement', type=str, default='false')
 
     args = parser.parse_args()
     
@@ -88,8 +89,14 @@ def main():
     sorted_file_path_list = sorted(args.file_path_list, key=lambda x: os.path.basename(x))
     print(sorted_file_path_list)
     
+    bc_replacement = args.bc_replacement.lower() in ['true', '1', 'yes']
+    if bc_replacement:
+        folder_ = "counts_unfiltered_modified"
+    else:
+        folder_ = "counts_unfiltered"
+    
     for idx, file_path in enumerate(sorted_file_path_list):
-        h5ad_path = os.path.join(file_path, "counts_unfiltered_modified/adata.h5ad")
+        h5ad_path = os.path.join(file_path, folder_, "adata.h5ad")
         print(f"Processing {h5ad_path}")
         
         adata = ad.read_h5ad(h5ad_path)
@@ -104,10 +111,10 @@ def main():
             adata.layers['nascent'] = adata.layers['nascent'].astype(np.float32)
             adata.layers['ambiguous'] = adata.layers['ambiguous'].astype(np.float32)
             print("Nascent (nac) workflow detected: combining mature, nascent, and ambiguous counts into .X")
-            if hasattr(adata.X, 'toarray'):
-                adata.X.data = np.round(adata.X.data)
-            else:
-                adata.X = np.round(adata.X)
+            # if hasattr(adata.X, 'toarray'):
+            #     adata.X.data = np.round(adata.X.data)
+            # else:
+            #     adata.X = np.round(adata.X)
         else:
             print("Standard workflow detected: Using existing .X matrix")
         
