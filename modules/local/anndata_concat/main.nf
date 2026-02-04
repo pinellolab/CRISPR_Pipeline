@@ -12,6 +12,6 @@ process anndata_concat {
 
     script:
     """
-    anndata_concat.py ${adata_filepath} ${parsed_covariate_df} --output concatenated_adata.h5ad --modality ${modality} --bc_replacement ${params.replace_barcodes}
+    anndata_concat.py ${adata_filepath} ${parsed_covariate_df} --output concatenated_adata.h5ad --modality ${modality} --bc_replacement ${params.replace_barcodes} --mm ${params.use_multimapping}
     """
 }

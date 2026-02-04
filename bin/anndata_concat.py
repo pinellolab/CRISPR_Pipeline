@@ -74,7 +74,8 @@ def main():
     parser.add_argument('--output', type=str, default='combined_adata.h5ad', help='Output file name (default: combined_adata.h5ad)')
     parser.add_argument('--temp_dir', type=str, default='./temp_processed', help='Directory for processed files')
     parser.add_argument('--modality', type=str, help='Modality')
-    parser.add_argument('--bc_replacement', type=str, default='false')
+    parser.add_argument('--bc_replacement', type=str, help='Barcode replacement specification (true/false)', default='false')
+    parser.add_argument('--mm', type=str, help='Multi-mapping specification (true/false)', default='false')
 
     args = parser.parse_args()
     
@@ -111,10 +112,13 @@ def main():
             adata.layers['nascent'] = adata.layers['nascent'].astype(np.float32)
             adata.layers['ambiguous'] = adata.layers['ambiguous'].astype(np.float32)
             print("Nascent (nac) workflow detected: combining mature, nascent, and ambiguous counts into .X")
-            # if hasattr(adata.X, 'toarray'):
-            #     adata.X.data = np.round(adata.X.data)
-            # else:
-            #     adata.X = np.round(adata.X)
+            mm = args.mm.lower() in ['true', '1', 'yes']
+            if mm:
+                # Round values for downstream compatibility
+                if hasattr(adata.X, 'toarray'):
+                    adata.X.data = np.round(adata.X.data)
+                else:
+                    adata.X = np.round(adata.X)
         else:
             print("Standard workflow detected: Using existing .X matrix")
         
