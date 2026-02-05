@@ -19,6 +19,7 @@ workflow dashboard_pipeline_HASHING {
     adata_demux
     adata_unfiltered_demux
     mdata
+    additional_qc_dir
     figures_dir
     evaluation_output_dir
     controls_evaluation_output_dir
@@ -41,6 +42,7 @@ workflow dashboard_pipeline_HASHING {
             ks_transcripts_out_dir_collected,
             ks_guide_out_dir_collected,
             ks_hashing_out_dir_collected,
+            additional_qc_dir,
             figures_dir,
             evaluation_output_dir,
             file(params.css),
@@ -64,6 +66,7 @@ workflow dashboard_pipeline_HASHING {
             ks_transcripts_out_dir_collected,
             ks_guide_out_dir_collected,
             ks_hashing_out_dir_collected,
+            additional_qc_dir,
             figures_dir,
             evaluation_output_dir,
             file(params.css),
