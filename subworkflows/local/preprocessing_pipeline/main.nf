@@ -15,7 +15,8 @@ workflow preprocessing_pipeline {
         params.QC_min_genes_per_cell,
         params.QC_min_cells_per_gene,
         params.QC_pct_mito,
-        params.REFERENCE_transcriptome
+        params.REFERENCE_transcriptome,
+        params.QC_barcode_filter
     )
 
     if (file(params.REFERENCE_gtf_local_path).exists()) {
