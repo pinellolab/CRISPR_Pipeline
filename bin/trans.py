@@ -11,7 +11,8 @@ Data structures used:
   - mdata.uns["trans_per_guide_results"]: DataFrame with trans test results
       Columns: guide_id, gene_id, log2_fc, p_value
   - guide.var: Per-guide metadata
-      Key columns: guide_id, intended_target_name, gene_name, label
+      Key columns: guide_id, intended_target_name, targeting
+      Optional: gene_name (required for validated link evaluation)
 
 Processing steps:
   1. Load trans_per_guide_results from mdata.uns
@@ -76,28 +77,67 @@ sns.set_style("white")
 # ---------------------------------------------------------------------
 # Utility Functions
 # ---------------------------------------------------------------------
-def build_symbol_to_id_map(guide_var: pd.DataFrame) -> pd.Series:
-    """
-    Build a mapping from gene_name (symbol) to intended_target_name (gene_id).
+def _ensure_guide_id_column(guide_var: pd.DataFrame) -> pd.DataFrame:
+    """Return guide.var with an explicit guide_id column."""
+    if "guide_id" in guide_var.columns:
+        return guide_var.reset_index(drop=True)
+    return guide_var.reset_index().rename(columns={"index": "guide_id"})
 
-    Parameters
-    ----------
-    guide_var : pd.DataFrame
-        guide.var with columns "intended_target_name" and "gene_name".
 
-    Returns
-    -------
-    pd.Series
-        Index = gene_name (symbol), values = intended_target_name (gene_id).
+def _coerce_targeting_column(
+    guide_meta: pd.DataFrame,
+    non_targeting_name: str = "non-targeting",
+) -> pd.Series:
+    """Normalize targeting metadata to boolean, with intended_target_name fallback."""
+    if "targeting" in guide_meta.columns:
+        def _to_bool(val):
+            if isinstance(val, (bool, np.bool_)):
+                return bool(val)
+            text = str(val).strip().upper()
+            if text == "TRUE":
+                return True
+            if text == "FALSE":
+                return False
+            return np.nan
+
+        targeting = guide_meta["targeting"].map(_to_bool)
+        if "intended_target_name" in guide_meta.columns:
+            fallback = guide_meta["intended_target_name"].astype(str) != non_targeting_name
+            targeting = targeting.where(~pd.isna(targeting), fallback)
+        return targeting
+
+    if "intended_target_name" not in guide_meta.columns:
+        raise ValueError("guide.var must contain 'targeting' or 'intended_target_name'")
+    return guide_meta["intended_target_name"].astype(str) != non_targeting_name
+
+
+def build_guide_meta(
+    guide_var: pd.DataFrame,
+    non_targeting_name: str = "non-targeting",
+) -> pd.DataFrame:
     """
-    if "intended_target_name" not in guide_var.columns:
+    Build guide metadata with required columns for trans QC.
+
+    Required columns:
+      - guide_id
+      - intended_target_name
+    Optional columns:
+      - gene_name
+      - targeting (normalized to boolean)
+    """
+    guide_meta = _ensure_guide_id_column(guide_var)
+    if "intended_target_name" not in guide_meta.columns:
         raise ValueError("guide.var must have 'intended_target_name' column")
-    if "gene_name" not in guide_var.columns:
-        raise ValueError("guide.var must have 'gene_name' column")
 
-    id_map = guide_var.set_index("gene_name")["intended_target_name"]
-    id_map = id_map[~id_map.index.duplicated(keep="first")]
-    return id_map
+    guide_meta["targeting"] = _coerce_targeting_column(
+        guide_meta, non_targeting_name=non_targeting_name
+    )
+
+    keep_cols = ["guide_id", "intended_target_name", "targeting"]
+    if "gene_name" in guide_meta.columns:
+        keep_cols.append("gene_name")
+
+    return guide_meta[keep_cols].drop_duplicates(subset=["guide_id"])
 
 
 def build_id_to_symbol_map(guide_var: pd.DataFrame) -> pd.Series:
@@ -117,7 +157,7 @@ def build_id_to_symbol_map(guide_var: pd.DataFrame) -> pd.Series:
     if "intended_target_name" not in guide_var.columns:
         raise ValueError("guide.var must have 'intended_target_name' column")
     if "gene_name" not in guide_var.columns:
-        raise ValueError("guide.var must have 'gene_name' column")
+        raise ValueError("guide.var must have 'gene_name' column to map IDs to symbols")
 
     id_map = guide_var.set_index("intended_target_name")["gene_name"]
     id_map = id_map[~id_map.index.duplicated(keep="first")]
@@ -163,6 +203,12 @@ def load_validated_links(
 
     # Rename for clarity
     links = links.rename(columns={"gene": "gene_symbol"})
+
+    if "gene_name" not in guide_var.columns:
+        logger.warning(
+            "guide.var is missing 'gene_name'; skipping validated links evaluation."
+        )
+        return pd.DataFrame(columns=["guide_target", "gene_symbol"])
 
     # Get valid guide targets (TFs that are actually targeted)
     valid_targets = set(guide_var["gene_name"].dropna().unique())
@@ -357,6 +403,7 @@ def compute_per_guide_trans_metrics(
     pvalue_col: str = "p_value",
     pval_threshold: float = 0.05,
     exclude_intended_target: bool = True,
+    non_targeting_name: str = "non-targeting",
 ) -> pd.DataFrame:
     """
     Compute per-guide summary statistics for trans effects across the genome.
@@ -385,6 +432,9 @@ def compute_per_guide_trans_metrics(
         Threshold for significance.
     exclude_intended_target : bool
         If True, exclude intended target from trans metrics (it's a cis effect).
+    non_targeting_name : str
+        Value in guide.var["intended_target_name"] used for non-targeting guides if
+        targeting is missing or non-boolean.
 
     Returns
     -------
@@ -393,16 +443,13 @@ def compute_per_guide_trans_metrics(
     """
     results = trans_results.copy()
 
-    # Add gene_name by mapping gene_id
-    id_to_symbol = build_id_to_symbol_map(guide_var)
-    results["gene_name"] = results["gene_id"].map(id_to_symbol)
-
-    # Extract target_name from guide_id (e.g., "CD81#strong" -> "CD81")
-    results["target_name"] = results["guide_id"].str.split("#").str[0]
+    guide_meta = build_guide_meta(guide_var, non_targeting_name=non_targeting_name)
+    intended_map = guide_meta.set_index("guide_id")["intended_target_name"].to_dict()
+    results["intended_target_name"] = results["guide_id"].map(intended_map)
 
     if exclude_intended_target:
         # Exclude intended target (cis effect) from trans metrics
-        results = results[results["gene_name"] != results["target_name"]].copy()
+        results = results[results["gene_id"] != results["intended_target_name"]].copy()
 
     # Compute per-guide metrics
     def guide_metrics(df):
@@ -440,7 +487,6 @@ def compute_per_guide_trans_metrics(
     per_guide = results.groupby("guide_id").apply(guide_metrics).reset_index()
 
     # Merge with guide metadata
-    guide_meta = guide_var.reset_index(drop=True)[["guide_id", "gene_name", "label"]].drop_duplicates()
     per_guide = per_guide.merge(guide_meta, on="guide_id", how="left")
 
     return per_guide
@@ -448,7 +494,7 @@ def compute_per_guide_trans_metrics(
 
 def compute_overall_trans_metrics(
     per_guide_summary: pd.DataFrame,
-    non_targeting_label: str = "non_targeting",
+    non_targeting_name: str = "non-targeting",
 ) -> dict:
     """
     Compute overall summary metrics across all guides.
@@ -457,16 +503,25 @@ def compute_overall_trans_metrics(
     ----------
     per_guide_summary : pd.DataFrame
         Output from compute_per_guide_trans_metrics.
-    non_targeting_label : str
-        Label for non-targeting guides.
+    non_targeting_name : str
+        Value in guide.var["intended_target_name"] used for non-targeting guides if
+        targeting is missing or non-boolean.
 
     Returns
     -------
     dict
         Dictionary of overall metrics.
     """
-    targeting = per_guide_summary[per_guide_summary["label"] != non_targeting_label]
-    non_targeting = per_guide_summary[per_guide_summary["label"] == non_targeting_label]
+    if "targeting" in per_guide_summary.columns:
+        targeting = per_guide_summary[per_guide_summary["targeting"] == True]
+        non_targeting = per_guide_summary[per_guide_summary["targeting"] == False]
+    else:
+        targeting = per_guide_summary[
+            per_guide_summary["intended_target_name"].astype(str) != non_targeting_name
+        ]
+        non_targeting = per_guide_summary[
+            per_guide_summary["intended_target_name"].astype(str) == non_targeting_name
+        ]
 
     metrics = {
         "n_guides_tested": len(per_guide_summary),
@@ -492,7 +547,7 @@ def build_validated_links_evaluation_table(
     guide_var: pd.DataFrame,
     validated_links: pd.DataFrame,
     pvalue_col: str = "p_value",
-    non_targeting_label: str = "non_targeting",
+    non_targeting_name: str = "non-targeting",
     random_state: int = 42,
 ) -> pd.DataFrame:
     """
@@ -514,13 +569,14 @@ def build_validated_links_evaluation_table(
     trans_results : pd.DataFrame
         Trans test results.
     guide_var : pd.DataFrame
-        guide.var with label, gene_name columns.
+        guide.var with intended_target_name, targeting (and gene_name for validated links).
     validated_links : pd.DataFrame
         Output from load_validated_links with columns: guide_target, gene_symbol.
     pvalue_col : str
         Column containing p-values.
-    non_targeting_label : str
-        Label for non-targeting guides.
+    non_targeting_name : str
+        Value in guide.var["intended_target_name"] used for non-targeting guides if
+        targeting is missing or non-boolean.
     random_state : int
         Random seed for balanced sampling.
 
@@ -529,17 +585,26 @@ def build_validated_links_evaluation_table(
     pd.DataFrame
         Evaluation table with columns: guide_id, gene_id, p_value, validated_link.
     """
-    # Build ID mappings
+    if "gene_name" not in guide_var.columns:
+        logger.warning(
+            "guide.var is missing 'gene_name'; cannot evaluate validated links."
+        )
+        return pd.DataFrame()
+
+    guide_meta = build_guide_meta(guide_var, non_targeting_name=non_targeting_name)
     id_to_symbol = build_id_to_symbol_map(guide_var)
 
     # Prepare results with gene_name and target_name
     results = trans_results.copy()
     results["gene_name"] = results["gene_id"].map(id_to_symbol)
-    results["target_name"] = results["guide_id"].str.split("#").str[0]
+    results["target_name"] = results["guide_id"].map(
+        guide_meta.set_index("guide_id")["gene_name"].to_dict()
+    )
 
-    # Merge guide metadata to get label
-    guide_meta = guide_var.reset_index(drop=True)[["guide_id", "label"]].drop_duplicates()
-    results = results.merge(guide_meta, on="guide_id", how="left")
+    # Merge guide metadata to get targeting
+    results = results.merge(
+        guide_meta[["guide_id", "targeting"]], on="guide_id", how="left"
+    )
 
     # Get set of validated target genes
     validated_target_genes = set(validated_links["gene_symbol"].unique())
@@ -560,7 +625,7 @@ def build_validated_links_evaluation_table(
 
     positives = results[
         (results["is_validated_pair"]) &
-        (results["label"] != non_targeting_label) &
+        (results["targeting"] == True) &
         (results[pvalue_col].notna())
     ].copy()
     positives["validated_link"] = 1
@@ -569,7 +634,7 @@ def build_validated_links_evaluation_table(
     # Negative controls: non-targeting guides tested against validated target genes
     # -------------------------------------------------------------------------
     negatives = results[
-        (results["label"] == non_targeting_label) &
+        (results["targeting"] == False) &
         (results["gene_name"].isin(validated_target_genes)) &
         (results[pvalue_col].notna())
     ].copy()
@@ -771,11 +836,19 @@ def plot_trans_volcano(
             label=f"Background (n={len(background)})",
         )
 
-        # Overlay validated links if provided
-        if validated_links is not None and guide_var is not None:
+    # Overlay validated links if provided
+    if validated_links is not None and guide_var is not None:
+        if "gene_name" not in guide_var.columns:
+            logger.warning(
+                "guide.var is missing 'gene_name'; skipping validated link overlay."
+            )
+        else:
+            guide_meta = build_guide_meta(guide_var)
             id_to_symbol = build_id_to_symbol_map(guide_var)
             plot_data["gene_name"] = plot_data["gene_id"].map(id_to_symbol)
-            plot_data["target_name"] = plot_data["guide_id"].str.split("#").str[0]
+            plot_data["target_name"] = plot_data["guide_id"].map(
+                guide_meta.set_index("guide_id")["gene_name"].to_dict()
+            )
 
             # Find validated pairs
             validated_pairs = set(zip(validated_links["guide_target"], validated_links["gene_symbol"]))
@@ -820,14 +893,14 @@ def plot_per_guide_trans_distribution(
     per_guide_summary: pd.DataFrame,
     outdir: str,
     prefix: str = "trans",
-    label_col: str = "label",
+    label_col: str = "targeting",
 ) -> None:
     """
-    Plot distribution of n_significant_trans per guide, colored by guide label.
+    Plot distribution of n_significant_trans per guide, colored by guide type.
 
     Two panels:
-      1. Histogram of n_significant_trans, colored by label
-      2. Boxplot of n_significant_trans by label category
+      1. Histogram of n_significant_trans, colored by guide type
+      2. Boxplot of n_significant_trans by guide type
 
     Parameters
     ----------
@@ -838,7 +911,7 @@ def plot_per_guide_trans_distribution(
     prefix : str
         Filename prefix.
     label_col : str
-        Column for coloring.
+        Column for coloring (defaults to "targeting").
     """
     plot_data = per_guide_summary.dropna(subset=["n_significant_trans"]).copy()
     if len(plot_data) == 0:
@@ -875,7 +948,7 @@ def plot_per_guide_trans_distribution(
         else:
             sns.boxplot(y=plot_data["n_significant_trans"], ax=ax)
 
-        ax.set_xlabel("Guide Label")
+        ax.set_xlabel("Guide Type")
         ax.set_ylabel("Number of Significant Trans Effects")
         ax.set_title("Trans Effects by Guide Type")
 
@@ -899,7 +972,7 @@ def run_trans_qc(
     pvalue_col: str = "p_value",
     pval_threshold: float = 0.05,
     fdr_method: str = "fdr_bh",
-    non_targeting_label: str = "non_targeting",
+    non_targeting_name: str = "non-targeting",
     n_background: int = 10000,
     prefix: str = "trans",
 ) -> None:
@@ -927,8 +1000,9 @@ def run_trans_qc(
     fdr_method : str
         Multiple testing correction method: "fdr_bh" (Benjamini-Hochberg),
         "bonferroni", or "none" (no correction).
-    non_targeting_label : str
-        Value in guide.var["label"] for non-targeting guides.
+    non_targeting_name : str
+        Value in guide.var["intended_target_name"] used for non-targeting guides if
+        guide.var["targeting"] is missing or non-boolean.
     n_background : int
         Number of background points for volcano plot.
     prefix : str
@@ -969,11 +1043,12 @@ def run_trans_qc(
         trans_results, guide.var,
         log2fc_col=log2fc_col, pvalue_col=pvalue_col_adj,
         pval_threshold=pval_threshold,
+        non_targeting_name=non_targeting_name,
     )
     logger.info(f"Computed per-guide metrics for {len(per_guide_summary)} guides")
 
     # Compute overall metrics
-    metrics = compute_overall_trans_metrics(per_guide_summary, non_targeting_label=non_targeting_label)
+    metrics = compute_overall_trans_metrics(per_guide_summary, non_targeting_name=non_targeting_name)
     metrics["fdr_method"] = fdr_method
 
     # -------------------------------------------------------------------------
@@ -988,7 +1063,7 @@ def run_trans_qc(
             eval_table = build_validated_links_evaluation_table(
                 trans_results, guide.var, validated_links,
                 pvalue_col=pvalue_col,
-                non_targeting_label=non_targeting_label,
+                non_targeting_name=non_targeting_name,
             )
 
             if len(eval_table) > 0:
@@ -1006,8 +1081,11 @@ def run_trans_qc(
                 # Save validated links results
                 validated_results = trans_results.copy()
                 id_to_symbol = build_id_to_symbol_map(guide.var)
+                guide_meta = build_guide_meta(guide.var, non_targeting_name=non_targeting_name)
                 validated_results["gene_name"] = validated_results["gene_id"].map(id_to_symbol)
-                validated_results["target_name"] = validated_results["guide_id"].str.split("#").str[0]
+                validated_results["target_name"] = validated_results["guide_id"].map(
+                    guide_meta.set_index("guide_id")["gene_name"].to_dict()
+                )
 
                 validated_pairs = set(zip(validated_links["guide_target"], validated_links["gene_symbol"]))
                 validated_mask = validated_results.apply(
@@ -1053,21 +1131,28 @@ def run_trans_qc(
 
     # Get gene modality for tested gene symbol lookup
     gene = mdata.mod["gene"]
-    gene_id_to_symbol = gene.var["symbol"].to_dict()
+    if "symbol" in gene.var.columns:
+        gene_id_to_symbol = gene.var["symbol"].to_dict()
+    elif "gene_name" in gene.var.columns:
+        gene_id_to_symbol = gene.var["gene_name"].to_dict()
+    else:
+        gene_id_to_symbol = {}
 
     # Guide target: extract symbol from guide_id, get ID from guide.var
     trans_results_annotated["guide_target_symbol"] = trans_results_annotated["guide_id"].str.split("#").str[0]
 
-    # Build symbol -> ID mapping from guide.var for guide targets
-    guide_symbol_to_id = guide.var.set_index("gene_name")["intended_target_name"].to_dict()
-    trans_results_annotated["guide_target_id"] = trans_results_annotated["guide_target_symbol"].map(guide_symbol_to_id)
+    guide_meta = build_guide_meta(guide.var, non_targeting_name=non_targeting_name)
+    guide_target_id_map = guide_meta.set_index("guide_id")["intended_target_name"].to_dict()
+    trans_results_annotated["guide_target_id"] = trans_results_annotated["guide_id"].map(guide_target_id_map)
+    if "gene_name" in guide_meta.columns:
+        guide_target_symbol_map = guide_meta.set_index("guide_id")["gene_name"].to_dict()
+        trans_results_annotated["guide_target_symbol"] = trans_results_annotated["guide_id"].map(guide_target_symbol_map)
 
     # Tested gene: rename gene_id for clarity, add symbol from gene.var
     trans_results_annotated = trans_results_annotated.rename(columns={"gene_id": "tested_gene_id"})
     trans_results_annotated["tested_gene_symbol"] = trans_results_annotated["tested_gene_id"].map(gene_id_to_symbol)
 
-    # Merge guide label
-    guide_meta = guide.var.reset_index(drop=True)[["guide_id", "label"]].drop_duplicates()
+    # Merge guide metadata
     trans_results_annotated = trans_results_annotated.merge(guide_meta, on="guide_id", how="left")
 
     # Add significant column
@@ -1078,7 +1163,7 @@ def run_trans_qc(
         "guide_id",
         "guide_target_id", "guide_target_symbol",
         "tested_gene_id", "tested_gene_symbol",
-        "label",
+        "targeting",
         log2fc_col, pvalue_col, pvalue_col_adj, "significant"
     ]
     output_cols = [c for c in output_cols if c in trans_results_annotated.columns]
@@ -1171,8 +1256,11 @@ def parse_args() -> argparse.Namespace:
              "Options: 'fdr_bh' (Benjamini-Hochberg FDR), 'bonferroni', 'none'."
     )
     parser.add_argument(
-        "--non-targeting-label", default="non_targeting",
-        help="Value in guide.var['label'] for non-targeting guides (default: 'non_targeting')."
+        "--non-targeting-label", default="non-targeting",
+        help=(
+            "Value in guide.var['intended_target_name'] used for non-targeting guides when "
+            "guide.var['targeting'] is missing or non-boolean (default: 'non-targeting')."
+        ),
     )
     parser.add_argument(
         "--n-background", type=int, default=10000,
@@ -1197,7 +1285,7 @@ if __name__ == "__main__":
         pvalue_col=args.pvalue_col,
         pval_threshold=args.pval_threshold,
         fdr_method=args.fdr_method,
-        non_targeting_label=args.non_targeting_label,
+        non_targeting_name=args.non_targeting_label,
         n_background=args.n_background,
         prefix=args.prefix,
     )

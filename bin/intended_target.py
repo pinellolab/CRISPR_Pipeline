@@ -16,15 +16,14 @@ Data structures used:
       Columns: guide_id, gene_id, sceptre_log2_fc, sceptre_p_value,
                perturbo_log2_fc, perturbo_p_value, ...
   - guide.var: Per-guide metadata
-      Key columns: guide_id, intended_target_name, gene_name, label
+      Key columns: guide_id, intended_target_name, gene_name, targeting
   - guide.layers["guide_assignment"]: Binary matrix (cells x guides)
   - gene.X or gene.layers[layer]: Gene expression matrix
 
 Processing steps:
   1. Load trans_per_guide_results from mdata.uns
-  2. Map gene_id to gene_name using guide.var["intended_target_name"] -> "gene_name"
-  3. Extract target name from guide_id (e.g., "CD81#strong" -> "CD81")
-  4. Filter to "intended target" tests where gene_name == target_name
+  2. Map intended_target_name from guide.var into results via guide_id
+  3. Filter to "intended target" tests where gene_id == intended_target_name
   5. Compute knockdown metrics (strong knockdowns, significant tests)
   6. Compute AUROC/AUPRC using targeting vs non-targeting guides
   7. Generate volcano plots, ROC/PR curves, and summary tables
@@ -49,7 +48,7 @@ import argparse
 import logging
 import os
 import sys
-from typing import Optional, Literal, Tuple, List
+from typing import Tuple, List
 
 import matplotlib
 matplotlib.use("Agg")
@@ -74,29 +73,67 @@ logging.basicConfig(
 sns.set_style("white")
 
 
-def build_intended_target_map(guide_var: pd.DataFrame) -> pd.Series:
-    """
-    Build a mapping from intended_target_name (gene ID) to gene_name (symbol).
+def _ensure_guide_id_column(guide_var: pd.DataFrame) -> pd.DataFrame:
+    """Return guide.var with an explicit guide_id column."""
+    if "guide_id" in guide_var.columns:
+        return guide_var.reset_index(drop=True)
+    return guide_var.reset_index().rename(columns={"index": "guide_id"})
 
-    Parameters
-    ----------
-    guide_var : pd.DataFrame
-        guide.var DataFrame with columns "intended_target_name" and "gene_name".
 
-    Returns
-    -------
-    pd.Series
-        Index = intended_target_name, values = gene_name.
-        Duplicates are dropped (keeps first).
+def _coerce_targeting_column(
+    guide_meta: pd.DataFrame,
+    non_targeting_name: str = "non-targeting",
+) -> pd.Series:
+    """Normalize targeting metadata to boolean, with intended_target_name fallback."""
+    if "targeting" in guide_meta.columns:
+        def _to_bool(val):
+            if isinstance(val, (bool, np.bool_)):
+                return bool(val)
+            text = str(val).strip().upper()
+            if text == "TRUE":
+                return True
+            if text == "FALSE":
+                return False
+            return np.nan
+
+        targeting = guide_meta["targeting"].map(_to_bool)
+        if "intended_target_name" in guide_meta.columns:
+            fallback = guide_meta["intended_target_name"].astype(str) != non_targeting_name
+            targeting = targeting.where(~pd.isna(targeting), fallback)
+        return targeting
+
+    if "intended_target_name" not in guide_meta.columns:
+        raise ValueError("guide.var must contain 'targeting' or 'intended_target_name'")
+    return guide_meta["intended_target_name"].astype(str) != non_targeting_name
+
+
+def build_guide_meta(
+    guide_var: pd.DataFrame,
+    non_targeting_name: str = "non-targeting",
+) -> pd.DataFrame:
     """
-    if "intended_target_name" not in guide_var.columns:
+    Build guide metadata with required columns for intended target QC.
+
+    Required columns:
+      - guide_id
+      - intended_target_name
+    Optional columns:
+      - gene_name
+      - targeting (normalized to boolean)
+    """
+    guide_meta = _ensure_guide_id_column(guide_var)
+    if "intended_target_name" not in guide_meta.columns:
         raise ValueError("guide.var must have 'intended_target_name' column")
-    if "gene_name" not in guide_var.columns:
-        raise ValueError("guide.var must have 'gene_name' column")
 
-    id_map = guide_var.set_index("intended_target_name")["gene_name"]
-    id_map = id_map[~id_map.index.duplicated(keep="first")]
-    return id_map
+    guide_meta["targeting"] = _coerce_targeting_column(
+        guide_meta, non_targeting_name=non_targeting_name
+    )
+
+    keep_cols = ["guide_id", "intended_target_name", "targeting"]
+    if "gene_name" in guide_meta.columns:
+        keep_cols.append("gene_name")
+
+    return guide_meta[keep_cols].drop_duplicates(subset=["guide_id"])
 
 
 # ---------------------------------------------------------------------
@@ -203,49 +240,48 @@ def filter_to_intended_targets(
     guide_var: pd.DataFrame,
     log2fc_col: str = "log2_fc",
     pvalue_col: str = "p_value",
+    non_targeting_name: str = "non-targeting",
 ) -> pd.DataFrame:
     """
     Filter trans results to only intended target tests (guide targets its intended gene).
 
     Processing steps:
-      1. Map gene_id to gene_name using guide.var
-      2. Extract target_name from guide_id (e.g., "CD81#strong" -> "CD81")
-      3. Keep rows where gene_name == target_name
+      1. Map intended_target_name from guide.var into results via guide_id
+      2. Keep rows where gene_id == intended_target_name
 
     Parameters
     ----------
     trans_results : pd.DataFrame
         Trans results with guide_id, gene_id columns.
     guide_var : pd.DataFrame
-        guide.var with intended_target_name and gene_name columns.
+        guide.var with intended_target_name (and optionally gene_name, targeting).
     log2fc_col : str
         Column name for log2 fold change.
     pvalue_col : str
         Column name for p-value.
+    non_targeting_name : str
+        Intended_target_name value used for non-targeting guides if targeting is missing.
 
     Returns
     -------
     pd.DataFrame
-        Filtered results with added columns: gene_name, target_name.
+        Filtered results merged with guide metadata.
     """
-    # Build gene ID -> gene name mapping
-    id_map = build_intended_target_map(guide_var)
+    guide_meta = build_guide_meta(guide_var, non_targeting_name=non_targeting_name)
 
-    # Add gene_name column by mapping gene_id
+    # Map intended_target_name from guide metadata
+    intended_map = guide_meta.set_index("guide_id")["intended_target_name"].to_dict()
+
     results = trans_results.copy()
-    results["gene_name"] = results["gene_id"].map(id_map)
-
-    # Extract target_name from guide_id (format: "TARGET#variant" -> "TARGET")
-    results["target_name"] = results["guide_id"].str.split("#").str[0]
+    results["intended_target_name"] = results["guide_id"].map(intended_map)
 
     # Filter to intended targets only
-    intended = results[results["gene_name"] == results["target_name"]].copy()
+    intended = results[results["gene_id"] == results["intended_target_name"]].copy()
 
     # Deduplicate by guide_id + gene_id
     intended = intended.drop_duplicates(subset=["guide_id", "gene_id"])
 
-    # Merge with full guide metadata
-    guide_meta = guide_var.reset_index(drop=True)
+    # Merge with guide metadata
     intended = guide_meta.merge(
         intended[["guide_id", "gene_id", log2fc_col, pvalue_col]],
         on="guide_id",
@@ -330,7 +366,7 @@ def build_evaluation_table(
     trans_results: pd.DataFrame,
     guide_var: pd.DataFrame,
     pvalue_col: str = "p_value",
-    non_targeting_label: str = "non_targeting",
+    non_targeting_name: str = "non-targeting",
     random_state: int = 42,
 ) -> pd.DataFrame:
     """
@@ -355,11 +391,12 @@ def build_evaluation_table(
         Trans test results containing all guide-gene pairs tested.
         Must have columns: guide_id, gene_id, and the p-value column.
     guide_var : pd.DataFrame
-        guide.var with columns: guide_id, intended_target_name, gene_name, label.
+        guide.var with columns: guide_id, intended_target_name (and optionally targeting).
     pvalue_col : str
         Column containing p-values.
-    non_targeting_label : str
-        Value in guide.var["label"] indicating non-targeting guides.
+    non_targeting_name : str
+        Value in guide.var["intended_target_name"] used for non-targeting guides if
+        targeting is missing or non-boolean.
     random_state : int
         Random seed for balanced sampling.
 
@@ -368,40 +405,34 @@ def build_evaluation_table(
     pd.DataFrame
         Evaluation table with columns: guide_id, gene_id, p_value, direct_target.
     """
-    # Build gene ID -> gene name mapping
-    id_map = build_intended_target_map(guide_var)
+    guide_meta = build_guide_meta(guide_var, non_targeting_name=non_targeting_name)
 
-    # Prepare results with gene_name and target_name
+    intended_map = guide_meta.set_index("guide_id")["intended_target_name"].to_dict()
+    targeting_map = guide_meta.set_index("guide_id")["targeting"].to_dict()
+
     results = trans_results.copy()
-    results["gene_name"] = results["gene_id"].map(id_map)
-    results["target_name"] = results["guide_id"].str.split("#").str[0]
-
-    # Merge guide metadata to get label
-    # Handle case where guide_id is both index and column
-    guide_meta = guide_var.reset_index(drop=True)[["guide_id", "label"]].drop_duplicates()
-    results = results.merge(guide_meta, on="guide_id", how="left")
-
-    # Get set of all intended target genes (gene symbols)
-    intended_target_genes = set(guide_var["gene_name"].dropna().unique())
+    results["intended_target_name"] = results["guide_id"].map(intended_map)
+    results["targeting"] = results["guide_id"].map(targeting_map)
 
     # -------------------------------------------------------------------------
     # Positive controls: guide tests its own intended target gene
-    # gene_name == target_name AND label != non_targeting (targeting guides)
+    # gene_id == intended_target_name
     # -------------------------------------------------------------------------
     positives = results[
-        (results["gene_name"] == results["target_name"]) &
-        (results["label"] != non_targeting_label) &
+        (results["gene_id"] == results["intended_target_name"]) &
         (results[pvalue_col].notna())
     ].copy()
     positives["direct_target"] = 1
 
     # -------------------------------------------------------------------------
     # Negative controls: non-targeting guides tested against intended target genes
-    # label == non_targeting AND gene_name is in intended_target_genes
+    # targeting == False AND gene_id is in all targeting intended_target_name values
     # -------------------------------------------------------------------------
+    all_targets = results.loc[results["targeting"] == True, "intended_target_name"].dropna().unique()
+
     negatives = results[
-        (results["label"] == non_targeting_label) &
-        (results["gene_name"].isin(intended_target_genes)) &
+        (results["targeting"] == False) &
+        (results["gene_id"].isin(all_targets)) &
         (results[pvalue_col].notna())
     ].copy()
     negatives["direct_target"] = 0
@@ -541,7 +572,6 @@ def plot_volcano(
     prefix: str = "intended_target",
     log2fc_col: str = "log2_fc",
     pvalue_col: str = "p_value",
-    label_col: str = "label",
     pval_threshold: float = 0.05,
     n_label: int = 10,
 ) -> None:
@@ -550,7 +580,6 @@ def plot_volcano(
 
     X-axis: log2 fold change
     Y-axis: -log10(p-value)
-    Points colored by guide label (e.g., positive_control, target, non_targeting)
     Top N most significant guides are labeled.
 
     Parameters
@@ -563,8 +592,6 @@ def plot_volcano(
         Prefix for output filename.
     log2fc_col, pvalue_col : str
         Column names for fold change and p-value.
-    label_col : str
-        Column for coloring points.
     pval_threshold : float
         Significance threshold for horizontal line.
     n_label : int
@@ -581,16 +608,7 @@ def plot_volcano(
     with sns.plotting_context("talk"):
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        # Scatter plot colored by label
-        if label_col in plot_data.columns:
-            plot_data[label_col] = plot_data[label_col].astype(str)
-            sns.scatterplot(
-                data=plot_data, x=log2fc_col, y="neg_log10_pval",
-                hue=label_col, alpha=0.7, ax=ax,
-            )
-            ax.legend(title="Label", bbox_to_anchor=(1.02, 1), loc="upper left")
-        else:
-            ax.scatter(plot_data[log2fc_col], plot_data["neg_log10_pval"], alpha=0.7)
+        ax.scatter(plot_data[log2fc_col], plot_data["neg_log10_pval"], alpha=0.7)
 
         # Reference lines
         ax.axhline(-np.log10(pval_threshold), color="red", linestyle="--", alpha=0.5)
@@ -620,7 +638,6 @@ def plot_log2fc_distribution(
     outdir: str,
     prefix: str = "intended_target",
     log2fc_col: str = "log2_fc",
-    label_col: str = "label",
 ) -> None:
     """
     Plot distribution of log2 fold changes for intended targets.
@@ -633,14 +650,7 @@ def plot_log2fc_distribution(
     with sns.plotting_context("talk"):
         fig, ax = plt.subplots(figsize=(10, 5))
 
-        if label_col in plot_data.columns:
-            plot_data[label_col] = plot_data[label_col].astype(str)
-            sns.histplot(
-                data=plot_data, x=log2fc_col, hue=label_col,
-                bins=50, ax=ax, element="step", stat="count",
-            )
-        else:
-            sns.histplot(plot_data[log2fc_col], bins=50, ax=ax)
+        sns.histplot(plot_data[log2fc_col], bins=50, ax=ax)
 
         # Reference lines
         ax.axvline(0, color="grey", linestyle="--", alpha=0.5)
@@ -674,7 +684,7 @@ def run_intended_target_qc(
     pvalue_col: str = "p_value",
     fc_threshold: float = 0.4,
     pval_threshold: float = 0.05,
-    non_targeting_label: str = "non_targeting",
+    non_targeting_name: str = "non-targeting",
     prefix: str = "intended_target",
 ) -> None:
     """
@@ -700,8 +710,9 @@ def run_intended_target_qc(
         Fold change threshold for strong knockdown (default 0.4 = 60% knockdown).
     pval_threshold : float
         P-value threshold for significance.
-    non_targeting_label : str
-        Value in guide.var["label"] identifying non-targeting guides.
+    non_targeting_name : str
+        Value in guide.var["intended_target_name"] used for non-targeting guides if
+        guide.var["targeting"] is missing or non-boolean.
     prefix : str
         Prefix for output filenames.
     """
@@ -733,6 +744,7 @@ def run_intended_target_qc(
     intended = filter_to_intended_targets(
         trans_results, guide.var,
         log2fc_col=log2fc_col, pvalue_col=pvalue_col,
+        non_targeting_name=non_targeting_name,
     )
     logger.info(f"Filtered to {len(intended)} intended target tests")
 
@@ -749,7 +761,7 @@ def run_intended_target_qc(
     eval_table = build_evaluation_table(
         trans_results, guide.var,
         pvalue_col=pvalue_col,
-        non_targeting_label=non_targeting_label,
+        non_targeting_name=non_targeting_name,
     )
 
     if len(eval_table) > 0:
@@ -777,7 +789,14 @@ def run_intended_target_qc(
 
     # Save full intended target results
     results_path = os.path.join(outdir, f"{prefix}_results.tsv")
-    output_cols = ["guide_id", "gene_name", "label", log2fc_col, pvalue_col]
+    output_cols = [
+        "guide_id",
+        "intended_target_name",
+        "gene_name",
+        "targeting",
+        log2fc_col,
+        pvalue_col,
+    ]
     output_cols = [c for c in output_cols if c in intended.columns]
     intended[output_cols].to_csv(results_path, sep="\t", index=False)
     logger.info(f"Saved results to {results_path}")
@@ -848,8 +867,11 @@ def parse_args() -> argparse.Namespace:
         help="P-value threshold for significance (default: 0.05)."
     )
     parser.add_argument(
-        "--non-targeting-label", default="non_targeting",
-        help="Value in guide.var['label'] for non-targeting guides (default: 'non_targeting')."
+        "--non-targeting-label", default="non-targeting",
+        help=(
+            "Value in guide.var['intended_target_name'] used for non-targeting guides when "
+            "guide.var['targeting'] is missing or non-boolean (default: 'non-targeting')."
+        ),
     )
     parser.add_argument(
         "--prefix", default="intended_target",
@@ -869,6 +891,6 @@ if __name__ == "__main__":
         pvalue_col=args.pvalue_col,
         fc_threshold=args.fc_threshold,
         pval_threshold=args.pval_threshold,
-        non_targeting_label=args.non_targeting_label,
+        non_targeting_name=args.non_targeting_label,
         prefix=args.prefix,
     )
