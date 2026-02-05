@@ -35,6 +35,201 @@ def new_block(modality, description, subject, value_display, highlighted=False, 
     }
     return pd.DataFrame(data)
 
+
+def _safe_read_tsv(path):
+    if not path or not os.path.exists(path):
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(path, sep="\t")
+    except Exception:
+        return pd.DataFrame()
+
+
+def _get_all_row(metrics_df):
+    if metrics_df.empty:
+        return None
+    if "batch" in metrics_df.columns:
+        all_rows = metrics_df[metrics_df["batch"].astype(str) == "all"]
+        if not all_rows.empty:
+            return all_rows.iloc[0]
+    return metrics_df.iloc[0]
+
+
+def _collect_images(base_dir, image_specs):
+    images = []
+    descs = []
+    for fname, desc in image_specs:
+        fpath = os.path.join(base_dir, fname)
+        if os.path.exists(fpath):
+            images.append(fpath)
+            descs.append(desc)
+    return images, descs
+
+
+def collect_additional_qc_blocks(additional_qc_dir):
+    blocks = []
+    if not additional_qc_dir or not os.path.exists(additional_qc_dir):
+        return blocks
+
+    # Gene QC (scRNA)
+    gene_dir = os.path.join(additional_qc_dir, "gene")
+    gene_metrics = _safe_read_tsv(os.path.join(gene_dir, "gene_metrics.tsv"))
+    gene_row = _get_all_row(gene_metrics)
+    gene_highlight = ""
+    if gene_row is not None:
+        parts = []
+        if "n_cells" in gene_row:
+            parts.append(f"Cells: {human_format(gene_row['n_cells'])}")
+        if "umi_median" in gene_row:
+            parts.append(f"Median UMIs: {gene_row['umi_median']:.0f}")
+        if "genes_median" in gene_row:
+            parts.append(f"Median genes: {gene_row['genes_median']:.0f}")
+        if "mito_median" in gene_row:
+            parts.append(f"Median mito%: {gene_row['mito_median']:.2f}%")
+        gene_highlight = ", ".join(parts)
+    gene_images, gene_descs = _collect_images(
+        gene_dir,
+        [
+            ("gene_knee_plot.png", "Knee plot of gene UMI counts."),
+            ("gene_histograms.png", "Distributions of gene QC metrics (all cells)."),
+            ("gene_histograms_by_batch.png", "Distributions of gene QC metrics by batch/lane."),
+            ("gene_cells_per_batch.png", "Number of cells per batch/lane."),
+        ],
+    )
+    if not gene_metrics.empty or gene_images:
+        blocks.append(
+            new_block(
+                "scRNA",
+                "Gene mapping QC",
+                "Gene Mapping QC",
+                gene_highlight,
+                bool(gene_highlight),
+                table=gene_metrics,
+                table_description="Gene mapping QC metrics (overall + per batch)",
+                image=gene_images,
+                image_description=gene_descs,
+            )
+        )
+
+    # Guide QC
+    guide_dir = os.path.join(additional_qc_dir, "guide")
+    guide_metrics = _safe_read_tsv(os.path.join(guide_dir, "guide_metrics.tsv"))
+    guide_row = _get_all_row(guide_metrics)
+    guide_highlight = ""
+    if guide_row is not None:
+        parts = []
+        if "n_cells" in guide_row:
+            parts.append(f"Cells: {human_format(guide_row['n_cells'])}")
+        if "frac_cells_with_guide" in guide_row:
+            parts.append(f"% cells w/ guide: {guide_row['frac_cells_with_guide']*100:.1f}%")
+        if "guides_per_cell_mean" in guide_row:
+            parts.append(f"Mean guides/cell: {guide_row['guides_per_cell_mean']:.2f}")
+        if "guide_umi_median" in guide_row:
+            parts.append(f"Median guide UMIs: {guide_row['guide_umi_median']:.0f}")
+        guide_highlight = ", ".join(parts)
+    guide_images, guide_descs = _collect_images(
+        guide_dir,
+        [
+            ("guide_knee_plot.png", "Knee plot of guide UMI counts."),
+            ("guide_histograms.png", "Distributions of guide QC metrics (all cells)."),
+            ("guide_histograms_by_batch.png", "Distributions of guide QC metrics by batch/lane."),
+        ],
+    )
+    if not guide_metrics.empty or guide_images:
+        blocks.append(
+            new_block(
+                "Guide",
+                "Guide mapping QC",
+                "Guide Mapping QC",
+                guide_highlight,
+                bool(guide_highlight),
+                table=guide_metrics,
+                table_description="Guide mapping QC metrics (overall + per batch)",
+                image=guide_images,
+                image_description=guide_descs,
+            )
+        )
+
+    # Intended target QC
+    intended_dir = os.path.join(additional_qc_dir, "intended_target")
+    intended_metrics = _safe_read_tsv(os.path.join(intended_dir, "intended_target_metrics.tsv"))
+    intended_row = _get_all_row(intended_metrics)
+    intended_highlight = ""
+    if intended_row is not None:
+        parts = []
+        if "n_guides_tested" in intended_row:
+            parts.append(f"Guides tested: {human_format(intended_row['n_guides_tested'])}")
+        if "frac_strong_knockdowns" in intended_row:
+            parts.append(f"% strong KD: {intended_row['frac_strong_knockdowns']*100:.1f}%")
+        if "frac_significant" in intended_row:
+            parts.append(f"% significant: {intended_row['frac_significant']*100:.1f}%")
+        if "auroc" in intended_row and pd.notna(intended_row["auroc"]):
+            parts.append(f"AUROC: {intended_row['auroc']:.2f}")
+        intended_highlight = ", ".join(parts)
+    intended_images, intended_descs = _collect_images(
+        intended_dir,
+        [
+            ("intended_target_volcano.png", "Volcano plot of intended target effects."),
+            ("intended_target_log2fc_distribution.png", "Distribution of intended target log2FC."),
+            ("intended_target_roc_pr_curves.png", "ROC/PR curves for intended vs non-targeting."),
+        ],
+    )
+    if not intended_metrics.empty or intended_images:
+        blocks.append(
+            new_block(
+                "Inference",
+                "Intended target QC",
+                "Intended Target QC",
+                intended_highlight,
+                bool(intended_highlight),
+                table=intended_metrics,
+                table_description="Intended target QC metrics",
+                image=intended_images,
+                image_description=intended_descs,
+            )
+        )
+
+    # Trans QC
+    trans_dir = os.path.join(additional_qc_dir, "trans")
+    trans_metrics = _safe_read_tsv(os.path.join(trans_dir, "trans_metrics.tsv"))
+    trans_row = _get_all_row(trans_metrics)
+    trans_highlight = ""
+    if trans_row is not None:
+        parts = []
+        if "n_guides_tested" in trans_row:
+            parts.append(f"Guides tested: {human_format(trans_row['n_guides_tested'])}")
+        if "median_significant_per_guide_targeting" in trans_row:
+            parts.append(f"Median sig/guide: {trans_row['median_significant_per_guide_targeting']:.1f}")
+        if "total_significant_tests" in trans_row:
+            parts.append(f"Total sig tests: {human_format(trans_row['total_significant_tests'])}")
+        if "auroc" in trans_row and pd.notna(trans_row["auroc"]):
+            parts.append(f"AUROC: {trans_row['auroc']:.2f}")
+        trans_highlight = ", ".join(parts)
+    trans_images, trans_descs = _collect_images(
+        trans_dir,
+        [
+            ("trans_volcano.png", "Volcano plot of trans effects."),
+            ("trans_per_guide_distribution.png", "Distribution of trans effects per guide."),
+            ("trans_roc_pr_curves.png", "ROC/PR curves for validated trans links."),
+        ],
+    )
+    if not trans_metrics.empty or trans_images:
+        blocks.append(
+            new_block(
+                "Inference",
+                "Trans-regulatory QC",
+                "Trans QC",
+                trans_highlight,
+                bool(trans_highlight),
+                table=trans_metrics,
+                table_description="Trans-regulatory QC metrics",
+                image=trans_images,
+                image_description=trans_descs,
+            )
+        )
+
+    return blocks
+
 def create_json_df(json_dir):
     ## prepare for json files
 
@@ -214,7 +409,7 @@ def collect_evaluation_plots(use_default=False):
 
     return network_plots, network_descs, volcano_plots, volcano_descs,precission_plots ,precission_desc, bar_plot_direct_x_control_plots ,bar_plot_direct_x_control_desc
 
-def create_dashboard_df(guide_fq_tbl, mudata_path, gene_ann_path, filtered_ann_path, guide_ann_path, use_default=False):
+def create_dashboard_df(guide_fq_tbl, mudata_path, gene_ann_path, filtered_ann_path, guide_ann_path, additional_qc_dir=None, use_default=False):
     ### Create df for cell statistics
     guide_fq_table = pd.read_csv(guide_fq_tbl)
     mudata = mu.read(mudata_path)
@@ -247,34 +442,27 @@ def create_dashboard_df(guide_fq_tbl, mudata_path, gene_ann_path, filtered_ann_p
     inference_blocks = create_inference_blocks(mudata, use_default)
 
     ### Create guide assignment df
-    positive_calls = guide_assignment_matrix > 0
-    number_of_guide_barcodes_with_positive_call = (positive_calls.sum(axis=1) > 0).sum()
     cell_ids = mudata.mod['guide'].obs.index
     guide_ids = mudata.mod['guide'].var.index
     df_guide_assignment = pd.DataFrame.sparse.from_spmatrix(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
-    sgRNA_frequencies = (df_guide_assignment > 0).sum(axis=0)
-
-
-
+    sgRNA_frequencies = df_guide_assignment.sum(axis=0)
     df_sgRNA_frequencies = sgRNA_frequencies.reset_index()
     df_sgRNA_frequencies.columns = ['sgRNA', 'Frequency']
-    #median_frequency = df_sgRNA_frequencies['Frequency'].median()
-    median_frequency = pd.to_numeric(
-    (df_sgRNA_frequencies['Frequency']
-        .pipe(lambda s: s.astype(pd.SparseDtype('int8', fill_value=0)) if isinstance(s.dtype, pd.SparseDtype) and s.dtype.subtype is bool else s)
-        .pipe(lambda s: s.sparse.to_dense() if isinstance(s.dtype, pd.SparseDtype) else s)
-        .pipe(lambda s: s.astype('int8') if s.dtype == bool else s)),
-    errors='coerce'
-    ).median()
-        
-    gs_highlight=f"Number of Guide barcodes with a positive sgRNA call: {human_format(number_of_guide_barcodes_with_positive_call)}, The median of cells with a positive sgRNA call is: {median_frequency}"
+    freq_series = df_sgRNA_frequencies['Frequency']
+    if isinstance(freq_series.dtype, pd.SparseDtype):
+        freq_series = freq_series.sparse.to_dense()
+    df_sgRNA_frequencies['Frequency'] = pd.to_numeric(freq_series, errors='coerce').fillna(0.0)
+    total_sgrna_assignments = df_sgRNA_frequencies['Frequency'].sum()
+    median_sgrna_frequency = df_sgRNA_frequencies['Frequency'].median()
+
+    gs_highlight=f"Total sgRNA assignment values across all guides: {human_format(total_sgrna_assignments)}, Median assignment value per sgRNA: {human_format(median_sgrna_frequency)}"
 
     df_sgRNA_table = df_sgRNA_frequencies.copy()
-    df_sgRNA_table.columns = ['sgRNA', '# guide barcodes']
+    df_sgRNA_table.columns = ['sgRNA', 'Assignment sum']
     gs_img_df = new_block('Guide', '', 'Guide Assignment', gs_highlight, True, table=df_sgRNA_table,
-                    table_description='Number of guide barcodes with a positive sgRNA call',
+                    table_description='Sum of sgRNA assignment values per sgRNA',
                     image = ['figures/guides_hist_num_sgRNA.png'],
-                    image_description=['Histogram of the number of sgRNA represented per cell'])
+                    image_description=['Histogram of summed sgRNA assignment values per sgRNA'])
 
     ### Create inference visualization df
     ##mean guides/cell
@@ -303,13 +491,16 @@ def create_dashboard_df(guide_fq_tbl, mudata_path, gene_ann_path, filtered_ann_p
 
     inf_img_df = new_block('Inference', '', 'Visualization', iv_highlight, True, image=all_plots, image_description=all_descs)
 
+    ### Collect Additional QC blocks (optional)
+    qc_blocks = collect_additional_qc_blocks(additional_qc_dir)
+
     ### check guide seqspec check df
     guide_check_df = new_block("Guide", '', 'Fastq Overview', '', False, table = guide_fq_table,
                         table_description='Summary of Sequence Index: A summary of the positions where the Guide starts are mapped on the reads (Use to inspect or calibrate the position where the guide is supposed to be found in your SeqSpec File)',
                         image = ['guide_seqSpec_plots/seqSpec_check_plots.png'],
                         image_description= ['The frequency of each nucleotides along the Read 1 (Use to inspect the expected read parts with their expected signature) and Read 2 (Use to inspect the expected read parts with their expected signature)'])
 
-    return guide_check_df, cell_stats, gene_stats, rna_img_df, guide_img_df, inference_blocks, gs_img_df, inf_img_df
+    return guide_check_df, cell_stats, gene_stats, rna_img_df, guide_img_df, inference_blocks, gs_img_df, inf_img_df, qc_blocks
 
 def main():
     parser = argparse.ArgumentParser(description="Process JSON files and generate dashboard dataframes.")
@@ -319,6 +510,7 @@ def main():
     parser.add_argument('--gene_ann', required=True, help='Path to the gene anndata file')
     parser.add_argument('--gene_ann_filtered', required=True, help='Path to the gene filtered anndata file')
     parser.add_argument('--guide_ann', required=True, help='Path to the guide anndata file')
+    parser.add_argument('--additional_qc_dir', default=None, help='Path to Additional QC output directory')
     parser.add_argument('--default', action="store_true",
                       help="Process mudata with cis_per_guide_results and trans_per_guide_results instead of single test_results")
     parser.add_argument('--output', type=str, default='all_df.pkl', help='Path to output pickle file')
@@ -326,13 +518,24 @@ def main():
     args = parser.parse_args()
 
     json_df = create_json_df(args.json_dir)
-    guide_check_df, cell_stats, gene_stats, rna_img_df, guide_img_df, inference_blocks, gs_img_df, inf_img_df = create_dashboard_df(args.guide_fq_tbl, args.mudata, args.gene_ann, args.gene_ann_filtered, args.guide_ann, args.default)
+    guide_check_df, cell_stats, gene_stats, rna_img_df, guide_img_df, inference_blocks, gs_img_df, inf_img_df, qc_blocks = create_dashboard_df(
+        args.guide_fq_tbl,
+        args.mudata,
+        args.gene_ann,
+        args.gene_ann_filtered,
+        args.guide_ann,
+        args.additional_qc_dir,
+        args.default
+    )
 
     ## consider the order of modules
     json_df_sorted = json_df.sort_values(by='description', ascending=True)
 
     # Combine all dataframes, with inference_blocks being a list now
     df_list = [guide_check_df, cell_stats, gene_stats, json_df_sorted, rna_img_df, guide_img_df, inf_img_df, gs_img_df]
+
+    # Add QC blocks (if any)
+    df_list.extend(qc_blocks)
 
     # Add inference blocks to the list
     df_list.extend(inference_blocks)

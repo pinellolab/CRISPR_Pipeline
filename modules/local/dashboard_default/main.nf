@@ -23,6 +23,7 @@ process createDashboard_default {
         path guide_ann
         path ks_transcripts_out_dir_collected
         path ks_guide_out_dir_collected
+        path additional_qc_dir
         path figures_dir
         path evaluation_output_dir
         path css
@@ -31,7 +32,7 @@ process createDashboard_default {
         path controls_evaluation_output_dir
 
     output:
-        tuple path("evaluation_output"), path("figures"), path("guide_seqSpec_plots"), path("dashboard.html"), path("svg"), path("inference_mudata.h5mu")
+        tuple path("evaluation_output"), path("figures"), path("guide_seqSpec_plots"), path("additional_qc"), path("dashboard.html"), path("svg"), path("inference_mudata.h5mu")
 
     script:
         """
@@ -40,13 +41,14 @@ process createDashboard_default {
         [[ -e figures ]] && mv figures input_figures
         [[ -e evaluation_output ]] && mv evaluation_output input_evaluation_output
         [[ -e svg ]] && mv svg input_svg
+        [[ -e additional_qc ]] && mv additional_qc input_additional_qc
         [[ -e ${mudata} ]] && mv ${mudata} input_mudata.h5mu
         [[ -e plots ]] && mv plots input_controls_evaluation_output_dir
 
 
         # Create new output directories with actual content
         echo "=== CREATING OUTPUT DIRECTORIES ==="
-        mkdir -p guide_seqSpec_plots figures evaluation_output svg
+        mkdir -p guide_seqSpec_plots figures evaluation_output svg additional_qc
 
         # Copy content from renamed inputs to new outputs
         if [[ -L input_guide_seqSpec_plots ]]; then
@@ -60,6 +62,9 @@ process createDashboard_default {
         fi
         if [[ -L input_svg ]]; then
             cp -rL input_svg/* svg/ 2>/dev/null || true
+        fi
+        if [[ -L input_additional_qc ]]; then
+            cp -rL input_additional_qc/* additional_qc/ 2>/dev/null || true
         fi
         if [[ -f input_mudata.h5mu ]]; then
             cp -L input_mudata.h5mu inference_mudata.h5mu
@@ -75,10 +80,10 @@ process createDashboard_default {
         # Run scripts using the renamed input files
         process_json.py --output_dir json_dir
         create_dashboard_plots.py --mudata input_mudata.h5mu --output_dir figures
-        create_dashboard_df.py --json_dir json_dir --guide_fq_tbl ${guide_fq_tbl} --mudata input_mudata.h5mu --gene_ann ${gene_ann} --gene_ann_filtered ${gene_ann_filtered} --guide_ann ${guide_ann} --default
+        create_dashboard_df.py --json_dir json_dir --guide_fq_tbl ${guide_fq_tbl} --mudata input_mudata.h5mu --gene_ann ${gene_ann} --gene_ann_filtered ${gene_ann_filtered} --guide_ann ${guide_ann} --additional_qc_dir additional_qc --default
         create_dashboard.py --input all_df.pkl
 
         echo "=== FINAL OUTPUT SIZES ==="
-        du -sh guide_seqSpec_plots figures evaluation_output svg *.html *.h5mu 2>/dev/null || true
+        du -sh guide_seqSpec_plots figures evaluation_output svg additional_qc *.html *.h5mu 2>/dev/null || true
         """
 }
