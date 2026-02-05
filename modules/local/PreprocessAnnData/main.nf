@@ -10,6 +10,7 @@ process PreprocessAnnData {
     val min_cells
     val pct_mito
     val reference
+    val barcode_filter
 
     output:
     path "filtered_anndata.h5ad" , emit: filtered_anndata_rna
@@ -18,7 +19,7 @@ process PreprocessAnnData {
 
     script:
         """
-        preprocess_adata.py ${adata_rna} ${gname_rna} --min_genes ${min_genes} --min_cells ${min_cells} --pct_mito ${pct_mito} --reference ${reference}
+        preprocess_adata.py ${adata_rna} ${gname_rna} --min_genes ${min_genes} --min_cells ${min_cells} --pct_mito ${pct_mito} --reference ${reference} --barcode-filter ${barcode_filter}
         mv concatenated_adata.h5ad rna_concatenated_adata.h5ad
         """
 
