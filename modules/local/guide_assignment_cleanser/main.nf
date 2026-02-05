@@ -17,6 +17,7 @@ process guide_assignment_cleanser {
         export PATH=\$PATH:\$CMDSTAN/bin
         export TMPDIR='./tmp'
         mkdir -p ./tmp
+        cat /usr/local/lib/python3.11/site-packages/cleanser/configuration.py
         cleanser -i ${mudata_input} --posteriors-output ${mudata_input.simpleName}_output.h5mu --modality guide --${capture_method} --output-layer guide_assignment ${thresh_opt}
         """
 }

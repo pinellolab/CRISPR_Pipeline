@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import pandas as pd
+
 from Bio.Seq import Seq
 import crispr_ambiguous_mapping
 from importlib.metadata import version
@@ -8,6 +9,8 @@ import os
 import subprocess # Use subprocess for shell commands
 import anndata
 import numpy as np
+import dill as pickle
+import scipy.sparse as sp
 
 
 import numpy as np
@@ -59,28 +62,38 @@ def parse_seqspec_string(chemistry: str):
 # protospacer_start, protospacer_len, umi_start, umi_len, barcode_start, barcode_len = parse_seqspec_string(chemistry)
 
 
+
+
 def series_to_anndata(count_series: pd.Series, args) -> anndata.AnnData:
     """
     Convert a multi-indexed Series (CellBarcode, protospacer) to an AnnData object.
-
-    Parameters
-    ----------
-    count_series : pd.Series
-        Series with MultiIndex (CellBarcode, protospacer) and numeric values.
-
-    Returns
-    -------
-    adata : anndata.AnnData
-        AnnData object with cells as obs, protospacers as var, and counts as X.
     """
-    # Convert Series to DataFrame with cells as rows, protospacers as columns
+    # 1. Unstack and fill missing values
     df = count_series.unstack(level='protospacer').fillna(0)
+    
+    # 2. Load guide metadata and align columns
+    guide_df = pd.read_csv(str(args.guide_set_fn), sep='\t')
+    guide_list = guide_df['spacer'].values.tolist()
+    
+    # Ensure all guides are present in the dataframe columns
+    # This prevents errors if some guides have 0 counts across all cells
+    for guide in guide_list:
+        if guide not in df.columns:
+            df[guide] = 0
+            
+    df = df[guide_list]
 
-    # Create AnnData
-    adata = anndata.AnnData(X=df.values, obs=pd.DataFrame(index=df.index), var=pd.DataFrame(index=df.columns))
-    #print(adata.var)
-    #print (adata)
-    adata.var['guide_id'] = pd.read_csv(str(args.guide_set_fn), sep='\t')['guide_id'].values.tolist()
+    # 3. Create AnnData using a Sparse CSR Matrix
+    # We wrap df.values in sp.csr_matrix()
+    adata = anndata.AnnData(
+        X=sp.csr_matrix(df.values), 
+        obs=pd.DataFrame(index=df.index), 
+        var=pd.DataFrame(index=df.columns)
+    )
+
+    # 4. Add guide metadata
+    adata.var['guide_id'] = guide_df['guide_id'].values.tolist()
+    
     return adata
 
 def run_crispr_mapping(args):
@@ -104,9 +117,10 @@ def run_crispr_mapping(args):
     
     guide_whitelist_input_df = pd.DataFrame(guide_set_df["spacer"])
     guide_whitelist_input_df.columns = ["protospacer"]
-    print(f"Loaded {len(guide_whitelist_input_df)} unique protospacers from guide set.")
+    #print(f"Loaded {len(guide_whitelist_input_df)} unique protospacers from guide set.")
     #print ('forcing downsample REMOVE IT')
-    #args.downsample_reads = 10000_000
+    #args.downsample_reads = 100_000 #15_M is the minimal to work w/ quang dataset
+    #args.downsample_reads = 0
     # --- 2. Downsample FASTQ Files ---
     if args.downsample_reads > 0:
         print(f"Downsampling to {args.downsample_reads} read pairs...")
@@ -140,13 +154,14 @@ def run_crispr_mapping(args):
         whitelist_guide_reporter_df=guide_whitelist_input_df,
         fastq_r1_fns =r1_input ,
         fastq_r2_fns = r2_input,
-        # Protospacer parameters (R2)
-        protospacer_start_position=protospacer_start,
-        protospacer_length=protospacer_len,
-        is_protospacer_r1=False,
-        is_protospacer_header=False,
-        revcomp_protospacer=True,
-        protospacer_hamming_threshold_strict=args.hamming_threshold,
+
+        # Sample Barcode parameters (R1)
+        sample_barcode_start_position=barcode_start,
+        sample_barcode_length=barcode_len,
+        is_sample_barcode_r1=True,
+        is_sample_barcode_header=False,
+        revcomp_sample_barcode=False,
+
 
         # Guide UMI parameters (R1)
         guide_umi_start_position=umi_start,
@@ -155,18 +170,32 @@ def run_crispr_mapping(args):
         is_guide_umi_header=False,
         revcomp_guide_umi=False,
 
-        # Sample Barcode parameters (R1)
-        sample_barcode_start_position=barcode_start,
-        sample_barcode_length=barcode_len,
-        is_sample_barcode_r1=True,
-        is_sample_barcode_header=False,
-        revcomp_sample_barcode=False,
+        # Protospacer parameters (R2)
+        protospacer_start_position=protospacer_start,
+        protospacer_length=protospacer_len,
+        is_protospacer_r1=False,
+        is_protospacer_header=False,
+        revcomp_protospacer=False,
+        protospacer_hamming_threshold_strict=args.hamming_threshold,
+
         
         cores=args.cores
     )
     print ('starting saving')
     # --- 4. Save Results (Example) ---
+    with open('observed_guide_reporter_umi_counts_inferred.pkl', 'wb') as file:
+        pickle.dump(cellbarcode_crisprcorrect_results.observed_guide_reporter_umi_counts_inferred, file)
+
     cell_barcode_result = cellbarcode_crisprcorrect_results.all_match_set_whitelist_reporter_counter_series_results.protospacer_match.ambiguous_spread_umi_collapsed_counterseries
+    with open('quality_control_result.pkl', 'wb') as file:
+        pickle.dump(cellbarcode_crisprcorrect_results.quality_control_result, file)
+
+
+
+    
+ 
+    
+
 
     anndata_test = series_to_anndata(cell_barcode_result, args)
     os.makedirs(f'{args.output_prefix}/counts_unfiltered/', exist_ok=True)
