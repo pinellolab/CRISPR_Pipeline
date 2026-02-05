@@ -9,7 +9,7 @@ def get_perturbation_expression(
     gene_mod: str = "gene",
     gene_layer: Optional[str] = None,
     guide_assignment_layer: str = "guide_assignment",
-    non_targeting_label: str = "non_targeting",
+    non_targeting_label: str = "non-targeting",
 ) -> pd.DataFrame:
     """
     Compare gene expression between cells with a specific guide vs non-targeting controls.
@@ -37,7 +37,8 @@ def get_perturbation_expression(
     guide_assignment_layer : str
         Layer in guide modality containing binary assignment matrix.
     non_targeting_label : str
-        Value in guide.var["label"] marking non-targeting guides.
+        Value in guide.var["intended_target_name"] used for non-targeting guides if
+        guide.var["targeting"] is missing or non-boolean.
 
     Returns
     -------
@@ -61,8 +62,8 @@ def get_perturbation_expression(
         raise ValueError(f"guide_id '{guide_id}' not found in guide.var_names")
     if gene_id not in gene.var_names:
         raise ValueError(f"gene_id '{gene_id}' not found in gene.var_names")
-    if "label" not in guide.var.columns:
-        raise ValueError("guide.var must contain a 'label' column")
+    if "targeting" not in guide.var.columns and "intended_target_name" not in guide.var.columns:
+        raise ValueError("guide.var must contain 'targeting' or 'intended_target_name'")
 
     # -----------------------------------------------------------------
     # Get gene expression for all cells
@@ -84,17 +85,37 @@ def get_perturbation_expression(
     # Step 2: Find cells with any targeting guide
     # Step 3: Control = cells with NT guides but NO targeting guides
     # -----------------------------------------------------------------
+    def _to_bool(val):
+        if isinstance(val, bool):
+            return val
+        text = str(val).strip().upper()
+        if text == "TRUE":
+            return True
+        if text == "FALSE":
+            return False
+        return None
+
+    if "targeting" in guide.var.columns:
+        targeting = guide.var["targeting"].map(_to_bool)
+        if "intended_target_name" in guide.var.columns:
+            fallback = guide.var["intended_target_name"].astype(str) != non_targeting_label
+            targeting = targeting.where(~targeting.isna(), fallback)
+    else:
+        targeting = guide.var["intended_target_name"].astype(str) != non_targeting_label
+
     # Get non-targeting guide indices
-    nt_guide_idx = guide.var.index[guide.var["label"] == non_targeting_label].tolist()
+    nt_guide_idx = guide.var.index[targeting == False].tolist()
     if len(nt_guide_idx) == 0:
-        raise ValueError(f"No guides with label '{non_targeting_label}' in guide.var['label']")
+        raise ValueError(
+            f"No guides marked non-targeting using '{non_targeting_label}'"
+        )
 
     # Cells with any non-targeting guide
     nt_assign = sc.get.obs_df(guide, keys=nt_guide_idx, layer=guide_assignment_layer)
     cells_with_nt = nt_assign.index[nt_assign.sum(axis=1) > 0].tolist()
 
     # Cells with any targeting (non-NT) guide
-    targeting_guide_idx = guide.var.index[guide.var["label"] != non_targeting_label].tolist()
+    targeting_guide_idx = guide.var.index[targeting == True].tolist()
     targeting_assign = sc.get.obs_df(guide, keys=targeting_guide_idx, layer=guide_assignment_layer)
     cells_with_targeting = targeting_assign.index[targeting_assign.sum(axis=1) > 0].tolist()
 
