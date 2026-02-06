@@ -89,7 +89,7 @@ process createDashboard_HASHING_default {
         # Run scripts using the renamed input files
         process_json_HASHING.py --output_dir json_dir
         create_dashboard_plots_HASHING.py --mudata ${mudata} --hashing_demux ${hashing_demux} --unfiltered_hashing_demux ${hashing_unfiltered_demux} --output_dir figures
-        create_dashboard_df_HASHING.py --json_dir json_dir --guide_fq_tbl ${guide_fq_tbl} --hashing_fq_tbl ${hashing_fq_tbl} --mudata input_mudata.h5mu --gene_ann ${gene_ann} --gene_ann_filtered ${gene_ann_filtered} --guide_ann ${guide_ann} --hashing_ann ${hashing_ann} --hashing_demux ${hashing_demux} --hashing_unfiltered_demux ${hashing_unfiltered_demux} --additional_qc_dir additional_qc --default
+        create_dashboard_df_HASHING.py --json_dir json_dir --guide_fq_tbl ${guide_fq_tbl} --hashing_fq_tbl ${hashing_fq_tbl} --mudata input_mudata.h5mu --gene_ann ${gene_ann} --gene_ann_filtered ${gene_ann_filtered} --guide_ann ${guide_ann} --hashing_ann ${hashing_ann} --hashing_demux ${hashing_demux} --hashing_unfiltered_demux ${hashing_unfiltered_demux} --params_dir ${params.outdir}/pipeline_info --additional_qc_dir additional_qc --default
         create_dashboard_HASHING.py --input all_df.pkl
 
         echo "=== FINAL OUTPUT SIZES ==="
