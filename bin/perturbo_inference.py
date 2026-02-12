@@ -61,22 +61,15 @@ def run_perturbo(
     # efficiency_mode = {"undecided": "auto", "low": "mixture", "high": "scaled"}[
     #     efficiency_mode
     # ]
-    efficiency_mode = "auto"
+    efficiency_mode = "scaled"
+    fit_guide_efficacy = True
+    # if efficiency_mode == "auto":
+    guides_per_element = mdata[guide_modality_name].var[element_key].value_counts()
 
-    if efficiency_mode == "auto":
-        avg_guides_per_element = (
-            mdata[guide_modality_name].var[element_key].value_counts().mean()
-        )
-
-        # max_guides_per_cell = mdata[guide_modality_name].X.sum(axis=1).max()
-        if avg_guides_per_element > 2:
-            efficiency_mode = "scaled"
-            print("Using 'scaled' efficiency mode due to avg guides per element > 2.")
-        else:
-            efficiency_mode = None
-            print(
-                "Not fitting guide efficiency (efficiency_mode=None) due to avg guides per element <= 2."
-            )
+    # max_guides_per_cell = mdata[guide_modality_name].X.sum(axis=1).max()
+    if np.all(guides_per_element <= 1):
+        fit_guide_efficacy = False
+        print("Not fitting guide efficiency -- only one guide per element.")
 
     intended_targets_df = pd.get_dummies(
         mdata[guide_modality_name].var[element_key]
