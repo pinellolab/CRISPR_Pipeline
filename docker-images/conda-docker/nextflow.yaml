@@ -7,7 +7,6 @@ dependencies:
   - numpy=1.26.4   
   - pandas=2.2.2
   - pip
-#  - kallisto=0.50.1
   - anndata=0.10.9
   - gmm-demux
   - scanpy
@@ -21,10 +20,13 @@ dependencies:
   - umap-learn
   - scikit-learn
   - cmdstanpy
+  - pybiomart
+  - pyranges
+  - statsmodels
   - gtfparse
   - pip:
     - kb-python==0.28.2  
     - pyseq-align
     - openpyxl
-    - seqspec
+    - git+https://github.com/IGVF-DACC/seqspec.git
     - igraph

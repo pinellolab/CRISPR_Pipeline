@@ -1,10 +1,6 @@
 name: Build and Publish conda-docker image
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - "docker-images/conda-docker/**"
   workflow_dispatch:
 
 jobs:
