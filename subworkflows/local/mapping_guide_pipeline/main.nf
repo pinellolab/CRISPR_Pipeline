@@ -19,7 +19,7 @@ workflow mapping_guide_pipeline {
     SeqSpecResult = seqSpecParser(
         ch_guide_seqspec,
         ch_barcode_onlist,
-        'guide'
+        'crispr'
     )
 
     GuideRef = createGuideRef(ch_guide_design, reverse_complement_flag, spacer_tag)
