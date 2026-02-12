@@ -1,29 +1,30 @@
-FROM condaforge/miniforge3:24.11.3-2
+FROM python:3.11-slim
 
-# Keep numba cache writable
+ENV DEBIAN_FRONTEND=noninteractive
 ENV NUMBA_CACHE_DIR=/tmp
+ENV PATH="/app/.venv/bin:${PATH}"
 
-# Workdir and bring the env spec alongside
 WORKDIR /app
-COPY nextflow.yaml /app/
+COPY requirements.txt /app/
 
-# (Optional) OS updates or packages; keep image slim
 RUN apt-get update && \
-    apt-get -y upgrade && \
+    apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    git \
+    openjdk-17-jre-headless && \
     rm -rf /var/lib/apt/lists/*
 
-# Create the env from your nextflow.yaml
-# (use absolute path so it works regardless of WORKDIR)
-RUN mamba env create -f /app/nextflow.yaml
+# Install Nextflow as a standalone CLI.
+RUN curl -fsSL https://get.nextflow.io | bash && \
+    mv nextflow /usr/local/bin/nextflow && \
+    chmod +x /usr/local/bin/nextflow
 
-# Put the env on PATH
-# (assuming the env is named "nfenv" inside nextflow.yaml)
-ENV PATH="/opt/conda/envs/nfenv/bin:${PATH}"
+# Install Python dependencies with uv into an isolated venv.
+RUN pip install --no-cache-dir uv && \
+    uv venv /app/.venv && \
+    uv pip install --python /app/.venv/bin/python \
+    -r /app/requirements.txt
 
-# # Copy any helper scripts/binaries (make sure build context includes ./bin)
-# # If you don't have a bin/ in that folder, remove these two lines.
-# COPY bin /usr/local/bin
-# RUN chmod +x /usr/local/bin/* || true
-
-# Default command
-CMD ["/bin/bash", "--login"]
+CMD ["/bin/bash"]
