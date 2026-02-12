@@ -16,24 +16,32 @@ def main(
 ):
     # Load the data
     guide_metadata = pd.read_csv(guide_metadata, sep="\t")
-    # Ensure guide metadata fields are HDF5-safe dtypes (avoid generic objects)
-    string_cols = [
-        "guide_id",
-        "intended_target_name",
-        "spacer",
-        # "targeting",
-        "guide_chr",
-        "intended_target_chr",
-    ]
+    # Warn and drop rows missing critical columns
+    if "guide_id" in guide_metadata.columns:
+        missing_guide_id = guide_metadata["guide_id"].isna().sum()
+        if missing_guide_id > 0:
+            warnings.warn(
+                f"Dropping {missing_guide_id} rows with missing guide_id.",
+                UserWarning,
+            )
+            guide_metadata = guide_metadata.dropna(subset=["guide_id"])
+
+    if "spacer" in guide_metadata.columns:
+        missing_spacer = guide_metadata["spacer"].isna().sum()
+        if missing_spacer > 0:
+            warnings.warn(
+                f"Dropping {missing_spacer} rows with missing spacer.",
+                UserWarning,
+            )
+            guide_metadata = guide_metadata.dropna(subset=["spacer"])
+
+    # Coerce numeric columns
     numeric_cols = [
         "guide_start",
         "guide_end",
         "intended_target_start",
         "intended_target_end",
     ]
-    for col in string_cols:
-        if col in guide_metadata.columns:
-            guide_metadata[col] = guide_metadata[col].astype("string")
     for col in numeric_cols:
         if col in guide_metadata.columns:
             guide_metadata[col] = pd.to_numeric(guide_metadata[col], errors="coerce")
