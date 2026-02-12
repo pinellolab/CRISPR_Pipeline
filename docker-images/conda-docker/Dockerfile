@@ -10,6 +10,7 @@ COPY requirements.txt /app/
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     bash \
+    build-essential \
     ca-certificates \
     curl \
     git \
