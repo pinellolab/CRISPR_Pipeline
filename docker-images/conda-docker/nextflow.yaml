@@ -5,7 +5,7 @@ channels:
 dependencies:
   - nextflow 
   - numpy  
-  - pandas
+  - pandas>=2.1.0,<3
   - pip
   - anndata
   - gmm-demux
