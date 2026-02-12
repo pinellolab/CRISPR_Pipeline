@@ -129,10 +129,10 @@ def plot_sgRNA_frequencies(mudata, save_dir):
     else:
         df_guide_assignment = pd.DataFrame(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
 
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(20, 6))
     plt.rcParams['font.size'] = 12
 
-    sgRNA_frequencies = (df_guide_assignment > 0).sum(axis=0)
+    sgRNA_frequencies = df_guide_assignment.sum(axis=0)
     df_sgRNA_frequencies = sgRNA_frequencies.reset_index()
     df_sgRNA_frequencies.columns = ['sgRNA', 'Frequency']
     df_sgRNA_frequencies = df_sgRNA_frequencies.sort_values(by='Frequency', ascending=True)
@@ -150,6 +150,7 @@ def plot_sgRNA_frequencies(mudata, save_dir):
     plt.tight_layout()
     plot_path = os.path.join(save_dir, 'guides_hist_num_sgRNA.png')
     plt.savefig(plot_path, dpi=300)
+    df_sgRNA_frequencies.to_csv(os.path.join(save_dir, 'sgRNA_frequencies.csv'), index=False)
     plt.close()
 
 def plot_guides_per_cell(mudata, save_dir):

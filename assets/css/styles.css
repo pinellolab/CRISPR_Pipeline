@@ -468,6 +468,63 @@ th .sort-icon-wrapper {
     font-weight: bold;
 }
 
+/* barcode filtering flowchart */
+.flowchart {
+    display: block;
+    margin-top: 6px;
+    font-size: 13px;
+}
+
+.flow-step {
+    display: block;
+    border: 1px solid #e6e6e6;
+    border-left: 4px solid #1abc9c;
+    background: #fafafa;
+    border-radius: 6px;
+    padding: 6px 8px;
+    margin: 6px 0;
+}
+
+.flow-title {
+    display: block;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.flow-count,
+.flow-removed,
+.flow-note,
+.flow-subitem,
+.flow-footnote {
+    display: block;
+}
+
+.flow-subitem {
+    padding-left: 8px;
+    color: #555;
+}
+
+.flow-arrow {
+    display: block;
+    text-align: center;
+    color: #bbb;
+    font-size: 18px;
+    line-height: 1;
+    margin: 2px 0;
+}
+
+.flow-note {
+    color: #777;
+    font-size: 12px;
+}
+
+.flow-footnote {
+    color: #888;
+    font-size: 11px;
+    margin-top: 6px;
+}
+
 /* page entry box */
 .pagination-input {
     width: 30px;     

@@ -12,3 +12,8 @@ nf-*-reports.tsv
 pipeline-service-key.json
 debug_dashboard.ipynb
 .vscode/
+GCP_user_notebook.ipynb
+.params_2026-01-29_13-02-48.json
+.params_2026-02-03_23-14-20.json
+.params_2026-02-03_23-14-49.json
+GCP_user_notebook.ipynb
