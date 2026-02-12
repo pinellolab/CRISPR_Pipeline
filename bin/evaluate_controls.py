@@ -17,7 +17,7 @@ def savefig(path):
     print(f"✔ Saved plot:", path)
 
 
-def perform_binary_evaluation(label_controls, infered_significance_col, outdir, plot=True):
+def perform_binary_evaluation(label_controls, infered_significance_col, outdir, plot=True, evaluation_tag=''):
     true_label = label_controls
     pred_value = infered_significance_col
 
@@ -41,6 +41,7 @@ def perform_binary_evaluation(label_controls, infered_significance_col, outdir, 
         axes[1].set_ylabel("True Positive Rate")
         axes[0].legend()
         axes[1].legend()
+        plt.title(evaluation_tag)
         plt.tight_layout()
 
         # Save
@@ -114,8 +115,9 @@ def run_evaluation_controls(md_read, outdir):
         
     selecting_non_targeting_guides = md_read['guide'].var[md_read['guide'].var['targeting'] == False]
     non_targeting_ids = set(selecting_non_targeting_guides['guide_id'].values)
-
+    print(f"Number of non-targeting guides: {len(non_targeting_ids)}")
     intended_dict = md_read['guide'].var.set_index(['guide_id'])['intended_target_name'].to_dict()
+    print(f"Number of unique intended targets: {len(set(intended_dict.values()))}")
     md_read.uns[col_used]['intended_target_name'] = md_read.uns[col_used]['guide_id'].map(intended_dict)
 
     selecting_to_plot = md_read.uns[col_used].copy()
@@ -127,23 +129,39 @@ def run_evaluation_controls(md_read, outdir):
     selecting_to_plot['targeting_genes'] = selecting_to_plot['guide_id'].map(dict_targeting_or_no)
 
     all_targets = selecting_to_plot.query('targeting_genes == True')['intended_target_name'].drop_duplicates()
-
+    print (f"all targets: {all_targets.shape[0]}")
     non_target_controls = selecting_to_plot.query("targeting_genes == False")
-    non_target_controls = non_target_controls[
-        non_target_controls.apply(lambda x: x['gene_id'] in all_targets.values, axis=1)
-    ]
+    using_random_sample = ''
+    if   non_target_controls[non_target_controls.apply(lambda x: x['gene_id'] in all_targets.values, axis=1)].shape[0] > 0:
+
+        non_target_controls = non_target_controls[
+                non_target_controls.apply(lambda x: x['gene_id'] in all_targets.values, axis=1)]
+    else:
+
+        print ("No non-targeting control guides found for evaluation that were tested against the intended targets.")
+        print ('Using random sample of non-targeting guides for evaluation instead.')
+        using_random_sample = '\n Warning \n Using random sample of non-targeting guides for evaluation instead.'
+
+
+
+
+
+        
     non_target_controls['direct_target'] = 0
+    print (f"Number of non-targeting control guides selected for evaluation: {non_target_controls.shape[0]}")
 
     table_to_test_cis = md_read.uns[col_used][
         md_read.uns[col_used].apply(lambda x: x['gene_id'] == x['intended_target_name'], axis=1)
     ].drop_duplicates()
-    table_to_test_cis['direct_target'] = 1
+    print (md_read.uns[col_used].head(5).values)
 
+    table_to_test_cis['direct_target'] = 1
+    print (f"Number of targeting guides for direct targets: {table_to_test_cis.shape[0]}")
     table_to_fdr = pd.concat([
         table_to_test_cis,
         non_target_controls.sample(n=table_to_test_cis.shape[0], random_state=42)
     ])
-
+    print (table_to_fdr)
     # Volcano plot
     plot_volcano(table_to_fdr, outdir=outdir)
 
@@ -152,14 +170,15 @@ def run_evaluation_controls(md_read, outdir):
         table_to_fdr['direct_target'],
         table_to_fdr['p_value'],
         outdir=outdir,
-        plot=True
+        plot=True,
+        evaluation_tag = using_random_sample,
     )
 
     # Bar plot
     plt.figure(figsize=(5, 4), dpi=150)
     table_to_fdr.groupby('direct_target').count()['guide_id'].plot(kind='bar')
     plt.ylabel('Number of guides')
-    plt.title("Direct targets vs random control guides")
+    plt.title(f"Direct targets vs random control guides \n {using_random_sample}")
     plt.tight_layout()
 
     savefig(os.path.join(outdir, "trans_perturbo_barplot_direct_vs_control.png"))

@@ -14,6 +14,7 @@ include { mapping_hashing_pipeline } from '../../subworkflows/local/mapping_hash
 include { preprocessing_pipeline } from '../../subworkflows/local/preprocessing_pipeline'
 include { guide_assignment_pipeline } from '../../subworkflows/local/guide_assignment_pipeline'
 include { inference_pipeline } from '../../subworkflows/local/inference_pipeline'
+include { additional_qc_plots } from '../../modules/local/additional_qc_plots'
 
 // Import hashing-specific modules
 include { CreateMuData } from '../../modules/local/CreateMuData'
@@ -173,6 +174,10 @@ workflow CRISPR_PIPELINE {
             Inference.inference_mudata
             )
 
+        AdditionalQC = additional_qc_plots(
+            Inference.inference_mudata
+        )
+
         dashboard_pipeline_HASHING (
             seqSpecCheck_pipeline_HASHING.out.guide_seqSpecCheck_plots,
             seqSpecCheck_pipeline_HASHING.out.guide_position_table,
@@ -188,6 +193,7 @@ workflow CRISPR_PIPELINE {
             Hashing_Concat.concatenated_hashing_demux,
             Hashing_Concat.concatenated_hashing_unfiltered_demux,
             Inference.inference_mudata,
+            AdditionalQC.additional_qc,
             Preprocessing.figures_dir,
             evaluation_pipeline.out.evaluation_output_dir,
             evaluation_pipeline.out.control_output_dir
@@ -223,6 +229,10 @@ workflow CRISPR_PIPELINE {
             Inference.inference_mudata
             )
 
+        AdditionalQC = additional_qc_plots(
+            Inference.inference_mudata
+        )
+
         dashboard_pipeline (
             seqSpecCheck_pipeline.out.guide_seqSpecCheck_plots,
             seqSpecCheck_pipeline.out.guide_position_table,
@@ -232,6 +242,7 @@ workflow CRISPR_PIPELINE {
             MergeMuData.adata_guide,
             mapping_guide_pipeline.out.ks_guide_out_dir_collected,
             Inference.inference_mudata,
+            AdditionalQC.additional_qc,
             Preprocessing.figures_dir,
             evaluation_pipeline.out.evaluation_output_dir,
             evaluation_pipeline.out.control_output_dir
