@@ -13,7 +13,7 @@ RUN apt-get update && \
     ca-certificates \
     curl \
     git \
-    openjdk-17-jre-headless && \
+    default-jre-headless && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Nextflow as a standalone CLI.
