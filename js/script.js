@@ -101,9 +101,13 @@ document.getElementById('show-images').addEventListener('change', function() {
 
 // Event listener for adjusting the number of cards per row
 document.getElementById('cards-per-row').addEventListener('change', function() {
+    const perRow = parseInt(this.value);
+    const containers = document.querySelectorAll('.flex-container');
+    containers.forEach(container => {
+        container.style.setProperty('--cards-per-row', perRow);
+    });
     const cards = document.querySelectorAll('.card');
-    const percentage = 100 / parseInt(this.value);
-    cards.forEach(card => card.style.width = `calc(${percentage}% - 20px)`);
+    cards.forEach(card => card.style.width = 'auto');
 });
 
 // Function to toggle the display of elements like tables or images

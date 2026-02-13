@@ -22,28 +22,47 @@ def generate_html_content(df, svg_mapping):
     html += '</div>'
     html += '<div class="content" role="main">'
     html += '''
-        <div id="settings-panel" class="settings-panel">
-            <h3>Dashboard Settings</h3>
-            <div class="settings-options">
-                <label class="setting-item">
-                    <input type="checkbox" id="show-images" checked> Show Images
-                </label>
-                <label class="setting-item">
-                    Cards per row:
-                    <select id="cards-per-row">
-                        <option subject="2">2</option>
-                        <option subject="3" selected>3</option>
-                        <option subject="4">4</option>
-                    </select>
-                </label>
+        <div class="dashboard-topbar">
+            <div class="topbar-title">
+                <span class="eyebrow">CRISPR Pipeline</span>
+                <h1>Dashboard Overview</h1>
+                <p>Explore QC, mapping, inference, and benchmark outputs in one place.</p>
+            </div>
+            <div class="topbar-meta">
+                <div class="meta-card">
+                    <span>Mode</span>
+                    <strong>Interactive</strong>
+                </div>
+                <div class="meta-card">
+                    <span>Assets</span>
+                    <strong>Figures & Tables</strong>
+                </div>
             </div>
         </div>
-        <div class="filter-sort-container">
-            <input type="text" id="filter-input" placeholder="Filter by dataset name...">
-            <select id="sort-select">
-                <option subject="name-asc">Name (A-Z)</option>
-                <option subject="name-desc">Name (Z-A)</option>
-            </select>
+        <div class="controls-panel">
+            <div id="settings-panel" class="settings-panel">
+                <h3>Display Settings</h3>
+                <div class="settings-options">
+                    <label class="setting-item">
+                        <input type="checkbox" id="show-images" checked> Show Images
+                    </label>
+                    <label class="setting-item">
+                        Cards per row:
+                        <select id="cards-per-row">
+                            <option subject="2">2</option>
+                            <option subject="3" selected>3</option>
+                            <option subject="4">4</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+            <div class="filter-sort-container">
+                <input type="text" id="filter-input" placeholder="Filter by dataset name...">
+                <select id="sort-select">
+                    <option subject="name-asc">Name (A-Z)</option>
+                    <option subject="name-desc">Name (Z-A)</option>
+                </select>
+            </div>
         </div>
     '''
 
