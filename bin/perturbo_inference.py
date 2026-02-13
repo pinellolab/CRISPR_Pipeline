@@ -23,6 +23,7 @@ def run_perturbo(
     guide_modality_name="guide",  # name of the guide modality in the MuData
     test_all_pairs=False,  # whether to test all pairs or only those in pairs_to_test
     inference_type="element",  # can be per-guide or per-element
+    drop_ntc_guides=False,  # whether to drop non-targeting control guides in low_MOI analysis
     num_workers=0,  # number of worker processes for data loading
 ):
     scvi.settings.seed = 0
@@ -31,29 +32,21 @@ def run_perturbo(
 
     mdata = md.read(mdata_input_fp)
 
-    guide_var = mdata["guide"].var
-    print("[DEBUG] guide.var columns:", list(guide_var.columns))
-    print("[DEBUG] guide.var dtypes:", guide_var.dtypes.to_dict())
+    if inference_type == "guide":
+        element_key = "guide_id"
+    elif inference_type == "element":
+        element_key = "intended_target_name"
+    else:
+        raise ValueError("inference_type must be 'guide' or 'element'")
 
-    control_guide_filter = pd.Series(False, index=guide_var.index)
-    if "targeting" in guide_var.columns:
-        targeting_series = guide_var["targeting"]
-        if targeting_series.dtype != bool:
-            targeting_series = targeting_series.astype(str).str.lower().isin(["true", "1", "t", "yes", "y"])
-        control_guide_filter |= ~targeting_series
-    if "type" in guide_var.columns:
-        control_guide_filter |= guide_var["type"].astype(str).str.lower().eq("non-targeting")
-    if "intended_target_name" in guide_var.columns:
-        control_guide_filter |= guide_var["intended_target_name"].astype(str).str.contains("non-targeting", case=False, na=False)
-
-    if not any([c in guide_var.columns for c in ["targeting", "type", "intended_target_name"]]):
-        raise KeyError(
-            "guide.var is missing all of: 'targeting', 'type', 'intended_target_name'. "
-            "Cannot identify control guides."
-        )
+    control_guide_filter = (
+        (~mdata["guide"].var["targeting"])
+        | (mdata["guide"].var["type"] == "non-targeting")
+        | mdata["guide"].var["intended_target_name"].str.contains("non-targeting")
+    )
 
     if np.any(control_guide_filter):
-        control_guides = mdata["guide"].var_names[control_guide_filter].tolist()
+        control_guides = control_guide_filter
     else:
         control_guides = None
 
@@ -65,29 +58,18 @@ def run_perturbo(
         - mdata[gene_modality_name].obs["log1p_total_guide_umis"].mean()
     )
 
-    efficiency_mode = {"undecided": "auto", "low": "mixture", "high": "scaled"}[
-        efficiency_mode
-    ]
+    # efficiency_mode = {"undecided": "auto", "low": "mixture", "high": "scaled"}[
+    #     efficiency_mode
+    # ]
+    efficiency_mode = "scaled"
+    fit_guide_efficacy = True
+    # if efficiency_mode == "auto":
+    guides_per_element = mdata[guide_modality_name].var[element_key].value_counts()
 
-    if efficiency_mode == "auto":
-        max_guides_per_cell = mdata[guide_modality_name].X.sum(axis=1).max()
-        if max_guides_per_cell > 1:
-            efficiency_mode = "scaled"
-            print(
-                "Using 'scaled' efficiency mode due to high MOI (max guides per cell > 1)."
-            )
-        else:
-            efficiency_mode = "mixture"
-            print(
-                "Using 'mixture' efficiency mode due to low MOI (max guides per cell <= 1)."
-            )
-
-    if inference_type == "guide":
-        element_key = "guide_id"
-    elif inference_type == "element":
-        element_key = "intended_target_name"
-    else:
-        raise ValueError("inference_type must be 'guide' or 'element'")
+    # max_guides_per_cell = mdata[guide_modality_name].X.sum(axis=1).max()
+    if np.all(guides_per_element <= 1):
+        fit_guide_efficacy = False
+        print("Not fitting guide efficiency -- only one guide per element.")
 
     intended_targets_df = pd.get_dummies(
         mdata[guide_modality_name].var[element_key]
@@ -95,9 +77,14 @@ def run_perturbo(
 
     if efficiency_mode == "mixture":
         # don't test for control guides in low_MOI analysis (slightly more robust alternative to just dropping "non-targeting")
-        control_elements_idx = intended_targets_df.loc[control_guides].sum(axis=0) > 0
-        control_elements = intended_targets_df.columns[control_elements_idx].tolist()
-        intended_targets_df = intended_targets_df.drop(control_elements, axis=1)
+        if drop_ntc_guides:
+            control_elements_idx = (
+                intended_targets_df.loc[control_guides].sum(axis=0) > 0
+            )
+            control_elements = intended_targets_df.columns[
+                control_elements_idx
+            ].tolist()
+            intended_targets_df = intended_targets_df.drop(control_elements, axis=1)
 
         # filter any cells with >1 guide
         multi_guide_cells = (
@@ -157,17 +144,17 @@ def run_perturbo(
 
     model = perturbo.PERTURBO(
         mdata,
-        # control_guides=control_guides, # broken in current PerTurbo version, fix when we update image
+        # control_guides=control_guides,  # broken in current PerTurbo version, fix when we update image
         likelihood="nb",
         efficiency_mode=efficiency_mode,
         fit_guide_efficacy=fit_guide_efficacy,
     )
 
     model.view_anndata_setup(mdata, hide_state_registries=True)
-    if batch_size is None:
-        # batch_size = int(np.clip(len(mdata) // 20, 128, 4096))
-        batch_size = int(np.clip(len(mdata) // 20, 512, 10_000))
-        print(f"Training using batch size of {batch_size}")
+    # if batch_size is None:
+    batch_size = int(np.clip(len(mdata) // 20, 128, 1024))
+    # batch_size = int(np.clip(len(mdata) // 20, 512, 10_000))
+    print(f"Training using batch size of {batch_size}")
     model.train(
         num_epochs,  # max number of epochs
         lr=lr,
@@ -191,7 +178,13 @@ def run_perturbo(
         model.get_element_effects()
         .rename(columns=igvf_name_map)
         .assign(log2_fc=lambda x: x["loc"] / np.log(2))
+        .assign(log2_scale=lambda x: x["scale"] / np.log(2))
     )
+
+    element_effects.to_csv(
+        "perturbo_results.tsv.gz", index=False, sep="\t", compression="gzip"
+    )
+
     # element_effects[element_key] = element_effects[element_key].astype("category")
     # element_effects["gene_id"] = element_effects["gene_id"].astype("category")
 
