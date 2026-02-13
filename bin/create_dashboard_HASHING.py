@@ -12,7 +12,7 @@ def generate_html_content(df, svg_mapping):
     html += '<div class="sidebar" role="navigation" aria-label="Dashboard navigation">'
 
     # Create tab buttons
-    tab_order = ['Filtering Summary', 'scRNA', 'Guide', 'Hashing', 'Inference']
+    tab_order = ['Filtering Summary', 'scRNA', 'Guide', 'Hashing', 'Inference', 'Benchmark']
     modality_set = sorted(set(df['modality']), key=lambda x: tab_order.index(x))
     
     for i, modality in enumerate(modality_set):

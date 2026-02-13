@@ -31,11 +31,26 @@ def run_perturbo(
 
     mdata = md.read(mdata_input_fp)
 
-    control_guide_filter = (
-        (~mdata["guide"].var["targeting"])
-        | (mdata["guide"].var["type"] == "non-targeting")
-        | mdata["guide"].var["intended_target_name"].str.contains("non-targeting")
-    )
+    guide_var = mdata["guide"].var
+    print("[DEBUG] guide.var columns:", list(guide_var.columns))
+    print("[DEBUG] guide.var dtypes:", guide_var.dtypes.to_dict())
+
+    control_guide_filter = pd.Series(False, index=guide_var.index)
+    if "targeting" in guide_var.columns:
+        targeting_series = guide_var["targeting"]
+        if targeting_series.dtype != bool:
+            targeting_series = targeting_series.astype(str).str.lower().isin(["true", "1", "t", "yes", "y"])
+        control_guide_filter |= ~targeting_series
+    if "type" in guide_var.columns:
+        control_guide_filter |= guide_var["type"].astype(str).str.lower().eq("non-targeting")
+    if "intended_target_name" in guide_var.columns:
+        control_guide_filter |= guide_var["intended_target_name"].astype(str).str.contains("non-targeting", case=False, na=False)
+
+    if not any([c in guide_var.columns for c in ["targeting", "type", "intended_target_name"]]):
+        raise KeyError(
+            "guide.var is missing all of: 'targeting', 'type', 'intended_target_name'. "
+            "Cannot identify control guides."
+        )
 
     if np.any(control_guide_filter):
         control_guides = mdata["guide"].var_names[control_guide_filter].tolist()

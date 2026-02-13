@@ -23,12 +23,10 @@ process mappingscRNA {
         """
         echo "Processing $batch with $fastq_files"
 
-        k_bin=\$(type -p kallisto)
-        bustools_bin=\$(type -p bustools)
         chemistry=\$(extract_parsed_seqspec.py --file ${parsed_seqSpec_file})
 
         kb count -i ${transcriptome_idx} -g ${transcriptome_t2g} --verbose -w ${barcode_file} \\
-                --h5ad --kallisto \$k_bin --bustools \$bustools_bin -x \$chemistry -o ${batch}_ks_transcripts_out -t ${task.cpus} \\
+                --h5ad  -x \$chemistry -o ${batch}_ks_transcripts_out -t ${task.cpus} \\
                 ${fastq_files} --overwrite
 
         echo "scRNA KB mapping Complete"

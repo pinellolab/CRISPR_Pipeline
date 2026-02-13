@@ -764,7 +764,49 @@ def collect_evaluation_plots(use_default=False):
 
     return network_plots, network_descs, volcano_plots, volcano_descs,precission_plots ,precission_desc, bar_plot_direct_x_control_plots ,bar_plot_direct_x_control_desc
 
-def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path, filtered_ann_path, guide_ann_path, hashing_ann_path, hashing_demux_path, hashing_unfiltered_demux_path, json_dir=None, params_json=None, params_dir=None, additional_qc_dir=None, use_default=False):
+def collect_benchmark_block(benchmark_dir):
+    if not benchmark_dir or not os.path.exists(benchmark_dir):
+        return None
+
+    table_path = os.path.join(benchmark_dir, "benchmark_tables", "enrichment_all.tsv")
+    benchmark_table = _safe_read_tsv(table_path)
+
+    image_path = os.path.join(benchmark_dir, "tf_benchmark.png")
+    images = []
+    image_descs = []
+    if os.path.exists(image_path):
+        images = [image_path]
+        image_descs = [
+            "TF enrichment benchmark across promoter windows (counts, odds ratios, p-values)."
+        ]
+
+    highlight_parts = []
+    if not benchmark_table.empty:
+        if "TF_display" in benchmark_table.columns:
+            highlight_parts.append(f"TFs: {benchmark_table['TF_display'].nunique()}")
+        elif "TF" in benchmark_table.columns:
+            highlight_parts.append(f"TFs: {benchmark_table['TF'].nunique()}")
+        if "promoter_window_width" in benchmark_table.columns:
+            highlight_parts.append(f"Windows: {benchmark_table['promoter_window_width'].nunique()}")
+    highlight = ", ".join(highlight_parts)
+
+    if benchmark_table.empty and not images:
+        return None
+
+    return new_block(
+        "Benchmark",
+        "TF enrichment benchmark",
+        "TF Benchmark",
+        highlight,
+        bool(highlight),
+        table=benchmark_table,
+        table_description="TF enrichment summary across promoter windows",
+        image=images,
+        image_description=image_descs,
+    )
+
+
+def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path, filtered_ann_path, guide_ann_path, hashing_ann_path, hashing_demux_path, hashing_unfiltered_demux_path, json_dir=None, params_json=None, params_dir=None, additional_qc_dir=None, benchmark_dir=None, use_default=False):
     ### Create df for cell statistics
     guide_fq_table = pd.read_csv(guide_fq_tbl)
     hashing_fq_table = pd.read_csv(hashing_fq_tbl)
@@ -915,7 +957,9 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
                         image = ['hashing_seqSpec_plots/seqSpec_check_plots.png'],
                         image_description= ['The frequency of each nucleotides along the Read 1 (Use to inspect the expected read parts with their expected signature )and Read 2 (Use to inspect the expected read parts with their expected signature)'])
 
-    return guide_check_df, hashing_check_df, cell_stats, gene_stats, flow_block, rna_img_df, guide_img_df, inference_blocks, gs_img_df, inf_img_df, hs_demux_df, qc_blocks
+    benchmark_block = collect_benchmark_block(benchmark_dir)
+
+    return guide_check_df, hashing_check_df, cell_stats, gene_stats, flow_block, rna_img_df, guide_img_df, inference_blocks, gs_img_df, inf_img_df, hs_demux_df, qc_blocks, benchmark_block
 
 def main():
     parser = argparse.ArgumentParser(description="Process JSON files and generate dashboard dataframes.")
@@ -932,6 +976,7 @@ def main():
     parser.add_argument('--params_json', default=None, help='Path to params JSON (optional)')
     parser.add_argument('--params_dir', default=None, help='Directory containing params_*.json (optional)')
     parser.add_argument('--additional_qc_dir', default=None, help='Path to Additional QC output directory')
+    parser.add_argument('--benchmark_dir', default=None, help='Path to benchmark output directory (optional)')
     parser.add_argument('--default', action="store_true",
                       help="Process mudata with cis_per_guide_results and trans_per_guide_results instead of single test_results")
     parser.add_argument('--output', type=str, default='all_df.pkl', help='Path to output pickle file')
@@ -940,7 +985,7 @@ def main():
 
     json_df = create_json_df(args.json_dir)
     ## adding plots
-    guide_check_df, hashing_check_df, cell_stats, gene_stats, flow_block, rna_img_df, guide_img_df, inference_blocks, gs_img_df, inf_img_df, hs_demux_df, qc_blocks = create_dashboard_df(
+    guide_check_df, hashing_check_df, cell_stats, gene_stats, flow_block, rna_img_df, guide_img_df, inference_blocks, gs_img_df, inf_img_df, hs_demux_df, qc_blocks, benchmark_block = create_dashboard_df(
         args.guide_fq_tbl,
         args.hashing_fq_tbl,
         args.mudata,
@@ -954,6 +999,7 @@ def main():
         args.params_json,
         args.params_dir,
         args.additional_qc_dir,
+        args.benchmark_dir,
         args.default
     )
 
@@ -968,6 +1014,9 @@ def main():
 
     # Add inference blocks to the list
     df_list.extend(inference_blocks)
+
+    if benchmark_block is not None:
+        df_list.append(benchmark_block)
 
     all_df = pd.concat(df_list, ignore_index=True)
 

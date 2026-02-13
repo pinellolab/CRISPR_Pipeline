@@ -23,6 +23,7 @@ include { demultiplex } from '../../modules/local/demultiplex'
 include { filter_hashing } from '../../modules/local/filter_hashing'
 include { hashing_concat } from '../../modules/local/hashing_concat'
 include { evaluation_pipeline } from '../../subworkflows/local/evaluation_pipeline'
+include { tf_benchmark } from '../../modules/local/tf_benchmark'
 
 include { dashboard_pipeline_HASHING } from '../../subworkflows/local/dashboard_pipeline_HASHING'
 include { dashboard_pipeline } from '../../subworkflows/local/dashboard_pipeline'
@@ -178,6 +179,17 @@ workflow CRISPR_PIPELINE {
             Inference.inference_mudata
         )
 
+        if (params.ENABLE_BENCHMARK) {
+            Benchmark = tf_benchmark(
+                Inference.inference_mudata,
+                Preprocessing.gencode_gtf,
+                file(params.ENCODE_BED_DIR)
+            )
+            benchmark_output_dir = Benchmark.benchmark_output
+        } else {
+            benchmark_output_dir = Channel.value(file("${workflow.projectDir}/assets/benchmark_empty"))
+        }
+
         dashboard_pipeline_HASHING (
             seqSpecCheck_pipeline_HASHING.out.guide_seqSpecCheck_plots,
             seqSpecCheck_pipeline_HASHING.out.guide_position_table,
@@ -196,7 +208,8 @@ workflow CRISPR_PIPELINE {
             AdditionalQC.additional_qc,
             Preprocessing.figures_dir,
             evaluation_pipeline.out.evaluation_output_dir,
-            evaluation_pipeline.out.control_output_dir
+            evaluation_pipeline.out.control_output_dir,
+            benchmark_output_dir
 
             )
     }
@@ -233,6 +246,17 @@ workflow CRISPR_PIPELINE {
             Inference.inference_mudata
         )
 
+        if (params.ENABLE_BENCHMARK) {
+            Benchmark = tf_benchmark(
+                Inference.inference_mudata,
+                Preprocessing.gencode_gtf,
+                file(params.ENCODE_BED_DIR)
+            )
+            benchmark_output_dir = Benchmark.benchmark_output
+        } else {
+            benchmark_output_dir = Channel.value(file("${workflow.projectDir}/assets/benchmark_empty"))
+        }
+
         dashboard_pipeline (
             seqSpecCheck_pipeline.out.guide_seqSpecCheck_plots,
             seqSpecCheck_pipeline.out.guide_position_table,
@@ -245,7 +269,8 @@ workflow CRISPR_PIPELINE {
             AdditionalQC.additional_qc,
             Preprocessing.figures_dir,
             evaluation_pipeline.out.evaluation_output_dir,
-            evaluation_pipeline.out.control_output_dir
+            evaluation_pipeline.out.control_output_dir,
+            benchmark_output_dir
             )
     }
 
