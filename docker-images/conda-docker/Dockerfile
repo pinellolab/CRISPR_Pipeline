@@ -25,10 +25,5 @@ ENV PATH="/opt/conda/envs/nfenv/bin:${PATH}"
 # COPY bin /usr/local/bin
 # RUN chmod +x /usr/local/bin/* || true
 
-# Symlink kallisto & bustools provided by kb-python (path may vary with Python version)
-# If Python version differs, adjust the 3.12 segment accordingly.
-RUN ln -sf /opt/conda/envs/nfenv/lib/python3.12/site-packages/kb_python/bins/linux/*/kallisto /opt/conda/envs/nfenv/bin/ && \
-    ln -sf /opt/conda/envs/nfenv/lib/python3.12/site-packages/kb_python/bins/linux/*/bustools /opt/conda/envs/nfenv/bin/
-
 # Default command
 CMD ["/bin/bash", "--login"]
