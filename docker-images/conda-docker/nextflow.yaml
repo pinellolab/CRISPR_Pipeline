@@ -4,6 +4,7 @@ channels:
   - bioconda
 dependencies:
   - nextflow 
+  - aria2
   - numpy  
   - pandas>=2.1.0,<3
   - pip
