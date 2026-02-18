@@ -23,6 +23,9 @@ dependencies:
   - pybiomart
   - pyranges
   - statsmodels
+  - pybiomart
+  - pyranges
+  - statsmodels
   - gtfparse
   - python-igraph
   - openpyxl

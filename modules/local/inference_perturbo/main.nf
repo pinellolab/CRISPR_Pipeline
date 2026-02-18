@@ -17,6 +17,7 @@ process inference_perturbo {
     
     output:
     path "inference_mudata.h5mu", emit: inference_mudata
+    path "perturbo_results.tsv.gz", emit: perturbo_results
     path "perturbo_cis_per_element_output.tsv.gz", emit: per_element_output
     path "perturbo_cis_per_guide_output.tsv.gz", emit: per_guide_output
 
