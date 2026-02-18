@@ -185,7 +185,6 @@ containers {
    cleanser = 'ghcr.io/gersbachlab-bioinformatics/cleanser:1.2.1'
    sceptre  = 'sjiang9/sceptre-igvf:0.1'
    perturbo = 'ghcr.io/pinellolab/perturbo'
-   aria2    = 'biasofpriene/aria2c'
 }
 ```
 

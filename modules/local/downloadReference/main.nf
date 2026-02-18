@@ -22,8 +22,7 @@ process downloadReference {
         """
     } else {
         """
-        k_bin=\$(type -p kallisto)
-        kb ref -d ${ref_name} -i transcriptome_index.idx -g transcriptome_t2g.txt --kallisto \$k_bin
+        kb ref -d ${ref_name} -i transcriptome_index.idx -g transcriptome_t2g.txt
         """
     }
 }
