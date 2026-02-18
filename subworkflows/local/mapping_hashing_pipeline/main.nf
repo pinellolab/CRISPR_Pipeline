@@ -18,7 +18,7 @@ workflow mapping_hashing_pipeline {
     SeqSpecResult = seqSpecParser(
         ch_hash_seqspec,
         ch_barcode_onlist,
-        'hashing'
+        'tag'
     )
 
     HashingRef = createHashingRef(ch_barcode_hashtag_map)
