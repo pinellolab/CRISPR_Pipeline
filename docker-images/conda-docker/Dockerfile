@@ -11,7 +11,7 @@ COPY nextflow.yaml /app/
 RUN apt-get update && \
     apt-get -y upgrade && \
     rm -rf /var/lib/apt/lists/*
-RUN apt install -y aria2
+
 # Create the env from your nextflow.yaml
 # (use absolute path so it works regardless of WORKDIR)
 RUN mamba env create -f /app/nextflow.yaml
