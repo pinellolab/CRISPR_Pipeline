@@ -88,7 +88,6 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
     guide_metadata = pd.read_csv(guide_metadata, sep='\t')
     if debug_var:
         _debug_spacer_samples(guide_metadata, "guide_metadata")
-    guide_metadata = pd.read_csv(guide_metadata, sep="\t")
     # Warn and drop rows missing critical columns
     if "guide_id" in guide_metadata.columns:
         missing_guide_id = guide_metadata["guide_id"].isna().sum()
