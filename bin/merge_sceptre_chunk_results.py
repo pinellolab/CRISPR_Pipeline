@@ -19,13 +19,18 @@ def _read_many_tsv(files):
     return pd.concat(dfs, ignore_index=True)
 
 
-def _assert_unique(df, keys, label):
+def _assert_unique(df, keys, label, mode="warn"):
     dup_mask = df.duplicated(keys, keep=False)
     if dup_mask.any():
         examples = df.loc[dup_mask, keys].head(10).to_dict(orient="records")
-        raise ValueError(
-            f"Duplicate {label} keys detected for {keys}; sample duplicates: {examples}"
-        )
+        if mode == "warn":
+            print(
+                f"Warning: Duplicate {label} keys detected for {keys}; sample duplicates: {examples}"
+            )
+        elif mode == "error":
+            raise ValueError(
+                f"Duplicate {label} keys detected for {keys}; sample duplicates: {examples}"
+            )
 
 
 def merge_sceptre_chunk_results(
