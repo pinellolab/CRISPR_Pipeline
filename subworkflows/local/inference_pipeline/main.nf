@@ -4,6 +4,8 @@ include { prepare_guide_inference } from '../../../modules/local/prepare_guide_i
 include { prepare_all_guide_inference } from '../../../modules/local/prepare_all_guide_inference'
 include { prepare_user_guide_inference } from '../../../modules/local/prepare_user_guide_inference'
 include { inference_sceptre } from '../../../modules/local/inference_sceptre'
+include { sceptre_chunk_prepare } from '../../../modules/local/sceptre_chunk_prepare'
+include { sceptre_chunk_merge } from '../../../modules/local/sceptre_chunk_merge'
 include { inference_perturbo } from '../../../modules/local/inference_perturbo'
 include { inference_perturbo_trans } from '../../../modules/local/inference_perturbo_trans'
 include { mergedResults } from '../../../modules/local/mergedResults'
@@ -51,7 +53,14 @@ workflow inference_pipeline {
     }
 
     if (params.INFERENCE_method == "sceptre"){
-        TestResults = inference_sceptre(mudata_input)
+        SceptreChunkInput = sceptre_chunk_prepare(mudata_input)
+        SceptreChunkResults = inference_sceptre(SceptreChunkInput.mudata_chunks.flatten())
+        TestResults = sceptre_chunk_merge(
+            SceptreChunkResults.per_guide_output.collect(),
+            SceptreChunkResults.per_element_output.collect(),
+            mudata_input,
+            SceptreChunkInput.chunk_manifest
+        )
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "perturbo"){
@@ -59,7 +68,14 @@ workflow inference_pipeline {
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
-        SceptreResults = inference_sceptre(mudata_input)
+        SceptreChunkInput = sceptre_chunk_prepare(mudata_input)
+        SceptreChunkResults = inference_sceptre(SceptreChunkInput.mudata_chunks.flatten())
+        SceptreResults = sceptre_chunk_merge(
+            SceptreChunkResults.per_guide_output.collect(),
+            SceptreChunkResults.per_element_output.collect(),
+            mudata_input,
+            SceptreChunkInput.chunk_manifest
+        )
         PerturboResults = inference_perturbo(mudata_input,  "perturbo", params.Multiplicity_of_infection)
         MergedInference = mergedResults(
             SceptreResults.per_guide_output,
@@ -75,7 +91,14 @@ workflow inference_pipeline {
             error "INFERENCE_method='default' requires INFERENCE_target_guide_pairing_strategy='default'"
         }
         // Process cis results
-        SceptreResults_cis = inference_sceptre(PrepareInference.mudata_inference_input)
+        SceptreChunkInput_cis = sceptre_chunk_prepare(PrepareInference.mudata_inference_input)
+        SceptreChunkResults_cis = inference_sceptre(SceptreChunkInput_cis.mudata_chunks.flatten())
+        SceptreResults_cis = sceptre_chunk_merge(
+            SceptreChunkResults_cis.per_guide_output.collect(),
+            SceptreChunkResults_cis.per_element_output.collect(),
+            PrepareInference.mudata_inference_input,
+            SceptreChunkInput_cis.chunk_manifest
+        )
         PerturboResults_cis = inference_perturbo(PrepareInference.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
         MergedInference_cis = mergedResults(
             SceptreResults_cis.per_guide_output,

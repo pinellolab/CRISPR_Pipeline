@@ -121,6 +121,10 @@ Update the pipeline-specific parameters in the `params` section, for example:
     INFERENCE_SCEPTRE_control_group = 'default'
     INFERENCE_SCEPTRE_resampling_mechanism = 'default'
     INFERENCE_SCEPTRE_formula_object = 'default'
+    INFERENCE_SCEPTRE_CHUNK_MODE = 'auto' // auto, off, force
+    INFERENCE_SCEPTRE_MAX_MATRIX_ENTRIES = 2147483647 // chunk when n_cells*n_genes exceeds this threshold
+    INFERENCE_SCEPTRE_GENE_CHUNK_SIZE = 4000 // genes per chunk when chunking is enabled
+    INFERENCE_SCEPTRE_FORCE_CHUNK = false // force chunking regardless of matrix size
 
     NETWORK_custom_central_nodes = 'undefined'
     NETWORK_central_nodes_num = 1
@@ -546,4 +550,3 @@ You can cite the `nf-core` publication as follows:
 > Philip Ewels, Alexander Peltzer, Sven Fillinger, Harshil Patel, Johannes Alneberg, Andreas Wilm, Maxime Ulysse Garcia, Paolo Di Tommaso & Sven Nahnsen.
 >
 > _Nat Biotechnol._ 2020 Feb 13. doi: [10.1038/s41587-020-0439-x](https://dx.doi.org/10.1038/s41587-020-0439-x).
-
