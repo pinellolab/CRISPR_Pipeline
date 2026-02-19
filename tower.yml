@@ -1,3 +1,5 @@
 reports:
   samplesheet.csv:
     display: "Auto-created samplesheet with collated metadata and FASTQ paths"
+  "**/pipeline_dashboard/dashboard.html":
+    display: "CRISPR Pipeline Dashboard"
