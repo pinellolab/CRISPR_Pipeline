@@ -305,6 +305,7 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
         raise
 
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Create a MuData object from scRNA and guide data.')
     parser.add_argument('adata_rna', type=str, help='Path to the scRNA AnnData file.')

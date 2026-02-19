@@ -7,7 +7,7 @@ process skipGTFDownload {
     path gtf_local_path
     
     output:
-    path "gencode_gtf.gtf.gz", emit: gtf
+    path "gencode_gtf.gtf.gz", emit: gencode_gtf
 
     script:
     """
