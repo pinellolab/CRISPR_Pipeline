@@ -39,10 +39,25 @@ def run_perturbo(
     else:
         raise ValueError("inference_type must be 'guide' or 'element'")
 
+    guide_var = mdata["guide"].var
+    targeting = guide_var["targeting"].map(
+        lambda x: (
+            bool(x)
+            if isinstance(x, (bool, np.bool_))
+            else (str(x).strip().lower() in {"true", "1", "t", "yes"})
+        )
+        if not pd.isna(x)
+        else False
+    )
+    guide_type = guide_var.get(
+        "type", pd.Series(index=guide_var.index, data="", dtype=object)
+    )
+    intended_target_name = guide_var["intended_target_name"].astype(str)
+
     control_guide_filter = (
-        (~mdata["guide"].var["targeting"])
-        | (mdata["guide"].var["type"] == "non-targeting")
-        | mdata["guide"].var["intended_target_name"].str.contains("non-targeting")
+        (~targeting)
+        | (guide_type == "non-targeting")
+        | intended_target_name.str.contains("non-targeting", na=False)
     )
 
     if np.any(control_guide_filter):

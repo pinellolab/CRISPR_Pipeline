@@ -143,6 +143,8 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
         'intended_target_name', 'spacer', 'targeting', 'guide_chr', 'guide_start',
         'guide_end', 'intended_target_chr', 'intended_target_start', 'intended_target_end'
     ]
+    if "type" in guide_metadata.columns:
+        meta_cols.append("type")
     guide_metadata_subset = guide_metadata[['guide_id'] + meta_cols].copy()
     adata_guide.var = adata_guide.var.merge(
         guide_metadata_subset,
@@ -150,6 +152,30 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
         how='left',
         validate='one_to_one'
     )
+    targeting_bool = adata_guide.var["targeting"].map(
+        lambda x: (
+            bool(x)
+            if isinstance(x, (bool, np.bool_))
+            else (str(x).strip().lower() in {"true", "1", "t", "yes"})
+        )
+        if not pd.isna(x)
+        else False
+    )
+    # Keep a stable guide type annotation for downstream tools (e.g. PerTurbo).
+    if "type" not in adata_guide.var.columns:
+        adata_guide.var["type"] = np.where(
+            targeting_bool,
+            "targeting",
+            "non-targeting",
+        )
+    else:
+        missing_type = adata_guide.var["type"].isna()
+        if missing_type.any():
+            adata_guide.var.loc[missing_type, "type"] = np.where(
+                targeting_bool.loc[missing_type],
+                "targeting",
+                "non-targeting",
+            )
     if debug_var:
         missing = int(pd.isna(adata_guide.var['spacer']).sum()) if 'spacer' in adata_guide.var.columns else -1
         print(f"[DEBUG] spacer missing after merge: {missing}")
