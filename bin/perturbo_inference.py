@@ -172,6 +172,9 @@ def run_perturbo(
         },
     )
 
+    if control_guides is not None and isinstance(control_guides[0], str):
+        control_guides = mdata["guide"].var_names.isin(control_guides)
+
     model = perturbo.PERTURBO(
         mdata,
         control_guides=control_guides,
