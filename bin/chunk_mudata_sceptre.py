@@ -10,6 +10,7 @@ pairs_to_test by chunk genes when available.
 import argparse
 import copy
 import os
+import shutil
 from math import ceil
 
 import mudata as md
@@ -40,11 +41,15 @@ def _write_single_chunk_passthrough(mdata, mudata_file, output_dir, output_prefi
     os.makedirs(output_dir, exist_ok=True)
     chunk_path = os.path.join(output_dir, f"{output_prefix}.000.h5mu")
 
+    src_abs = os.path.abspath(mudata_file)
+
+    # Materialize a real file instead of a symlink so downstream tasks can
+    # always stage/open it reliably across execution backends (e.g. GCS).
+    if os.path.lexists(chunk_path):
+        os.remove(chunk_path)
+
     try:
-        src_abs = os.path.abspath(mudata_file)
-        if os.path.lexists(chunk_path):
-            os.remove(chunk_path)
-        os.symlink(src_abs, chunk_path)
+        shutil.copy2(src_abs, chunk_path)
     except OSError:
         mdata.write(chunk_path)
 

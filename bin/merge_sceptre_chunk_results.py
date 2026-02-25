@@ -3,19 +3,89 @@
 
 import argparse
 import os
+from pathlib import Path
 
 import mudata as mu
 import pandas as pd
 
 
+def _expand_tsv_inputs(files):
+    """Expand mixed file/dir inputs to concrete TSV files."""
+    expanded = []
+    dir_inputs = []
+    missing_inputs = []
+    for fp in files:
+        p = Path(fp)
+        if not p.exists():
+            # Keep going; some backends/syntax combinations pass split tokens like:
+            #   guide1  sceptre_per_guide_output.tsv.gz
+            # where the second token is the basename inside guide1/.
+            missing_inputs.append(fp)
+            continue
+        if p.is_dir():
+            dir_inputs.append(p)
+            # Nextflow may stage grouped inputs as directories (e.g. guide1/).
+            candidates = sorted(
+                [
+                    x
+                    for x in p.rglob("*")
+                    if x.is_file()
+                    and (
+                        x.name.endswith(".tsv")
+                        or x.name.endswith(".tsv.gz")
+                        or x.name.endswith(".csv")
+                    )
+                ]
+            )
+            if not candidates:
+                raise ValueError(f"Directory input contains no tabular files: {fp}")
+            expanded.extend(candidates)
+        else:
+            expanded.append(p)
+
+    # Try to resolve any missing basename tokens against staged directories.
+    unresolved = []
+    for missing in missing_inputs:
+        missing_name = Path(missing).name
+        resolved = None
+
+        for d in dir_inputs:
+            candidate = d / missing_name
+            if candidate.exists() and candidate.is_file():
+                resolved = candidate
+                break
+
+        if resolved is None:
+            # If we've already discovered a file with this basename from a dir, treat
+            # the missing token as redundant and ignore it.
+            already_present = any(p.name == missing_name for p in expanded)
+            if not already_present:
+                unresolved.append(missing)
+        else:
+            expanded.append(resolved)
+
+    if unresolved:
+        raise FileNotFoundError(
+            f"Missing input path(s): {', '.join(sorted(map(str, unresolved)))}"
+        )
+
+    # De-duplicate while preserving order.
+    seen = set()
+    out = []
+    for p in expanded:
+        key = str(p.resolve())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(str(p))
+    return out
+
+
 def _read_many_tsv(files):
     if not files:
         raise ValueError("No input files supplied")
-    dfs = []
-    for fp in files:
-        if not os.path.exists(fp):
-            raise FileNotFoundError(f"Missing file: {fp}")
-        dfs.append(pd.read_csv(fp, sep="\t"))
+    concrete_files = _expand_tsv_inputs(files)
+    dfs = [pd.read_csv(fp, sep="\t") for fp in concrete_files]
     return pd.concat(dfs, ignore_index=True)
 
 

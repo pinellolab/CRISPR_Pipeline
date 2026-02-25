@@ -2,8 +2,8 @@ process sceptre_chunk_merge {
     cache 'lenient'
 
     input:
-    path (per_guide_outputs, name: "guide?/*")
-    path (per_element_outputs, name: "element?/*")
+    path per_guide_outputs, stageAs: "guide?/*"
+    path per_element_outputs, stageAs: "element?/*"
     path base_mudata
     path chunk_manifest
 
