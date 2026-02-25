@@ -40,8 +40,6 @@ def run_perturbo(
         raise ValueError("inference_type must be 'guide' or 'element'")
 
     guide_var = mdata["guide"].var
-    print("[DEBUG] guide.var columns:", list(guide_var.columns))
-    print("[DEBUG] guide.var dtypes:", guide_var.dtypes.to_dict())
 
     control_guide_filter = pd.Series(False, index=guide_var.index)
     if "targeting" in guide_var.columns:
