@@ -14,7 +14,7 @@ def run_perturbo(
     fit_guide_efficacy=True,  # whether to fit guide efficacy (if false, overrides efficiency_mode)
     efficiency_mode="undecided",  # mapping from undecided->auto, low->mixture, high->scaled# can be "mixture" (for low MOI only), "scaled", "undecided" (auto), "low" (mixture), or "high" (scaled)
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
-    batch_size=4096,  # batch size for training
+    batch_size=None,  # batch size for training
     early_stopping=False,  # whether to use early stopping
     early_stopping_patience=5,  # patience for early stopping
     lr=0.01,  # learning rate for training
@@ -40,28 +40,38 @@ def run_perturbo(
         raise ValueError("inference_type must be 'guide' or 'element'")
 
     guide_var = mdata["guide"].var
-    targeting = guide_var["targeting"].map(
-        lambda x: (
-            bool(x)
-            if isinstance(x, (bool, np.bool_))
-            else (str(x).strip().lower() in {"true", "1", "t", "yes"})
-        )
-        if not pd.isna(x)
-        else False
-    )
-    guide_type = guide_var.get(
-        "type", pd.Series(index=guide_var.index, data="", dtype=object)
-    )
-    intended_target_name = guide_var["intended_target_name"].astype(str)
 
-    control_guide_filter = (
-        (~targeting)
-        | (guide_type == "non-targeting")
-        | intended_target_name.str.contains("non-targeting", na=False)
-    )
+    control_guide_filter = pd.Series(False, index=guide_var.index)
+    if "targeting" in guide_var.columns:
+        targeting_series = guide_var["targeting"]
+        if targeting_series.dtype != bool:
+            targeting_series = (
+                targeting_series.astype(str)
+                .str.lower()
+                .isin(["true", "1", "t", "yes", "y"])
+            )
+        control_guide_filter |= ~targeting_series
+    if "type" in guide_var.columns:
+        control_guide_filter |= (
+            guide_var["type"].astype(str).str.lower().eq("non-targeting")
+        )
+    if "intended_target_name" in guide_var.columns:
+        control_guide_filter |= (
+            guide_var["intended_target_name"]
+            .astype(str)
+            .str.contains("non-targeting", case=False, na=False)
+        )
+
+    if not any(
+        [c in guide_var.columns for c in ["targeting", "type", "intended_target_name"]]
+    ):
+        raise KeyError(
+            "guide.var is missing all of: 'targeting', 'type', 'intended_target_name'. "
+            "Cannot identify control guides."
+        )
 
     if np.any(control_guide_filter):
-        control_guides = control_guide_filter
+        control_guides = mdata["guide"].var_names[control_guide_filter].tolist()
     else:
         control_guides = None
 
@@ -82,7 +92,7 @@ def run_perturbo(
     guides_per_element = mdata[guide_modality_name].var[element_key].value_counts()
 
     # max_guides_per_cell = mdata[guide_modality_name].X.sum(axis=1).max()
-    if np.all(guides_per_element <= 1):
+    if np.all(guides_per_element <= 1) or inference_type == "guide":
         fit_guide_efficacy = False
         print("Not fitting guide efficiency -- only one guide per element.")
 
@@ -91,6 +101,9 @@ def run_perturbo(
     ).astype(float)
 
     if efficiency_mode == "mixture":
+        raise NotImplementedError(
+            "Mixture efficiency mode is not currently supported due to issues with model convergence. Please use 'scaled' or 'undecided' instead."
+        )
         # don't test for control guides in low_MOI analysis (slightly more robust alternative to just dropping "non-targeting")
         if drop_ntc_guides:
             control_elements_idx = (
@@ -157,18 +170,21 @@ def run_perturbo(
         },
     )
 
+    if control_guides is not None and isinstance(control_guides[0], str):
+        control_guides = mdata["guide"].var_names.isin(control_guides)
+
     model = perturbo.PERTURBO(
         mdata,
-        # control_guides=control_guides,  # broken in current PerTurbo version, fix when we update image
+        control_guides=control_guides,
         likelihood="nb",
         efficiency_mode=efficiency_mode,
         fit_guide_efficacy=fit_guide_efficacy,
     )
 
     model.view_anndata_setup(mdata, hide_state_registries=True)
-    # if batch_size is None:
-    batch_size = int(np.clip(len(mdata) // 20, 128, 1024))
-    # batch_size = int(np.clip(len(mdata) // 20, 512, 10_000))
+    if batch_size is None:
+        batch_size = int(np.clip(len(mdata) // 20, 512, 10_000))
+
     print(f"Training using batch size of {batch_size}")
     model.train(
         num_epochs,  # max number of epochs
@@ -285,12 +301,12 @@ def main():
         default="gpu",
         help="Accelerator to use for training (default: gpu)",
     )
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=4096,
-        help="Batch size for training (default: 4096)",
-    )
+    # parser.add_argument(
+    #     "--batch_size",
+    #     type=int,
+    #     default=4096,
+    #     help="Batch size for training (default: 4096)",
+    # )
     parser.add_argument(
         "--early_stopping",
         type=bool,
