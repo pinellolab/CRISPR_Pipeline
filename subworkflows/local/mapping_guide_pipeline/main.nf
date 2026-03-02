@@ -4,6 +4,7 @@ include { seqSpecParser } from '../../../modules/local/seqSpecParser'
 include { createGuideRef } from '../../../modules/local/createGuideRef'
 include { mappingGuide } from '../../../modules/local/mappingGuide'
 include { mappingGuideBaseEditing } from '../../../modules/local/mappingGuideBaseEditing'
+include { mappingGuideBaseEditingFlash } from '../../../modules/local/mappingGuideBaseEditingFlash'
 
 include { anndata_concat } from '../../../modules/local/anndata_concat'
 
@@ -21,6 +22,8 @@ workflow mapping_guide_pipeline {
     when:
 
     main:
+    def baseEditingMethod = (params.BASEEDITING_method ?: 'legacy').toString().toLowerCase()
+
     SeqSpecResult = seqSpecParser(
         ch_guide_seqspec,
         ch_barcode_onlist,
@@ -30,27 +33,41 @@ workflow mapping_guide_pipeline {
     GuideRef = createGuideRef(ch_guide_design, reverse_complement_flag, spacer_tag)
 
     if( params.is_BaseEditing ) {
-            MappingOut = mappingGuideBaseEditing(
+        if( baseEditingMethod == 'flash' ) {
+            MappingOut = mappingGuideBaseEditingFlash(
                 ch_guide,
                 SeqSpecResult.parsed_seqspec,
                 SeqSpecResult.barcode_file,
                 params.is_10x3v3,
                 ch_guide_design,
-                
-
-            )
-        }
-        else {
-            MappingOut = mappingGuide(
-                ch_guide,
-                GuideRef.guide_index,
-                GuideRef.t2g_guide,
-                SeqSpecResult.parsed_seqspec,
-                SeqSpecResult.barcode_file,
-                params.is_10x3v3,
+                reverse_complement_flag,
                 spacer_tag
             )
         }
+        else if( baseEditingMethod == 'legacy' ) {
+            MappingOut = mappingGuideBaseEditing(
+                ch_guide,
+                SeqSpecResult.parsed_seqspec,
+                SeqSpecResult.barcode_file,
+                params.is_10x3v3,
+                ch_guide_design
+            )
+        }
+        else {
+            error "Unsupported params.BASEEDITING_method='${params.BASEEDITING_method}'. Expected 'legacy' or 'flash'."
+        }
+    }
+    else {
+        MappingOut = mappingGuide(
+            ch_guide,
+            GuideRef.guide_index,
+            GuideRef.t2g_guide,
+            SeqSpecResult.parsed_seqspec,
+            SeqSpecResult.barcode_file,
+            params.is_10x3v3,
+            spacer_tag
+        )
+    }
 
 
 
