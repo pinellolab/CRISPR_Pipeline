@@ -151,7 +151,7 @@ def run_crispr_mapping(args):
     print("Running get_whitelist_reporter_counts_from_fastq...")
     #print (crispr_ambiguous_mapping.__version__, 'version')
     cellbarcode_crisprcorrect_results = crispr_ambiguous_mapping.mapping.get_whitelist_reporter_counts_from_fastq(
-        whitelist_guide_reporter_df=guide_whitelist_input_df,
+        whitelist_guide_reporter_df=None,
         fastq_r1_fns =r1_input ,
         fastq_r2_fns = r2_input,
 
@@ -176,7 +176,7 @@ def run_crispr_mapping(args):
         is_protospacer_r1=False,
         is_protospacer_header=False,
         revcomp_protospacer=False,
-        protospacer_hamming_threshold_strict=args.hamming_threshold,
+        protospacer_hamming_threshold_strict=1,
 
         
         cores=args.cores

@@ -143,9 +143,6 @@ def run_evaluation_controls(md_read, outdir):
         using_random_sample = '\n Warning \n Using random sample of non-targeting guides for evaluation instead.'
 
 
-
-
-
         
     non_target_controls['direct_target'] = 0
     print (f"Number of non-targeting control guides selected for evaluation: {non_target_controls.shape[0]}")
