@@ -108,6 +108,25 @@ class IntendedTargetKeyUtilsTests(unittest.TestCase):
         self.assertTrue(out.loc[out["guide_id"] == "nt1", "intended_target_name"].iloc[0].startswith("non-targeting|"))
         self.assertFalse((out["intended_target_name"] == "non-targeting").any())
 
+    def test_index_and_column_named_guide_id_do_not_break_control_sorting(self):
+        guide_var = pd.DataFrame(
+            {
+                "guide_id": ["g1", "nt2", "nt1"],
+                "targeting": [True, False, False],
+                "type": ["targeting", "non-targeting", "non-targeting"],
+                "intended_target_name": ["E1", "non-targeting", "non-targeting"],
+                "intended_target_chr": ["chr1", pd.NA, pd.NA],
+                "intended_target_start": [100, pd.NA, pd.NA],
+                "intended_target_end": [110, pd.NA, pd.NA],
+            }
+        )
+        guide_var.index = pd.Index(["g1", "nt2", "nt1"], name="guide_id")
+
+        out = annotate_intended_target_groups(guide_var)
+        controls = out[out["guide_id"].isin(["nt1", "nt2"])]
+        controls = controls.loc[controls["guide_id"].astype(str).sort_values(kind="stable").index]
+        self.assertEqual(controls["intended_target_name"].tolist(), ["non-targeting|1", "non-targeting|2"])
+
 
 if __name__ == "__main__":
     unittest.main()

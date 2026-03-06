@@ -150,8 +150,9 @@ def annotate_intended_target_groups(
         median_size = _median_guides_per_targeting_element(df, control_mask)
 
         control_idx_sorted = (
-            df.loc[control_mask, ["guide_id"]]
-            .sort_values("guide_id", kind="stable")
+            df.loc[control_mask, "guide_id"]
+            .astype(str)
+            .sort_values(kind="stable")
             .index
         )
         group_numbers = np.arange(n_controls) // median_size + 1
