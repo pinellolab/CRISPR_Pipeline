@@ -91,6 +91,23 @@ class IntendedTargetKeyUtilsTests(unittest.TestCase):
         self.assertTrue(isinstance(out.loc[0, "intended_target_key"], str))
         self.assertGreater(len(out.loc[0, "intended_target_key"]), 0)
 
+    def test_categorical_columns_with_missing_values_do_not_fail_control_mask(self):
+        guide_var = pd.DataFrame(
+            {
+                "guide_id": ["g1", "nt1"],
+                "targeting": [True, False],
+                "type": pd.Categorical(["targeting", pd.NA], categories=["targeting", "non-targeting"]),
+                "intended_target_name": pd.Categorical(["E1", pd.NA], categories=["E1", "non-targeting"]),
+                "intended_target_chr": ["chr1", pd.NA],
+                "intended_target_start": [100, pd.NA],
+                "intended_target_end": [110, pd.NA],
+            }
+        )
+
+        out = annotate_intended_target_groups(guide_var)
+        self.assertTrue(out.loc[out["guide_id"] == "nt1", "intended_target_name"].iloc[0].startswith("non-targeting|"))
+        self.assertFalse((out["intended_target_name"] == "non-targeting").any())
+
 
 if __name__ == "__main__":
     unittest.main()

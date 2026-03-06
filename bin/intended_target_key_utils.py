@@ -39,6 +39,20 @@ def _string_or_na(value):
     return str(value)
 
 
+def _normalized_text_series(values, index: pd.Index) -> pd.Series:
+    """Return lowercase/trimmed text values while avoiding categorical fillna pitfalls."""
+    if values is None:
+        series = pd.Series(index=index, data="", dtype=object)
+    elif isinstance(values, pd.Series):
+        series = values.reindex(index)
+    else:
+        series = pd.Series(values, index=index)
+
+    series = series.astype(object)
+    series = series.where(series.notna(), "")
+    return series.astype(str).str.strip().str.lower()
+
+
 def _build_target_key(name, chrom, start, end) -> str:
     has_coords = not (pd.isna(chrom) or pd.isna(start) or pd.isna(end))
     if has_coords:
@@ -48,20 +62,8 @@ def _build_target_key(name, chrom, start, end) -> str:
 
 def _control_mask(df: pd.DataFrame) -> pd.Series:
     targeting = _to_bool_series(df.get("targeting", pd.Series(index=df.index, data=False)))
-    guide_type = (
-        df.get("type", pd.Series(index=df.index, data="", dtype=object))
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
-    names = (
-        df.get("intended_target_name", pd.Series(index=df.index, data="", dtype=object))
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
+    guide_type = _normalized_text_series(df.get("type"), df.index)
+    names = _normalized_text_series(df.get("intended_target_name"), df.index)
     return (
         (~targeting)
         | guide_type.isin(CONTROL_TYPES)
