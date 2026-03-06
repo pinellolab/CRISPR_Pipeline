@@ -16,9 +16,9 @@ def _read_pairs_table(path: str) -> pd.DataFrame:
     lower = path.lower()
     if lower.endswith(".parquet"):
         return pd.read_parquet(path)
-    if lower.endswith(".tsv") or lower.endswith(".txt"):
+    if lower.endswith(".tsv") or lower.endswith(".tsv.gz") or lower.endswith(".txt"):
         return pd.read_csv(path, sep="\t")
-    if lower.endswith(".csv"):
+    if lower.endswith(".csv") or lower.endswith(".csv.gz"):
         return pd.read_csv(path)
     return pd.read_csv(path, sep=None, engine="python")
 

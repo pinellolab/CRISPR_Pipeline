@@ -15,7 +15,7 @@ process prepare_guide_inference {
 
     script:
         def cis_flag = subset_for_cis ? "--subset_for_cis" : ""
-        def pairs_format = ((params.INFERENCE_method == 'default' || params.INFERENCE_method.toString().contains('sceptre')) && params.INFERENCE_INTERMEDIATE_TABLE_FORMAT == 'parquet') ? 'tsv' : params.INFERENCE_INTERMEDIATE_TABLE_FORMAT
+        def pairs_format = ((params.INFERENCE_method == 'default' || params.INFERENCE_method.toString().contains('sceptre')) && params.INFERENCE_INTERMEDIATE_TABLE_FORMAT == 'parquet') ? 'tsv.gz' : params.INFERENCE_INTERMEDIATE_TABLE_FORMAT
         """
         prepare_inference.py \\
             --mudata_path ${mudata} \\

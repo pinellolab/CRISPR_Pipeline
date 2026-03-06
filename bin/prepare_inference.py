@@ -28,9 +28,9 @@ def _read_pairs_table(path: str) -> pd.DataFrame:
     lower = path.lower()
     if lower.endswith(".parquet"):
         return pd.read_parquet(path)
-    if lower.endswith(".tsv") or lower.endswith(".txt"):
+    if lower.endswith(".tsv") or lower.endswith(".tsv.gz") or lower.endswith(".txt"):
         return pd.read_csv(path, sep="\t")
-    if lower.endswith(".csv"):
+    if lower.endswith(".csv") or lower.endswith(".csv.gz"):
         return pd.read_csv(path)
     return pd.read_csv(path, sep=None, engine="python")
 
@@ -45,6 +45,11 @@ def _write_pairs_table(df: pd.DataFrame, prefix: str, output_format: str) -> str
             print(
                 f"Unable to write parquet pairs table ({err}); falling back to TSV."
             )
+    if output_format == "tsv.gz":
+        tsv_gz_path = f"{prefix}.tsv.gz"
+        df.to_csv(tsv_gz_path, sep="\t", index=False, compression="gzip")
+        return tsv_gz_path
+
     tsv_path = f"{prefix}.tsv"
     df.to_csv(tsv_path, sep="\t", index=False)
     return tsv_path
@@ -258,8 +263,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pairs_output_format",
-        choices=["tsv", "parquet"],
-        default="tsv",
+        choices=["tsv.gz", "tsv", "parquet"],
+        default="tsv.gz",
         help="Sidecar pairs table format.",
     )
     parser.add_argument(

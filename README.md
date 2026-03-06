@@ -125,7 +125,7 @@ Update the pipeline-specific parameters in the `params` section, for example:
     INFERENCE_SCEPTRE_MAX_MATRIX_ENTRIES = 2147483647 // chunk when n_cells*n_genes exceeds this threshold
     INFERENCE_SCEPTRE_GENE_CHUNK_SIZE = 4000 // genes per chunk when chunking is enabled
     INFERENCE_SCEPTRE_FORCE_CHUNK = false // force chunking regardless of matrix size
-    INFERENCE_INTERMEDIATE_TABLE_FORMAT = 'tsv' // sidecar pairs_to_test format: tsv or parquet
+    INFERENCE_INTERMEDIATE_TABLE_FORMAT = 'tsv.gz' // sidecar pairs_to_test format: tsv.gz, tsv, or parquet
     INFERENCE_IO_PROFILE = 'default' // 'default' or 'optimized'
 
     NETWORK_custom_central_nodes = 'undefined'
