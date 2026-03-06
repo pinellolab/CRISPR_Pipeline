@@ -39,44 +39,73 @@ workflow inference_pipeline {
             params.INFERENCE_max_target_distance_bp,
             true
         )
+    } else if (params.INFERENCE_target_guide_pairing_strategy == 'all_by_all') {
+        // no pair preparation required
     } else{
         error("Invalid INFERENCE_target_guide_pairing_strategy: ${params.INFERENCE_target_guide_pairing_strategy}")
     }
 
     // Determine the mudata input once (avoid duplicate variable definitions)
     def mudata_input
+    def pairs_to_test_input
 
     if (params.INFERENCE_target_guide_pairing_strategy != 'all_by_all') {
         mudata_input = PrepareInference.mudata_inference_input
+        pairs_to_test_input = PrepareInference.pairs_to_test_file
     } else {
         mudata_input = mudata_concat
+        pairs_to_test_input = Channel.value(file("${projectDir}/assets/no_pairs_to_test.tsv"))
     }
 
     if (params.INFERENCE_method == "sceptre"){
         SceptreChunkInput = sceptre_chunk_prepare(mudata_input)
-        SceptreChunkResults = inference_sceptre(SceptreChunkInput.mudata_chunks.flatten())
+        SceptreChunkResults = inference_sceptre(
+            SceptreChunkInput.mudata_chunks.flatten(),
+            pairs_to_test_input
+        )
         TestResults = sceptre_chunk_merge(
             SceptreChunkResults.per_guide_output.collect(),
             SceptreChunkResults.per_element_output.collect(),
             mudata_input,
-            SceptreChunkInput.chunk_manifest
+            SceptreChunkInput.chunk_manifest,
+            true
         )
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "perturbo"){
-        TestResults = inference_perturbo(mudata_input, params.INFERENCE_method, params.Multiplicity_of_infection)
+        def run_all_pairs = params.INFERENCE_target_guide_pairing_strategy == 'all_by_all'
+        TestResults = inference_perturbo(
+            mudata_input,
+            params.INFERENCE_method,
+            params.Multiplicity_of_infection,
+            pairs_to_test_input,
+            run_all_pairs,
+            true
+        )
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
         SceptreChunkInput = sceptre_chunk_prepare(mudata_input)
-        SceptreChunkResults = inference_sceptre(SceptreChunkInput.mudata_chunks.flatten())
+        SceptreChunkResults = inference_sceptre(
+            SceptreChunkInput.mudata_chunks.flatten(),
+            pairs_to_test_input
+        )
         SceptreResults = sceptre_chunk_merge(
             SceptreChunkResults.per_guide_output.collect(),
             SceptreChunkResults.per_element_output.collect(),
             mudata_input,
-            SceptreChunkInput.chunk_manifest
+            SceptreChunkInput.chunk_manifest,
+            false
         )
-        PerturboResults = inference_perturbo(mudata_input,  "perturbo", params.Multiplicity_of_infection)
+        def run_all_pairs = params.INFERENCE_target_guide_pairing_strategy == 'all_by_all'
+        PerturboResults = inference_perturbo(
+            mudata_input,
+            "perturbo",
+            params.Multiplicity_of_infection,
+            pairs_to_test_input,
+            run_all_pairs,
+            false
+        )
         MergedInference = mergedResults(
             SceptreResults.per_guide_output,
             SceptreResults.per_element_output,
@@ -92,14 +121,25 @@ workflow inference_pipeline {
         }
         // Process cis results
         SceptreChunkInput_cis = sceptre_chunk_prepare(PrepareInference.mudata_inference_input)
-        SceptreChunkResults_cis = inference_sceptre(SceptreChunkInput_cis.mudata_chunks.flatten())
+        SceptreChunkResults_cis = inference_sceptre(
+            SceptreChunkInput_cis.mudata_chunks.flatten(),
+            pairs_to_test_input
+        )
         SceptreResults_cis = sceptre_chunk_merge(
             SceptreChunkResults_cis.per_guide_output.collect(),
             SceptreChunkResults_cis.per_element_output.collect(),
             PrepareInference.mudata_inference_input,
-            SceptreChunkInput_cis.chunk_manifest
+            SceptreChunkInput_cis.chunk_manifest,
+            false
         )
-        PerturboResults_cis = inference_perturbo(PrepareInference.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
+        PerturboResults_cis = inference_perturbo(
+            PrepareInference.mudata_inference_input,
+            "perturbo",
+            params.Multiplicity_of_infection,
+            pairs_to_test_input,
+            false,
+            false
+        )
         MergedInference_cis = mergedResults(
             SceptreResults_cis.per_guide_output,
             SceptreResults_cis.per_element_output,
@@ -108,7 +148,13 @@ workflow inference_pipeline {
             PrepareInference.mudata_inference_input
         )
         // Process trans results - use concat_mudata directly
-        MergedInference_trans = inference_perturbo_trans(mudata_concat, "perturbo", params.Multiplicity_of_infection, PerturboResults_cis.inference_mudata)
+        MergedInference_trans = inference_perturbo_trans(
+            mudata_concat,
+            "perturbo",
+            params.Multiplicity_of_infection,
+            PerturboResults_cis.completion_token,
+            false
+        )
 
         MergedInference = mergeMudata(
             MergedInference_cis.per_guide_output,

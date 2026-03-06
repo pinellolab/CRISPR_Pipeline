@@ -9,10 +9,16 @@ process prepare_all_guide_inference {
 
     output:
         path "mudata_inference_input.h5mu", emit: mudata_inference_input
+        path "pairs_to_test.*", emit: pairs_to_test_file
 
     script:
+        def pairs_format = ((params.INFERENCE_method == 'default' || params.INFERENCE_method.toString().contains('sceptre')) && params.INFERENCE_INTERMEDIATE_TABLE_FORMAT == 'parquet') ? 'tsv' : params.INFERENCE_INTERMEDIATE_TABLE_FORMAT
         """
-        create_pairs_to_test.py  --limit -1 ${mudata} ${gtf_path}
-        prepare_inference.py pairs_to_test.csv ${mudata}
+        prepare_inference.py \\
+            --mudata_path ${mudata} \\
+            --generate_pairs \\
+            --input_gtf ${gtf_path} \\
+            --limit -1 \\
+            --pairs_output_format ${pairs_format}
         """
 }

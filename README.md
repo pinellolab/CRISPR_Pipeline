@@ -125,6 +125,8 @@ Update the pipeline-specific parameters in the `params` section, for example:
     INFERENCE_SCEPTRE_MAX_MATRIX_ENTRIES = 2147483647 // chunk when n_cells*n_genes exceeds this threshold
     INFERENCE_SCEPTRE_GENE_CHUNK_SIZE = 4000 // genes per chunk when chunking is enabled
     INFERENCE_SCEPTRE_FORCE_CHUNK = false // force chunking regardless of matrix size
+    INFERENCE_INTERMEDIATE_TABLE_FORMAT = 'tsv' // sidecar pairs_to_test format: tsv or parquet
+    INFERENCE_IO_PROFILE = 'default' // 'default' or 'optimized'
 
     NETWORK_custom_central_nodes = 'undefined'
     NETWORK_central_nodes_num = 1
@@ -157,6 +159,12 @@ slurm {
 }
 
 // Run with: nextflow run main.nf -profile slurm
+```
+
+##### ⚡ **I/O-Optimized Mode (Local/HPC)**
+```bash
+# Enables symlink publishing and scratch usage for inference-heavy processes
+nextflow run main.nf -profile local,io_optimized
 ```
 
 ##### ☁️ **Google Cloud Platform**

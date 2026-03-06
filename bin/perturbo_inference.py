@@ -12,6 +12,17 @@ from intended_target_key_utils import (
 )
 
 
+def _read_pairs_table(path: str) -> pd.DataFrame:
+    lower = path.lower()
+    if lower.endswith(".parquet"):
+        return pd.read_parquet(path)
+    if lower.endswith(".tsv") or lower.endswith(".txt"):
+        return pd.read_csv(path, sep="\t")
+    if lower.endswith(".csv"):
+        return pd.read_csv(path)
+    return pd.read_csv(path, sep=None, engine="python")
+
+
 def run_perturbo(
     mdata_input_fp,
     results_tsv_fp,
@@ -30,6 +41,7 @@ def run_perturbo(
     inference_type="element",  # can be per-guide or per-element
     drop_ntc_guides=False,  # whether to drop non-targeting control guides in low_MOI analysis
     num_workers=0,  # number of worker processes for data loading
+    pairs_to_test_file=None,  # optional sidecar file with pairs_to_test
 ):
     scvi.settings.seed = 0
     if num_workers > 0:
@@ -137,15 +149,21 @@ def run_perturbo(
 
     # create element by gene matrix if not testing all pairs
     if not test_all_pairs:
-        assert "pairs_to_test" in mdata.uns, (
-            "pairs_to_test not found in mudata.uns and test_all_pairs is False"
-        )
-        if isinstance(mdata.uns["pairs_to_test"], pd.DataFrame):
+        if pairs_to_test_file is not None:
+            pairs_to_test_df = _read_pairs_table(pairs_to_test_file)
+        elif "pairs_to_test" in mdata.uns and isinstance(mdata.uns["pairs_to_test"], pd.DataFrame):
             pairs_to_test_df = mdata.uns["pairs_to_test"]
-        elif isinstance(mdata.uns["pairs_to_test"], dict):
+        elif "pairs_to_test" in mdata.uns and isinstance(mdata.uns["pairs_to_test"], dict):
             pairs_to_test_df = pd.DataFrame(mdata.uns["pairs_to_test"])
         else:
-            raise ValueError("pairs_to_test must be a DataFrame or dictionary")
+            raise ValueError(
+                "pairs_to_test not found (provide --pairs_to_test_file or include pairs_to_test in mudata.uns)."
+            )
+
+        if "gene_id" not in pairs_to_test_df.columns and "gene_name" in pairs_to_test_df.columns:
+            pairs_to_test_df = pairs_to_test_df.rename(columns={"gene_name": "gene_id"})
+        if "gene_id" not in pairs_to_test_df.columns:
+            raise ValueError("pairs_to_test must contain gene_id (or gene_name) column.")
 
         if element_key not in pairs_to_test_df.columns:
             pairs_to_test_df = enrich_pairs_with_target_metadata(pairs_to_test_df, guide_var)
@@ -409,6 +427,12 @@ def main():
         default=0,
         help="Number of workers for data loading (default: 0)",
     )
+    parser.add_argument(
+        "--pairs_to_test_file",
+        type=str,
+        default=None,
+        help="Optional sidecar pairs table path (tsv/csv/parquet) for non-all-pairs runs.",
+    )
 
     # Parse the arguments
     args = parser.parse_args()
@@ -429,6 +453,7 @@ def main():
         guide_modality_name=args.guide_modality_name,
         test_all_pairs=args.test_all_pairs,
         inference_type=args.inference_type,
+        pairs_to_test_file=args.pairs_to_test_file,
     )
 
 

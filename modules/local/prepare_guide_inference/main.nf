@@ -11,11 +11,18 @@ process prepare_guide_inference {
 
     output:
         path "mudata_inference_input.h5mu", emit: mudata_inference_input
+        path "pairs_to_test.*", emit: pairs_to_test_file
 
     script:
         def cis_flag = subset_for_cis ? "--subset_for_cis" : ""
+        def pairs_format = ((params.INFERENCE_method == 'default' || params.INFERENCE_method.toString().contains('sceptre')) && params.INFERENCE_INTERMEDIATE_TABLE_FORMAT == 'parquet') ? 'tsv' : params.INFERENCE_INTERMEDIATE_TABLE_FORMAT
         """
-        create_pairs_to_test.py  --limit $limit ${mudata} ${gtf_path}
-        prepare_inference.py pairs_to_test.csv ${mudata} ${cis_flag}
+        prepare_inference.py \\
+            --mudata_path ${mudata} \\
+            --generate_pairs \\
+            --input_gtf ${gtf_path} \\
+            --limit $limit \\
+            --pairs_output_format ${pairs_format} \\
+            ${cis_flag}
         """
 }

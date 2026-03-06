@@ -198,7 +198,7 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 }
 
 
-inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
+inference_sceptre_m <- function(mudata, n_processors = NA, pairs_to_test_file = NA_character_, ...) {
   # convert MuData object to sceptre object
   sceptre_object <- convert_mudata_to_sceptre_object_v1(mudata, remove_collinear_covariates = TRUE)
   guide_lookup <- SingleCellExperiment::rowData(mudata[["guide"]]) |>
@@ -224,10 +224,35 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
   }
   args_list$control_group <- "complement"
 
-  # Check if pairs_to_test exists in metadata
-  if (!is.null(MultiAssayExperiment::metadata(mudata)$pairs_to_test)) {
+  pairs_to_test <- NULL
+  if (!is.na(pairs_to_test_file) && nzchar(pairs_to_test_file) && pairs_to_test_file != "NONE") {
+    if (!file.exists(pairs_to_test_file)) {
+      stop(sprintf("pairs_to_test file does not exist: %s", pairs_to_test_file))
+    }
+    lower_fp <- tolower(pairs_to_test_file)
+    if (grepl("\\.parquet$", lower_fp)) {
+      if (!requireNamespace("arrow", quietly = TRUE)) {
+        stop("pairs_to_test parquet input requires the arrow R package.")
+      }
+      pairs_to_test <- arrow::read_parquet(pairs_to_test_file) |>
+        as.data.frame(stringsAsFactors = FALSE)
+    } else if (grepl("\\.csv$", lower_fp)) {
+      pairs_to_test <- utils::read.csv(pairs_to_test_file, stringsAsFactors = FALSE)
+    } else {
+      pairs_to_test <- utils::read.delim(
+        pairs_to_test_file,
+        sep = "\t",
+        stringsAsFactors = FALSE,
+        check.names = FALSE
+      )
+    }
+  } else if (!is.null(MultiAssayExperiment::metadata(mudata)$pairs_to_test)) {
     pairs_to_test <- MultiAssayExperiment::metadata(mudata)$pairs_to_test |>
-      as.data.frame()
+      as.data.frame(stringsAsFactors = FALSE)
+  }
+
+  # Use provided/metadata pairs_to_test when available.
+  if (!is.null(pairs_to_test)) {
 
     if (!"gene_id" %in% colnames(pairs_to_test) && "gene_name" %in% colnames(pairs_to_test)) {
       pairs_to_test <- pairs_to_test |>
@@ -252,6 +277,10 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
         )
     }
 
+    available_gene_ids <- rownames(SingleCellExperiment::rowData(mudata[["gene"]]))
+    pairs_to_test <- pairs_to_test |>
+      dplyr::filter(as.character(gene_id) %in% as.character(available_gene_ids))
+
     discovery_pairs <- pairs_to_test |>
       dplyr::transmute(
         grna_target = as.character(intended_target_key),
@@ -263,7 +292,12 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
       dplyr::filter(!is.na(grna_target), !is.na(response_id)) |>
       dplyr::distinct()
 
-    args_list[["discovery_pairs"]] <- discovery_pairs
+    if (nrow(discovery_pairs) == 0) {
+      warning("pairs_to_test resolved to zero discovery pairs for this chunk; using construct_trans_pairs fallback.")
+      args_list[["discovery_pairs"]] <- sceptre::construct_trans_pairs(sceptre_object)
+    } else {
+      args_list[["discovery_pairs"]] <- discovery_pairs
+    }
   } else {
     # No pairs_to_test found - use SCEPTRE's construct_trans_pairs for trans analysis
     args_list[["discovery_pairs"]] <- sceptre::construct_trans_pairs(sceptre_object)
@@ -393,9 +427,8 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
     silent = TRUE
   )
 
-  # return mudata (with union results in metadata) and both result tables
+  # return result tables
   return(list(
-    mudata = mudata,
     union_test_results = union_test_results,
     singleton_test_results = singleton_test_results
   ))
@@ -414,6 +447,7 @@ if (!exists(".sourced_from_test")) {
   control_group <- args[5]
   resampling_mechanism <- args[6]
   n_processors <- if (length(args) >= 7) suppressWarnings(as.integer(args[7])) else NA
+  pairs_to_test_file <- if (length(args) >= 8) args[8] else "NONE"
 
   # read MuData
   mudata_in <- MuData::readH5MU(mudata_fp)
@@ -426,16 +460,7 @@ if (!exists(".sourced_from_test")) {
     resampling_approximation = resampling_approximation,
     control_group = control_group,
     resampling_mechanism = resampling_mechanism,
-    n_processors = n_processors
+    n_processors = n_processors,
+    pairs_to_test_file = pairs_to_test_file
   )
-  # write outputs: per-element (union) and per-guide (singleton)
-  if (!is.null(results$union_test_results)) {
-    try(write.table(results$union_test_results, file = "per_element_output.tsv", sep = "\t", row.names = FALSE, quote = FALSE), silent = TRUE)
-  }
-  if (!is.null(results$singleton_test_results)) {
-    try(write.table(results$singleton_test_results, file = "per_guide_output.tsv", sep = "\t", row.names = FALSE, quote = FALSE), silent = TRUE)
-  }
-
-  # write the modified MuData (contains union results in metadata as 'test_results')
-  try(MuData::writeH5MU(object = results$mudata, file = "inference_mudata.h5mu"), silent = TRUE)
 }

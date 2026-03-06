@@ -111,6 +111,7 @@ def merge_sceptre_chunk_results(
     output_mudata,
     output_per_guide,
     output_per_element,
+    skip_mudata_write=False,
 ):
     merged_guide = _read_many_tsv(per_guide_files)
     merged_element = _read_many_tsv(per_element_files)
@@ -137,14 +138,17 @@ def merge_sceptre_chunk_results(
     merged_guide.to_csv(output_per_guide, sep="\t", index=False, compression="gzip")
     merged_element.to_csv(output_per_element, sep="\t", index=False, compression="gzip")
 
-    mdata = mu.read_h5mu(base_mudata)
-    mdata.uns["per_guide_results"] = merged_guide
-    mdata.uns["per_element_results"] = merged_element
+    if not skip_mudata_write:
+        mdata = mu.read_h5mu(base_mudata)
+        mdata.uns["per_guide_results"] = merged_guide
+        mdata.uns["per_element_results"] = merged_element
 
-    if chunk_manifest and os.path.exists(chunk_manifest):
-        mdata.uns["sceptre_chunk_manifest"] = pd.read_csv(chunk_manifest, sep="\t")
+        if chunk_manifest and os.path.exists(chunk_manifest):
+            mdata.uns["sceptre_chunk_manifest"] = pd.read_csv(chunk_manifest, sep="\t")
 
-    mdata.write(output_mudata, compression="gzip")
+        mdata.write(output_mudata, compression="gzip")
+    else:
+        print("Skipping merged MuData write (--skip_mudata_write enabled).")
 
 
 def main():
@@ -159,6 +163,11 @@ def main():
     parser.add_argument("--output_mudata", default="inference_mudata.h5mu")
     parser.add_argument("--output_per_guide", default="sceptre_per_guide_output.tsv.gz")
     parser.add_argument("--output_per_element", default="sceptre_per_element_output.tsv.gz")
+    parser.add_argument(
+        "--skip_mudata_write",
+        action="store_true",
+        help="Skip writing merged MuData output; write only merged TSV outputs.",
+    )
     args = parser.parse_args()
 
     merge_sceptre_chunk_results(
@@ -169,6 +178,7 @@ def main():
         output_mudata=args.output_mudata,
         output_per_guide=args.output_per_guide,
         output_per_element=args.output_per_element,
+        skip_mudata_write=args.skip_mudata_write,
     )
 
 
