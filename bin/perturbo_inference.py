@@ -220,11 +220,7 @@ def run_perturbo(
         model.get_element_effects()
         .rename(columns=igvf_name_map)
         .assign(log2_fc=lambda x: x["loc"] / np.log(2))
-        .assign(log2_scale=lambda x: x["scale"] / np.log(2))
-    )
-
-    element_effects.to_csv(
-        "perturbo_results.tsv.gz", index=False, sep="\t", compression="gzip"
+        .assign(log2_fc_std=lambda x: x["scale"] / np.log(2))
     )
 
     # element_effects[element_key] = element_effects[element_key].astype("category")
@@ -235,6 +231,7 @@ def run_perturbo(
             "gene_id",
             element_key,
             "log2_fc",
+            "log2_fc_std",
             "p_value",
         ]
     ]
@@ -266,6 +263,7 @@ def run_perturbo(
                 "intended_target_start",
                 "intended_target_end",
                 "log2_fc",
+                "log2_fc_std",
                 "p_value",
             ]
         ]
