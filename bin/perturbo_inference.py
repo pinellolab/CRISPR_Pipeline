@@ -5,6 +5,11 @@ import mudata as md
 import numpy as np
 import pandas as pd
 import scvi
+from intended_target_key_utils import (
+    annotate_intended_target_groups,
+    enrich_pairs_with_target_metadata,
+    get_target_lookup,
+)
 
 
 def run_perturbo(
@@ -31,15 +36,18 @@ def run_perturbo(
         scvi.settings.dl_num_workers = num_workers
 
     mdata = md.read(mdata_input_fp)
+    guide_var = annotate_intended_target_groups(mdata["guide"].var)
+    mdata["guide"].var = guide_var
 
     if inference_type == "guide":
         element_key = "guide_id"
     elif inference_type == "element":
-        element_key = "intended_target_name"
+        element_key = "intended_target_key"
     else:
         raise ValueError("inference_type must be 'guide' or 'element'")
 
     guide_var = mdata["guide"].var
+    target_lookup = get_target_lookup(guide_var) if inference_type == "element" else None
 
     control_guide_filter = pd.Series(False, index=guide_var.index)
     if "targeting" in guide_var.columns:
@@ -139,6 +147,9 @@ def run_perturbo(
         else:
             raise ValueError("pairs_to_test must be a DataFrame or dictionary")
 
+        if element_key not in pairs_to_test_df.columns:
+            pairs_to_test_df = enrich_pairs_with_target_metadata(pairs_to_test_df, guide_var)
+
         aggregated_df = (
             pairs_to_test_df[["gene_id", element_key]].drop_duplicates().assign(value=1)
         )
@@ -209,11 +220,7 @@ def run_perturbo(
         model.get_element_effects()
         .rename(columns=igvf_name_map)
         .assign(log2_fc=lambda x: x["loc"] / np.log(2))
-        .assign(log2_scale=lambda x: x["scale"] / np.log(2))
-    )
-
-    element_effects.to_csv(
-        "perturbo_results.tsv.gz", index=False, sep="\t", compression="gzip"
+        .assign(log2_fc_std=lambda x: x["scale"] / np.log(2))
     )
 
     # element_effects[element_key] = element_effects[element_key].astype("category")
@@ -224,9 +231,43 @@ def run_perturbo(
             "gene_id",
             element_key,
             "log2_fc",
+            "log2_fc_std",
             "p_value",
         ]
     ]
+
+    if inference_type == "element":
+        test_results = test_results.merge(
+            target_lookup,
+            on="intended_target_key",
+            how="left",
+        )
+        if test_results["intended_target_name"].isna().any():
+            missing_keys = (
+                test_results.loc[
+                    test_results["intended_target_name"].isna(), "intended_target_key"
+                ]
+                .astype(str)
+                .drop_duplicates()
+                .tolist()
+            )
+            raise ValueError(
+                "Unable to map intended_target_key back to target metadata for keys: "
+                + ", ".join(missing_keys[:20])
+            )
+        test_results = test_results[
+            [
+                "gene_id",
+                "intended_target_name",
+                "intended_target_chr",
+                "intended_target_start",
+                "intended_target_end",
+                "log2_fc",
+                "log2_fc_std",
+                "p_value",
+            ]
+        ]
+
     mdata.uns[f"per_{inference_type}_results"] = test_results
 
     # NOTE: this part creates a per-guide output table even when we are running per-element inference.

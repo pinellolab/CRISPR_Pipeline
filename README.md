@@ -118,7 +118,7 @@ Update the pipeline-specific parameters in the `params` section, for example:
     INFERENCE_SCEPTRE_side = 'both'
     INFERENCE_SCEPTRE_grna_integration_strategy = 'union'
     INFERENCE_SCEPTRE_resampling_approximation = 'skew_normal'
-    INFERENCE_SCEPTRE_control_group = 'default'
+    INFERENCE_SCEPTRE_control_group = 'complement'
     INFERENCE_SCEPTRE_resampling_mechanism = 'default'
     INFERENCE_SCEPTRE_formula_object = 'default'
     INFERENCE_SCEPTRE_CHUNK_MODE = 'auto' // auto, off, force
@@ -260,7 +260,7 @@ All result files are `tsv.gz` (tab-separated, gzip-compressed) unless noted othe
 | File | Description |
 |---|---|
 | `cis_per_guide_results.tsv.gz` | Inference results for **cis** guide--gene pairs with guides tested **independently**. |
-| `cis_per_element_results.tsv.gz` | Inference results for **cis** element--gene pairs with guides **grouped by intended target element**. |
+| `cis_per_element_results.tsv.gz` | Inference results for **cis** element--gene pairs with guides grouped by `(intended_target_name, intended_target_chr, intended_target_start, intended_target_end)`. |
 
 ### Schema
 
@@ -281,10 +281,16 @@ All result files are `tsv.gz` (tab-separated, gzip-compressed) unless noted othe
 |---|---|
 | `gene_id` | ENSEMBL gene ID |
 | `intended_target_name` | Intended target element name |
+| `intended_target_chr` | Intended target chromosome |
+| `intended_target_start` | Intended target start coordinate |
+| `intended_target_end` | Intended target end coordinate |
 | `sceptre_log2_fc` | SCEPTRE effect size estimate (log2 fold-change) |
 | `sceptre_p_value` | SCEPTRE (uncorrected) p_value |
 | `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
+
+`intended_target_name` for non-targeting controls is bucketed as `non-targeting|N` (for example, `non-targeting|1`).
+SCEPTRE outputs contain discovery-analysis results only (calibration-check rows are not exported).
 
 ---
 
@@ -295,7 +301,7 @@ All result files are `tsv.gz` (tab-separated, gzip-compressed) unless noted othe
 | File | Description |
 |---|---|
 | `trans_per_guide_results.tsv.gz` | PerTurbo inference results for **all guide--gene pairs**, guides tested **independently**. |
-| `trans_per_element_results.tsv.gz` | PerTurbo inference results for **all element--gene pairs**, guides **grouped by intended target element**. |
+| `trans_per_element_results.tsv.gz` | PerTurbo inference results for **all element--gene pairs**, grouped by `(intended_target_name, intended_target_chr, intended_target_start, intended_target_end)`. |
 
 ### Schema
 
@@ -314,6 +320,9 @@ All result files are `tsv.gz` (tab-separated, gzip-compressed) unless noted othe
 |---|---|
 | `gene_id` | ENSEMBL gene ID |
 | `intended_target_name` | Intended target element name. |
+| `intended_target_chr` | Intended target chromosome. |
+| `intended_target_start` | Intended target start coordinate. |
+| `intended_target_end` | Intended target end coordinate. |
 | `log2_fc` | PerTurbo effect size (log2 fold-change) |
 | `p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
 

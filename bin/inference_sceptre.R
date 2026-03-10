@@ -18,6 +18,10 @@ if (getRversion() >= "2.15.1") {
       "log_2_fold_change",
       "gene_id",
       "intended_target_name",
+      "intended_target_chr",
+      "intended_target_start",
+      "intended_target_end",
+      "intended_target_key",
       "log2_fc"
     )
   )
@@ -150,12 +154,35 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 
   gene_ids <- rownames(SingleCellExperiment::rowData(mudata[["gene"]]))
   rownames(response_matrix) <- gene_ids
-  grna_target_data_frame <- SingleCellExperiment::rowData(mudata[["guide"]]) |>
+  guide_row_data <- SingleCellExperiment::rowData(mudata[["guide"]]) |>
     as.data.frame() |>
-    tibble::rownames_to_column(var = "grna_id") |>
-    dplyr::rename(grna_target = intended_target_name) |>
-    # dplyr::mutate(grna_target = ifelse(!targeting & (moi=='low'), "non-targeting", grna_target)) |>
-    dplyr::select(grna_id, grna_target)
+    tibble::rownames_to_column(var = "grna_id")
+
+  required_cols <- c(
+    "intended_target_key",
+    "intended_target_name",
+    "intended_target_chr",
+    "intended_target_start",
+    "intended_target_end"
+  )
+  missing_cols <- setdiff(required_cols, colnames(guide_row_data))
+  if (length(missing_cols) > 0) {
+    stop(sprintf(
+      "Guide rowData is missing required columns: %s. Upstream metadata preparation did not run.",
+      paste(missing_cols, collapse = ", ")
+    ))
+  }
+
+  if (any(guide_row_data$intended_target_name == "non-targeting", na.rm = TRUE)) {
+    stop("Found guides assigned to exact 'non-targeting'. Expected bucketed non-targeting groups (e.g., non-targeting|1).")
+  }
+
+  if (any(is.na(guide_row_data$intended_target_key))) {
+    stop("Guide rowData contains NA intended_target_key values.")
+  }
+
+  grna_target_data_frame <- guide_row_data |>
+    dplyr::transmute(grna_id = grna_id, grna_target = intended_target_key)
 
   # assemble information into sceptre object
   sceptre_object <- sceptre::import_data(
@@ -174,47 +201,73 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
   # convert MuData object to sceptre object
   sceptre_object <- convert_mudata_to_sceptre_object_v1(mudata, remove_collinear_covariates = TRUE)
+  guide_lookup <- SingleCellExperiment::rowData(mudata[["guide"]]) |>
+    as.data.frame() |>
+    tibble::rownames_to_column(var = "grna_id")
+  if (!"guide_id" %in% colnames(guide_lookup)) {
+    guide_lookup$guide_id <- guide_lookup$grna_id
+  }
+  target_lookup <- guide_lookup |>
+    dplyr::select(
+      intended_target_key,
+      intended_target_name,
+      intended_target_chr,
+      intended_target_start,
+      intended_target_end
+    ) |>
+    dplyr::distinct()
 
-  # extract set of discovery pairs to test (if available)
-  moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
+  args_list <- list(...)
+  requested_control_group <- if ("control_group" %in% names(args_list)) as.character(args_list$control_group)[1] else NA_character_
+  if (!is.na(requested_control_group) && requested_control_group != "complement") {
+    warning(sprintf("Overriding control_group='%s' with 'complement' for SCEPTRE DE analysis.", requested_control_group))
+  }
+  args_list$control_group <- "complement"
 
   # Check if pairs_to_test exists in metadata
   if (!is.null(MultiAssayExperiment::metadata(mudata)$pairs_to_test)) {
     pairs_to_test <- MultiAssayExperiment::metadata(mudata)$pairs_to_test |>
       as.data.frame()
-    discovery_pairs <- pairs_to_test |>
-      dplyr::rename(
-        grna_target = intended_target_name,
-        response_id = gene_id
-      ) |>
-      dplyr::filter(grna_target != "non-targeting")
-    # assemble base arguments to set_analysis_parameters()
-    args_list <- list(...)
 
-    discovery_pairs <- discovery_pairs |>
-      dplyr::mutate(grna_target = replace(grna_target, tolower(trimws(as.character(grna_target))) == "nan", NA_character_)) |>
-      dplyr::filter(!is.na(grna_target))
-
-    tmp_allowed <- unique(sceptre_object@grna_target_data_frame$grna_target)
-    tmp_bad <- setdiff(unique(discovery_pairs$grna_target), tmp_allowed)
-
-    print("Diferences:")
-    print(tmp_bad)
-    print(setdiff(unique(discovery_pairs$grna_target), unique(sceptre_object@grna_target_data_frame$grna_target)))
-
-    if ("discovery_pairs" %in% names(args_list)) {
-      warning("The `discovery_pairs` argument is ignored. The `discovery_pairs` are set from the `pairs_to_test` metadata.")
+    if (!"gene_id" %in% colnames(pairs_to_test) && "gene_name" %in% colnames(pairs_to_test)) {
+      pairs_to_test <- pairs_to_test |>
+        dplyr::rename(gene_id = gene_name)
     }
-    # use discovery pairs from metadata
+    if (!"gene_id" %in% colnames(pairs_to_test)) {
+      stop("pairs_to_test metadata must contain gene_id or gene_name.")
+    }
+
+    if (!"intended_target_key" %in% colnames(pairs_to_test)) {
+      if (!"guide_id" %in% colnames(pairs_to_test)) {
+        stop("pairs_to_test metadata is missing intended_target_key and guide_id columns.")
+      }
+      pairs_to_test <- pairs_to_test |>
+        dplyr::mutate(guide_id = as.character(guide_id))
+      pairs_to_test <- pairs_to_test |>
+        dplyr::left_join(
+          guide_lookup |>
+            dplyr::transmute(guide_id = as.character(guide_id), intended_target_key = intended_target_key) |>
+            dplyr::distinct(),
+          by = "guide_id"
+        )
+    }
+
+    discovery_pairs <- pairs_to_test |>
+      dplyr::transmute(
+        grna_target = as.character(intended_target_key),
+        response_id = as.character(gene_id)
+      ) |>
+      dplyr::mutate(
+        grna_target = replace(grna_target, tolower(trimws(grna_target)) == "nan", NA_character_)
+      ) |>
+      dplyr::filter(!is.na(grna_target), !is.na(response_id)) |>
+      dplyr::distinct()
+
     args_list[["discovery_pairs"]] <- discovery_pairs
   } else {
     # No pairs_to_test found - use SCEPTRE's construct_trans_pairs for trans analysis
-    args_list <- list(...)
-    discovery_pairs <- sceptre::construct_trans_pairs(sceptre_object)
-    args_list[["discovery_pairs"]] <- discovery_pairs
+    args_list[["discovery_pairs"]] <- sceptre::construct_trans_pairs(sceptre_object)
   }
-  # print (discovery_pairs)
-
 
   # construct formula excluding gRNA covariates to avoid multicollinearity
   # (gRNA assignments are binary, making grna_n_nonzero and grna_n_umis identical)
@@ -248,13 +301,6 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
       n_nonzero_trt_thresh = 0L,
       n_nonzero_cntrl_thresh = 0L,
       p_mito_threshold = 1
-    )
-
-  # run calibration check before discovery analysis to satisfy sceptre ordering
-  sceptre_object <- sceptre_object |>
-    sceptre::run_calibration_check(
-      parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
-      n_processors = if (!is.na(n_processors) && as.integer(n_processors) > 1) as.integer(n_processors) else NULL
     ) |>
     sceptre::run_discovery_analysis(
       parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
@@ -267,18 +313,23 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
     dplyr::select(response_id, grna_target, p_value, log_2_fold_change) |>
     dplyr::rename(
       gene_id = response_id,
-      intended_target_name = grna_target,
+      intended_target_key = grna_target,
       log2_fc = log_2_fold_change
+    ) |>
+    dplyr::left_join(target_lookup, by = "intended_target_key") |>
+    dplyr::select(
+      gene_id,
+      intended_target_name,
+      intended_target_chr,
+      intended_target_start,
+      intended_target_end,
+      log2_fc,
+      p_value
     )
-  union_calibration_results <- sceptre_object |>
-    sceptre::get_result(analysis = "run_calibration_check") |>
-    dplyr::select(response_id, grna_target, p_value, log_2_fold_change) |>
-    dplyr::rename(
-      gene_id = response_id,
-      intended_target_name = grna_target,
-      log2_fc = log_2_fold_change
-    )
-  union_test_results <- rbind(union_results, union_calibration_results)
+  if (any(is.na(union_results$intended_target_name))) {
+    stop("Unable to decode intended_target_key values back to intended target metadata in SCEPTRE union output.")
+  }
+  union_test_results <- union_results
 
   # store union results in mudata metadata as requested
   MultiAssayExperiment::metadata(mudata)$per_element_results <- union_test_results
@@ -314,10 +365,6 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
       n_nonzero_cntrl_thresh = 0L,
       p_mito_threshold = 1
     ) |>
-    sceptre::run_calibration_check(
-      parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
-      n_processors = if (!is.na(n_processors) && as.integer(n_processors) > 1) as.integer(n_processors) else NULL
-    ) |>
     sceptre::run_discovery_analysis(
       parallel = (!is.na(n_processors) && as.integer(n_processors) > 1),
       n_processors = if (!is.na(n_processors) && as.integer(n_processors) > 1) as.integer(n_processors) else NULL
@@ -332,17 +379,7 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
       guide_id = grna_id,
       log2_fc = log_2_fold_change
     )
-
-  singleton_calibration_results <- sceptre_object |>
-    sceptre::get_result(analysis = "run_calibration_check") |>
-    dplyr::select(response_id, grna_id, p_value, log_2_fold_change) |>
-    dplyr::rename(
-      gene_id = response_id,
-      guide_id = grna_id,
-      log2_fc = log_2_fold_change
-    )
-
-  singleton_test_results <- rbind(singleton_results, singleton_calibration_results)
+  singleton_test_results <- singleton_results
   MultiAssayExperiment::metadata(mudata)$per_guide_results <- singleton_test_results
 
   try(
