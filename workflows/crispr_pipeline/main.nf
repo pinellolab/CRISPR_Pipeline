@@ -63,17 +63,17 @@ workflow CRISPR_PIPELINE {
     //ch_hash.view()
 
     ch_rna_seqspec = ch_rna
-        .map { meta, _fastqs -> meta.seqspec }
+        .map { meta, _fastqs -> file(meta.seqspec) }
         .unique()
         .first()
 
     ch_guide_seqspec = ch_guide
-        .map { meta, _fastqs -> meta.seqspec }
+        .map { meta, _fastqs -> file(meta.seqspec) }
         .unique()
         .first()
 
     ch_hash_seqspec = ch_hash
-        .map { meta, _fastqs -> meta.seqspec }
+        .map { meta, _fastqs -> file(meta.seqspec) }
         .unique()
         .first()
 
@@ -84,19 +84,19 @@ workflow CRISPR_PIPELINE {
 
     // barcode_onlist
     ch_barcode_onlist = ch_rna
-        .map { meta, _fastqs -> meta.barcode_onlist }
+        .map { meta, _fastqs -> file(meta.barcode_onlist) }
         .unique()
         .first()
 
     //guide_design
     ch_guide_design = ch_guide
-        .map { meta, _fastqs -> meta.guide_design }
+        .map { meta, _fastqs -> file(meta.guide_design) }
         .unique()
         .first()
 
     //barcode_hashtag_map
     ch_barcode_hashtag_map = ch_hash
-        .map { meta, _fastqs -> meta.barcode_hashtag_map }
+        .map { meta, _fastqs -> file(meta.barcode_hashtag_map) }
         .unique()
         .first()
 
@@ -150,8 +150,12 @@ workflow CRISPR_PIPELINE {
 
         Demultiplex = demultiplex(Hashing_Filtered.hashing_filtered_anndata.flatten())
 
-        hashing_demux_anndata_collected = Demultiplex.hashing_demux_anndata.collect()
-        hashing_demux_unfiltered_anndata_collected = Demultiplex.hashing_demux_unfiltered_anndata.collect()
+        hashing_demux_anndata_collected = Demultiplex.hashing_demux_anndata
+            .collect()
+            .map { files -> files.sort { a, b -> a.toString() <=> b.toString() } }
+        hashing_demux_unfiltered_anndata_collected = Demultiplex.hashing_demux_unfiltered_anndata
+            .collect()
+            .map { files -> files.sort { a, b -> a.toString() <=> b.toString() } }
 
         Hashing_Concat = hashing_concat(hashing_demux_anndata_collected, hashing_demux_unfiltered_anndata_collected)
 

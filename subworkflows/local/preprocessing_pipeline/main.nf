@@ -9,9 +9,15 @@ workflow preprocessing_pipeline {
     trans_out_dir
 
     main:
+    selected_trans_out_dir = trans_out_dir
+        .collect()
+        .map { dirs ->
+            dirs.sort { a, b -> a.getName() <=> b.getName() }[0]
+        }
+
     Preprocessed_AnnData = PreprocessAnnData(
         concat_anndata_rna,
-        trans_out_dir.flatten().first(),
+        selected_trans_out_dir,
         params.QC_min_genes_per_cell,
         params.QC_min_cells_per_gene,
         params.QC_pct_mito,

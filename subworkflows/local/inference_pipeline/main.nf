@@ -19,6 +19,7 @@ workflow inference_pipeline {
     gtf_reference
 
     main:
+    sort_paths = { paths -> paths.sort { a, b -> a.toString() <=> b.toString() } }
 
     if (params.INFERENCE_target_guide_pairing_strategy == 'predefined_pairs') {
         PrepareInference = prepare_user_guide_inference(
@@ -56,8 +57,8 @@ workflow inference_pipeline {
         SceptreChunkInput = sceptre_chunk_prepare(mudata_input)
         SceptreChunkResults = inference_sceptre(SceptreChunkInput.mudata_chunks.flatten())
         TestResults = sceptre_chunk_merge(
-            SceptreChunkResults.per_guide_output.collect(),
-            SceptreChunkResults.per_element_output.collect(),
+            SceptreChunkResults.per_guide_output.collect().map(sort_paths),
+            SceptreChunkResults.per_element_output.collect().map(sort_paths),
             mudata_input,
             SceptreChunkInput.chunk_manifest
         )
@@ -71,8 +72,8 @@ workflow inference_pipeline {
         SceptreChunkInput = sceptre_chunk_prepare(mudata_input)
         SceptreChunkResults = inference_sceptre(SceptreChunkInput.mudata_chunks.flatten())
         SceptreResults = sceptre_chunk_merge(
-            SceptreChunkResults.per_guide_output.collect(),
-            SceptreChunkResults.per_element_output.collect(),
+            SceptreChunkResults.per_guide_output.collect().map(sort_paths),
+            SceptreChunkResults.per_element_output.collect().map(sort_paths),
             mudata_input,
             SceptreChunkInput.chunk_manifest
         )
@@ -94,8 +95,8 @@ workflow inference_pipeline {
         SceptreChunkInput_cis = sceptre_chunk_prepare(PrepareInference.mudata_inference_input)
         SceptreChunkResults_cis = inference_sceptre(SceptreChunkInput_cis.mudata_chunks.flatten())
         SceptreResults_cis = sceptre_chunk_merge(
-            SceptreChunkResults_cis.per_guide_output.collect(),
-            SceptreChunkResults_cis.per_element_output.collect(),
+            SceptreChunkResults_cis.per_guide_output.collect().map(sort_paths),
+            SceptreChunkResults_cis.per_element_output.collect().map(sort_paths),
             PrepareInference.mudata_inference_input,
             SceptreChunkInput_cis.chunk_manifest
         )

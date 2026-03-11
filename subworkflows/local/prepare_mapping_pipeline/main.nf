@@ -19,7 +19,10 @@ workflow prepare_mapping_pipeline {
         }
         .collect()
         .map { it ->
-            def json = groovy.json.JsonOutput.toJson([batch: it.batch.flatten(), cov1: it.cov1.flatten()])
+            def sorted_covariates = it.sort { a, b ->
+                a.batch.toString() <=> b.batch.toString() ?: a.cov1.toString() <=> b.cov1.toString()
+            }
+            def json = groovy.json.JsonOutput.toJson([batch: sorted_covariates.batch.flatten(), cov1: sorted_covariates.cov1.flatten()])
             return json
         }
         .view {"Covariate_list: $it"}
