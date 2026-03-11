@@ -84,6 +84,31 @@ def _debug_spacer_samples(df, label, max_rows=10):
     for idx, val in sample.items():
         print(f"[DEBUG] {label}.spacer[{idx}] -> {repr(val)} (type={type(val).__name__})")
 
+
+def merge_guide_metadata(guide_var, guide_metadata):
+    guide_var = guide_var.copy()
+    guide_metadata = guide_metadata.copy()
+
+    overlapping_cols = [
+        col
+        for col in guide_metadata.columns
+        if col != "guide_id" and col in guide_var.columns
+    ]
+    if overlapping_cols:
+        guide_var = guide_var.drop(columns=overlapping_cols)
+
+    merged_guide_var = guide_var.merge(
+        guide_metadata,
+        on="guide_id",
+        how="left",
+        validate="one_to_one",
+    )
+
+    if merged_guide_var["guide_id"].isna().any():
+        raise ValueError("guide_id is missing after merging guide metadata.")
+
+    return merged_guide_var
+
 def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata_hashing=None, debug_var=False):
     # Load the data
     guide_metadata = pd.read_csv(guide_metadata, sep='\t')
@@ -140,19 +165,7 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
     if len(guide_metadata) != len(adata_guide.var):
         print(f"The numbers of sgRNA_ID/guide_id are different: There are {len(adata_guide.var)} in guide anndata, but there are {len(guide_metadata)} in guide metadata.")
 
-    meta_cols = [
-        'intended_target_name', 'spacer', 'targeting', 'guide_chr', 'guide_start',
-        'guide_end', 'intended_target_chr', 'intended_target_start', 'intended_target_end'
-    ]
-    if "type" in guide_metadata.columns:
-        meta_cols.append("type")
-    guide_metadata_subset = guide_metadata[['guide_id'] + meta_cols].copy()
-    adata_guide.var = adata_guide.var.merge(
-        guide_metadata_subset,
-        on='guide_id',
-        how='left',
-        validate='one_to_one'
-    )
+    adata_guide.var = merge_guide_metadata(adata_guide.var, guide_metadata)
     targeting_bool = adata_guide.var["targeting"].map(
         lambda x: (
             bool(x)
@@ -189,7 +202,7 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
     assert guide_metadata["guide_id"].is_unique, (
         "guide_id in guide metadata is not unique."
     )
-    adata_guide.var_names = guide_metadata["guide_id"]
+    adata_guide.var_names = pd.Index(adata_guide.var["guide_id"].astype(str))
 
     # adding uns for guide
     adata_guide.uns["capture_method"] = np.array([capture_method], dtype=object)
