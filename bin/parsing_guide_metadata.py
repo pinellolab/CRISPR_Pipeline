@@ -20,12 +20,12 @@ def process_reads(yaml_file):
     with open(yaml_file, 'r') as file:
         for line in file:
             if 'read_id:' in line:
-                read_id = line.split('read_id:')[1].strip()
+                read_id = line.split('read_id:')[1].strip().strip("'\"")
                 read_ids.append(read_id)
                 print (f'creating dummy files to seqspec index : {read_id}')
-                result_sub = subprocess.run(f'touch {read_id} ', shell=True, capture_output=True, text=True)
+                result_sub = subprocess.run(f'touch {read_id}', shell=True, capture_output=True, text=True)
                 print (result_sub)
-                os.system(f'touch {read_id} ')
+                os.system(f'touch {read_id}')
 
     return ','.join(read_ids)
 
@@ -34,7 +34,7 @@ def process_reads(yaml_file):
 def get_info_from_yaml(modality, yaml_file, whitelist):
     reads = process_reads(yaml_file)
     print('reads out', reads)
-    cmd = f'seqspec index -m {modality} -t kb {yaml_file} -r {reads} '
+    cmd = f'seqspec index -m {modality} -t kb {yaml_file} -i {reads}'
     print(cmd)
     output, error = system_call(cmd)
 

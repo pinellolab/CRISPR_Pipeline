@@ -29,7 +29,9 @@ workflow mapping_rna_pipeline {
         SeqSpecResult.barcode_file
     )
 
-    ks_transcripts_out_dir_collected = MappingOut.ks_transcripts_out_dir.collect()
+    ks_transcripts_out_dir_collected = MappingOut.ks_transcripts_out_dir
+        .collect()
+        .map { dirs -> dirs.sort { a, b -> a.getName() <=> b.getName() } }
     ks_transcripts_out_dir_collected.view()
 
     AnndataConcatenate = anndata_concat(
@@ -39,6 +41,8 @@ workflow mapping_rna_pipeline {
 
     emit:
     trans_out_dir = MappingOut.ks_transcripts_out_dir
-    ks_transcripts_out_dir_collected = MappingOut.ks_transcripts_out_dir.collect()
+    ks_transcripts_out_dir_collected = MappingOut.ks_transcripts_out_dir
+        .collect()
+        .map { dirs -> dirs.sort { a, b -> a.getName() <=> b.getName() } }
     concat_anndata_rna = AnndataConcatenate.concat_anndata
 }

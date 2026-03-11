@@ -25,7 +25,7 @@ process mappingHashing {
         chemistry=\$(extract_parsed_seqspec.py --file ${parsed_seqSpec_file})
 
         kb count -i ${hashing_index} -g ${t2g_hashing} --verbose -w ${barcode_file} \\
-                --h5ad  -x \$chemistry -o ${batch}_ks_hashing_out -t ${task.cpus} \\
+                --h5ad -x \$chemistry -o ${batch}_ks_hashing_out -t ${task.cpus} \\
                 ${fastq_files} --overwrite
 
         echo "Hash KB mapping Complete"

@@ -3,166 +3,120 @@
 import argparse
 import pandas as pd
 import muon as mu
-import numpy as np
+
+from intended_target_key_utils import (
+    annotate_intended_target_groups,
+    enrich_pairs_with_target_metadata,
+)
+
+
+def _normalize_pairs_schema(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+
+    if "gene_name" not in out.columns and "gene_id" in out.columns:
+        out["gene_name"] = out["gene_id"]
+
+    required_cols = {"guide_id", "gene_name"}
+    missing = [col for col in required_cols if col not in out.columns]
+    if missing:
+        raise ValueError(
+            "guide_inference file is missing required columns: " + ", ".join(missing)
+        )
+
+    if "pair_type" not in out.columns:
+        out["pair_type"] = "discovery"
+
+    out["guide_id"] = out["guide_id"].astype(str)
+    out["gene_name"] = out["gene_name"].astype(str)
+    return out
 
 
 def main(guide_inference, mudata_path, subset_for_cis=False):
-    # read in files
     print(f"Reading guide inference file from {guide_inference}...")
-    guide_inference = pd.read_csv(guide_inference)
+    guide_inference_df = pd.read_csv(guide_inference)
+    guide_inference_df = _normalize_pairs_schema(guide_inference_df)
+
     print(f"Reading mudata file from {mudata_path}...")
     mudata = mu.read_h5mu(mudata_path)
-    gvar = mudata.mod["guide"].var
 
-    # Ensure the column exists
-    if "intended_target_name" not in gvar.columns:
-        # create it from guide_id for targeting rows, else "non-targeting"
-        base_vals = np.where(gvar.get("targeting", False), gvar["guide_id"].astype(str), "non-targeting")
-        gvar["intended_target_name"] = base_vals
-
-    # Drop categorical dtype to allow arbitrary strings
-    if pd.api.types.is_categorical_dtype(gvar["intended_target_name"]):
-        gvar["intended_target_name"] = gvar["intended_target_name"].astype("object")
-
-    # Also make sure guide_id is stringy (avoids category/NA mismatches)
-    if pd.api.types.is_categorical_dtype(gvar["guide_id"]):
-        gvar["guide_id"] = gvar["guide_id"].astype("object")
-    else:
-        gvar["guide_id"] = gvar["guide_id"].astype(str)
-
-
-    # Check if mudata.mod contains 'gene' and 'guide'
     if "gene" not in mudata.mod or "guide" not in mudata.mod:
         raise KeyError("Mudata file is missing 'gene' or 'guide' modality.")
 
-    # Debugging: Print basic information about the input data
-    print(f"Tested pairs dataset contains {len(guide_inference)} rows.")
+    gvar = annotate_intended_target_groups(mudata.mod["guide"].var)
+    mudata.mod["guide"].var = gvar
+
+    print(f"Tested pairs dataset contains {len(guide_inference_df)} rows.")
     print(f"Mudata 'gene' modality contains {mudata.mod['gene'].shape[1]} genes.")
     print(f"Mudata 'guide' modality contains {mudata.mod['guide'].shape[1]} guides.")
-    missing_intended_target_name_guides = (
-        gvar["targeting"] & gvar["intended_target_name"].isna()
-    )
-    if np.any(missing_intended_target_name_guides):
-        gvar.loc[missing_intended_target_name_guides, "intended_target_name"] = gvar.loc[
-            missing_intended_target_name_guides, "guide_id"
-        ]
 
-    ntc_guide_idx = (
-        (~gvar["targeting"])
-        | (gvar.get("type", pd.Series(index=gvar.index, dtype=object)) == "non-targeting")
-        | (gvar["intended_target_name"] == "non-targeting")
-    )
-    if ntc_guide_idx.any():
-        gvar.loc[ntc_guide_idx, "intended_target_name"] = "non-targeting"
-    else:
-        print("No non-targeting guides found. Make sure you set up the metadata correctly")
+    gene_var = mudata.mod["gene"].var.index if mudata.mod["gene"].var.index is not None else []
+    guide_var = mudata.mod["guide"].var["guide_id"] if mudata.mod["guide"] is not None else []
 
-    n_ntc_guides = np.sum(ntc_guide_idx)
-    print(
-        f"{n_ntc_guides} non-targeting guides found. {n_ntc_guides / mudata.mod['guide'].var.shape[0] * 100:.2f}% of total"
-    )
+    include_genes = set(guide_inference_df["gene_name"]).intersection(set(gene_var))
+    include_guides = set(guide_inference_df["guide_id"]).intersection(set(guide_var))
 
-    if n_ntc_guides > 0:
-        if (
-            "non-targeting"
-            not in mudata.mod["guide"].var["intended_target_name"].unique()
-        ):
-            mudata.mod["guide"].var["intended_target_name"] = (
-                mudata.mod["guide"]
-                .var["intended_target_name"]
-                .cat.add_categories(["non-targeting"])
-            )
+    print(f"Number of genes in common: {len(include_genes)}")
+    print(f"Number of guides in common: {len(include_guides)}")
 
-        mudata.mod["guide"].var.loc[ntc_guide_idx, "intended_target_name"] = (
-            "non-targeting"
-        )
-    else:
-        print(
-            "No non-targeting guides found. Make sure you set up the metadata correctly"
-        )
+    subset = guide_inference_df[
+        guide_inference_df["gene_name"].isin(include_genes)
+        & guide_inference_df["guide_id"].isin(include_guides)
+    ].copy()
 
-    gene_var = (
-        mudata.mod["gene"].var.index if mudata.mod["gene"].var.index is not None else []
-    )
-    guide_var = (
-        mudata.mod["guide"].var["guide_id"] if mudata.mod["guide"] is not None else []
-    )
-
-    include1 = set(guide_inference["gene_name"]).intersection(set(gene_var))
-    include2 = set(guide_inference["guide_id"]).intersection(set(guide_var))
-
-    print(f"Number of genes in common: {len(include1)}")
-    print(f"Number of guides in common: {len(include2)}")
-
-    subset = guide_inference[
-        guide_inference["gene_name"].isin(include1)
-        & guide_inference["guide_id"].isin(include2)
-    ]
-
-    # Ensure that subset is not empty
     if subset.empty:
         raise ValueError(
             "The subset of guide_inference is empty after filtering. Please check your input data."
         )
 
-    print(f"Subset contains {len(subset)} rows after filtering.")
-
-    # Remove "non-targeting" guides from pairs_to_test (these need to be handled differently)
-    subset = subset[subset["intended_target_name"] != "non-targeting"]
+    subset = enrich_pairs_with_target_metadata(subset, mudata.mod["guide"].var)
+    print(f"Subset contains {len(subset)} rows after filtering and metadata enrichment.")
 
     mudata.uns["pairs_to_test"] = subset.to_dict(orient="list")
 
-    # rename keys in uns
     key_mapping = {
         "gene_name": "gene_id",
         "guide_id": "guide_id",
         "intended_target_name": "intended_target_name",
+        "intended_target_chr": "intended_target_chr",
+        "intended_target_start": "intended_target_start",
+        "intended_target_end": "intended_target_end",
+        "intended_target_key": "intended_target_key",
         "pair_type": "pair_type",
     }
 
-    # Ensure pairs_to_test is not None before trying to access items
     if mudata.uns.get("pairs_to_test") is None:
         raise ValueError(
             "'pairs_to_test' in mudata.uns is None, something went wrong when processing the subset."
         )
 
-    # Update the keys in pairs_to_test
     print("Renaming keys in pairs_to_test...")
     mudata.uns["pairs_to_test"] = {
         key_mapping.get(k, k): v for k, v in mudata.uns["pairs_to_test"].items()
     }
 
-    # Subset mudata for cis analysis if requested
     if subset_for_cis:
         print("Subsetting mudata for cis analysis...")
         pairs_to_test_df = pd.DataFrame(mudata.uns["pairs_to_test"])
 
-        # Get unique tested genes and guides
-        tested_guides = pairs_to_test_df["guide_id"].unique()
-        tested_genes = pairs_to_test_df["gene_id"].unique()
+        tested_guides = pairs_to_test_df["guide_id"].astype(str).unique()
+        tested_genes = pairs_to_test_df["gene_id"].astype(str).unique()
 
-        print(
-            f"Subsetting to {len(tested_genes)} genes and {len(tested_guides)} guides"
-        )
+        print(f"Subsetting to {len(tested_genes)} genes and {len(tested_guides)} guides")
 
-        # Subset gene modality
         gene_subset_mask = mudata.mod["gene"].var_names.isin(tested_genes)
         if not gene_subset_mask.any():
             raise ValueError("No tested genes found in gene modality")
 
-        # Subset guide modality
+        guide_names = mudata.mod["guide"].var["intended_target_name"].astype(str)
+        control_mask = guide_names.str.startswith("non-targeting|", na=False) | guide_names.eq("non-targeting")
 
-        guide_subset_mask = mudata.mod["guide"].var["guide_id"].isin(tested_guides) | (
-            mudata.mod["guide"].var["intended_target_name"] == "non-targeting"
-        )
+        guide_subset_mask = mudata.mod["guide"].var["guide_id"].astype(str).isin(tested_guides) | control_mask
         if not guide_subset_mask.any():
             raise ValueError("No tested guides found in guide modality")
 
-        # Create subsets
         rna_subset = mudata.mod["gene"][:, gene_subset_mask]
         grna_subset = mudata.mod["guide"][:, guide_subset_mask]
 
-        # Filter to cells that have at least one targeted guide
         targeted_cells = grna_subset.X.sum(axis=1) > 0
         if not targeted_cells.any():
             raise ValueError("No targeted cells found in the guide modality subset.")
@@ -171,23 +125,19 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
             f"Keeping {targeted_cells.sum()} targeted cells out of {len(targeted_cells)} total cells"
         )
 
-        # Create new mudata with subsets
         mdata_dict = {
             "gene": rna_subset[targeted_cells],
             "guide": grna_subset[targeted_cells],
         }
 
-        # Copy over any additional modalities
         for mod in mudata.mod.keys():
             if mod not in mdata_dict:
                 mdata_dict[mod] = mudata.mod[mod][targeted_cells]
 
-        # Create new mudata object
         mudata_new = mu.MuData(mdata_dict)
         mudata_new.uns = mudata.uns.copy()
         mudata = mudata_new
 
-    # save the mudata
     output_file = "mudata_inference_input.h5mu"
     print(f"Saving processed mudata to {output_file}...")
     mudata.write(output_file)

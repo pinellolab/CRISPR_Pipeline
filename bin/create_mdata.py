@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import os
 import sys
 import warnings
+from intended_target_key_utils import annotate_intended_target_groups
 
 
 def _debug_var_strings(df, label, max_rows=5):
@@ -189,6 +190,9 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
                 "targeting",
                 "non-targeting",
             )
+
+    # Canonicalize guide target grouping metadata used by inference modules.
+    adata_guide.var = annotate_intended_target_groups(adata_guide.var)
     if debug_var:
         missing = int(pd.isna(adata_guide.var['spacer']).sum()) if 'spacer' in adata_guide.var.columns else -1
         print(f"[DEBUG] spacer missing after merge: {missing}")
@@ -316,6 +320,7 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
         if debug_var:
             _debug_var_strings(mdata.mod["guide"].var, "guide")
         raise
+
 
 
 if __name__ == "__main__":
