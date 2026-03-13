@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import os
+import os
 import perturbo
 import mudata as md
 import numpy as np
@@ -28,6 +29,14 @@ def resolve_num_workers(num_workers=None):
     return max(detected_cpus - 1, 0)
 
 
+def resolve_efficiency_mode(efficiency_mode="scaled"):
+    if efficiency_mode != "scaled":
+        raise ValueError(
+            "PerTurbo only supports efficiency_mode='scaled' in this pipeline"
+        )
+    return "scaled"
+
+
 def run_perturbo(
     mdata_input_fp,
     results_tsv_fp,
@@ -47,11 +56,9 @@ def run_perturbo(
     test_all_pairs=False,  # whether to test all pairs or only those in pairs_to_test
     inference_type="element",  # can be per-guide or per-element
     num_workers=None,  # number of worker processes for data loading
+    num_workers=None,  # number of worker processes for data loading
 ):
-    if efficiency_mode != "scaled":
-        raise NotImplementedError(
-            "PerTurbo only supports efficiency_mode='scaled' in this pipeline"
-        )
+    efficiency_mode = resolve_efficiency_mode(efficiency_mode)
     num_workers = resolve_num_workers(num_workers)
     scvi.settings.seed = 0
     if num_workers > 0:
@@ -79,7 +86,7 @@ def run_perturbo(
     fit_guide_efficacy = True
     guides_per_element = mdata[guide_modality_name].var[element_key].value_counts()
 
-    if np.all(guides_per_element <= 1):
+    if np.all(guides_per_element <= 1) or inference_type == "guide":
         fit_guide_efficacy = False
         print("Not fitting guide efficiency -- only one guide per element.")
 

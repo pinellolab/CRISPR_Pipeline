@@ -7,16 +7,21 @@ Run PerTurbo inference on balanced gene chunks and concatenate TSV outputs.
 import argparse
 import os
 import shutil
+import shutil
 import subprocess
 import sys
+import sys
 import tempfile
+from pathlib import Path
+
+import mudata as md
 from pathlib import Path
 
 import mudata as md
 import pandas as pd
 
 from chunk_mudata import chunk_mudata
-from perturbo_inference import resolve_efficiency_mode, resolve_num_workers
+from perturbo_inference import resolve_num_workers
 
 
 def get_gene_count(mdata_input_fp, gene_modality_name):
@@ -33,8 +38,10 @@ def build_perturbo_command(
     mdata_input_fp,
     results_tsv_fp,
     mdata_output_fp=None,
+    results_tsv_fp,
+    mdata_output_fp=None,
     fit_guide_efficacy=True,
-    efficiency_mode="scaled",
+    efficiency_mode="undecided",
     accelerator="gpu",
     batch_size=4096,
     early_stopping=False,
@@ -48,7 +55,6 @@ def build_perturbo_command(
     num_workers=None,
 ):
     resolved_num_workers = resolve_num_workers(num_workers)
-    resolved_efficiency_mode = resolve_efficiency_mode(efficiency_mode)
     cmd = [
         sys.executable,
         str(perturbo_script),
@@ -57,7 +63,7 @@ def build_perturbo_command(
         "--fit_guide_efficacy",
         str(fit_guide_efficacy),
         "--efficiency_mode",
-        resolved_efficiency_mode,
+        efficiency_mode,
         "--accelerator",
         accelerator,
         "--batch_size",
@@ -120,7 +126,7 @@ def run_perturbo_chunked(
     results_tsv_fp,
     mdata_output_fp=None,
     fit_guide_efficacy=True,
-    efficiency_mode="scaled",
+    efficiency_mode="undecided",
     accelerator="gpu",
     batch_size=4096,
     early_stopping=False,
@@ -332,6 +338,17 @@ def main():
         help="Optional output file path for MuData; if omitted the MuData will not be written",
     )
     parser.add_argument(
+        "results_tsv_fp",
+        type=str,
+        help="Output TSV file path for concatenated PerTurbo results",
+    )
+    parser.add_argument(
+        "--mdata_output_fp",
+        type=str,
+        default=None,
+        help="Optional output file path for MuData; if omitted the MuData will not be written",
+    )
+    parser.add_argument(
         "--chunk_size",
         "-c",
         type=int,
@@ -347,14 +364,16 @@ def main():
     parser.add_argument(
         "--efficiency_mode",
         type=str,
-        choices=["scaled"],
-        default="scaled",
-        help="Efficiency mode for the model. Only 'scaled' is supported.",
+        choices=["undecided", "low", "high"],
+        default="undecided",
+        help="Efficiency mode for the model",
     )
     parser.add_argument(
         "--accelerator",
         type=str,
         choices=["auto", "gpu", "cpu"],
+        default="gpu",
+        help="Accelerator to use for training",
         default="gpu",
         help="Accelerator to use for training",
     )
@@ -416,10 +435,13 @@ def main():
         "--test_all_pairs",
         action="store_true",
         help="Whether to test all pairs or only those in pairs_to_test",
+        help="Whether to test all pairs or only those in pairs_to_test",
     )
     parser.add_argument(
         "--num_workers",
         type=int,
+        default=None,
+        help="Number of workers for data loading (default: assigned CPUs minus one)",
         default=None,
         help="Number of workers for data loading (default: assigned CPUs minus one)",
     )
@@ -444,7 +466,27 @@ def main():
         test_all_pairs=args.test_all_pairs,
         num_workers=args.num_workers,
     )
+    run_perturbo_chunked(
+        mdata_input_fp=args.mdata_input_fp,
+        results_tsv_fp=args.results_tsv_fp,
+        mdata_output_fp=args.mdata_output_fp,
+        chunk_size=args.chunk_size,
+        fit_guide_efficacy=args.fit_guide_efficacy,
+        efficiency_mode=args.efficiency_mode,
+        accelerator=args.accelerator,
+        batch_size=args.batch_size,
+        early_stopping=args.early_stopping,
+        early_stopping_patience=args.early_stopping_patience,
+        lr=args.lr,
+        num_epochs=args.num_epochs,
+        gene_modality_name=args.gene_modality_name,
+        guide_modality_name=args.guide_modality_name,
+        inference_type=args.inference_type,
+        test_all_pairs=args.test_all_pairs,
+        num_workers=args.num_workers,
+    )
 
 
 if __name__ == "__main__":
+    main()
     main()

@@ -24,10 +24,17 @@ process inference_perturbo {
         PERTURBO_NUM_WORKERS=$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 0 ))
 
         # Run PerTurbo inference for per-element results
+<<<<<<< HEAD
         perturbo_inference.py ${mudata} perturbo_cis_per_element_output.tsv.gz --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers ${PERTURBO_NUM_WORKERS} --efficiency_mode scaled --inference_type element
         
         # Run PerTurbo inference for per-guide results  
         perturbo_inference.py ${mudata} perturbo_cis_per_guide_output.tsv.gz --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers ${PERTURBO_NUM_WORKERS} --efficiency_mode scaled --inference_type guide
+=======
+        perturbo_inference.py ${mudata} perturbo_cis_per_element_output.tsv.gz --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers ${PERTURBO_NUM_WORKERS} --efficiency_mode ${efficiency_mode} --inference_type element
+        
+        # Run PerTurbo inference for per-guide results  
+        perturbo_inference.py ${mudata} perturbo_cis_per_guide_output.tsv.gz --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers ${PERTURBO_NUM_WORKERS} --efficiency_mode ${efficiency_mode} --inference_type guide
+>>>>>>> 21aed61 (re-enable perturbo chunking and expose CLI options)
         
         # Add both results to the base mudata file
         add_perturbo_results_to_mudata.py \\
