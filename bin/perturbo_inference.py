@@ -107,7 +107,6 @@ def run_perturbo(
         control_guides = mdata["guide"].var_names[control_guide_filter].tolist()
     else:
         control_guides = None
-
     mdata[gene_modality_name].obs["log1p_total_guide_umis"] = np.log1p(
         mdata[guide_modality_name].obs["total_guide_umis"]
     )
