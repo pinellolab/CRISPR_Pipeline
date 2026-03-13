@@ -10,16 +10,19 @@ workflow prepare_mapping_pipeline {
     // Prepare covariate list from the samples channel
     covariate_list = ch_samples
         .map { meta, _reads ->
-            [meta.measurement_sets, meta.sequencing_run]
+            [meta.measurement_sets]
         }
         .unique()
         // .groupTuple()
-        .map { measurement_sets, sequencing_run ->
-            [batch: measurement_sets, cov1: sequencing_run]
+        .map { measurement_sets ->
+            [batch: measurement_sets]
         }
         .collect()
         .map { it ->
-            def json = groovy.json.JsonOutput.toJson([batch: it.batch.flatten(), cov1: it.cov1.flatten()])
+            def sorted_covariates = it.sort { a, b ->
+                a.batch.toString() <=> b.batch.toString()
+            }
+            def json = groovy.json.JsonOutput.toJson([batch: sorted_covariates.batch.flatten()])
             return json
         }
         .view {"Covariate_list: $it"}

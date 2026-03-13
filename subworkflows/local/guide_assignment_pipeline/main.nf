@@ -17,7 +17,9 @@ workflow guide_assignment_pipeline {
             params.GUIDE_ASSIGNMENT_cleanser_probability_threshold, 
             params.GUIDE_ASSIGNMENT_capture_method
         )
-        guide_assignment_collected = Guide_Assignment.guide_assignment_mudata_output.collect()
+        guide_assignment_collected = Guide_Assignment.guide_assignment_mudata_output
+            .collect()
+            .map { files -> files.sort { a, b -> a.toString() <=> b.toString() } }
         Mudata_concat = mudata_concat(guide_assignment_collected, params.QC_min_cells_per_gene, params.DUAL_GUIDE)
     }
     else if (params.GUIDE_ASSIGNMENT_method == "sceptre") {
@@ -26,7 +28,9 @@ workflow guide_assignment_pipeline {
             params.GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold, 
             params.GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep
         )
-        guide_assignment_collected = Guide_Assignment.guide_assignment_mudata_output.collect()
+        guide_assignment_collected = Guide_Assignment.guide_assignment_mudata_output
+            .collect()
+            .map { files -> files.sort { a, b -> a.toString() <=> b.toString() } }
         Mudata_concat = mudata_concat(guide_assignment_collected, params.QC_min_cells_per_gene, params.DUAL_GUIDE)
     } else {
         error("Invalid GUIDE_ASSIGNMENT_method: ${params.GUIDE_ASSIGNMENT_method}")

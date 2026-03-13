@@ -34,7 +34,9 @@ workflow mapping_guide_pipeline {
         spacer_tag
     )
 
-    ks_guide_out_dir_collected = MappingOut.ks_guide_out_dir.collect()
+    ks_guide_out_dir_collected = MappingOut.ks_guide_out_dir
+        .collect()
+        .map { dirs -> dirs.sort { a, b -> a.getName() <=> b.getName() } }
     ks_guide_out_dir_collected.view()
 
     AnndataConcatenate = anndata_concat(
@@ -44,6 +46,8 @@ workflow mapping_guide_pipeline {
 
     emit:
     guide_out_dir = MappingOut.ks_guide_out_dir
-    ks_guide_out_dir_collected = MappingOut.ks_guide_out_dir.collect()
+    ks_guide_out_dir_collected = MappingOut.ks_guide_out_dir
+        .collect()
+        .map { dirs -> dirs.sort { a, b -> a.getName() <=> b.getName() } }
     concat_anndata_guide = AnndataConcatenate.concat_anndata
 }

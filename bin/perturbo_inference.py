@@ -6,6 +6,34 @@ import mudata as md
 import numpy as np
 import pandas as pd
 import scvi
+from intended_target_key_utils import (
+    annotate_intended_target_groups,
+    enrich_pairs_with_target_metadata,
+    get_target_lookup,
+)
+
+
+def resolve_num_workers(num_workers=None):
+    if num_workers is not None:
+        return max(int(num_workers), 0)
+
+    assigned_cpus = os.environ.get("NXF_TASK_CPUS")
+    if assigned_cpus is not None:
+        try:
+            return max(int(assigned_cpus) - 1, 0)
+        except ValueError:
+            pass
+
+    detected_cpus = os.cpu_count() or 1
+    return max(detected_cpus - 1, 0)
+
+
+def resolve_efficiency_mode(efficiency_mode="scaled"):
+    if efficiency_mode != "scaled":
+        raise ValueError(
+            "PerTurbo only supports efficiency_mode='scaled' in this pipeline"
+        )
+    return "scaled"
 
 
 def resolve_num_workers(num_workers=None):
@@ -51,14 +79,54 @@ def run_perturbo(
         scvi.settings.dl_num_workers = num_workers
 
     mdata = md.read(mdata_input_fp)
+    guide_var = annotate_intended_target_groups(mdata["guide"].var)
+    mdata["guide"].var = guide_var
 
     if inference_type == "guide":
         element_key = "guide_id"
     elif inference_type == "element":
-        element_key = "intended_target_name"
+        element_key = "intended_target_key"
     else:
         raise ValueError("inference_type must be 'guide' or 'element'")
 
+    guide_var = mdata["guide"].var
+    target_lookup = (
+        get_target_lookup(guide_var) if inference_type == "element" else None
+    )
+
+    control_guide_filter = pd.Series(False, index=guide_var.index)
+    if "targeting" in guide_var.columns:
+        targeting_series = guide_var["targeting"]
+        if targeting_series.dtype != bool:
+            targeting_series = (
+                targeting_series.astype(str)
+                .str.lower()
+                .isin(["true", "1", "t", "yes", "y"])
+            )
+        control_guide_filter |= ~targeting_series
+    if "type" in guide_var.columns:
+        control_guide_filter |= (
+            guide_var["type"].astype(str).str.lower().eq("non-targeting")
+        )
+    if "intended_target_name" in guide_var.columns:
+        control_guide_filter |= (
+            guide_var["intended_target_name"]
+            .astype(str)
+            .str.contains("non-targeting", case=False, na=False)
+        )
+
+    if not any(
+        [c in guide_var.columns for c in ["targeting", "type", "intended_target_name"]]
+    ):
+        raise KeyError(
+            "guide.var is missing all of: 'targeting', 'type', 'intended_target_name'. "
+            "Cannot identify control guides."
+        )
+
+    if np.any(control_guide_filter):
+        control_guides = mdata["guide"].var_names[control_guide_filter].tolist()
+    else:
+        control_guides = None
     mdata[gene_modality_name].obs["log1p_total_guide_umis"] = np.log1p(
         mdata[guide_modality_name].obs["total_guide_umis"]
     )
@@ -70,7 +138,7 @@ def run_perturbo(
     fit_guide_efficacy = True
     guides_per_element = mdata[guide_modality_name].var[element_key].value_counts()
 
-    if np.all(guides_per_element <= 1):
+    if np.all(guides_per_element <= 1) or inference_type == "guide":
         fit_guide_efficacy = False
         print("Not fitting guide efficiency -- only one guide per element.")
 
@@ -92,6 +160,11 @@ def run_perturbo(
             pairs_to_test_df = pd.DataFrame(mdata.uns["pairs_to_test"])
         else:
             raise ValueError("pairs_to_test must be a DataFrame or dictionary")
+
+        if element_key not in pairs_to_test_df.columns:
+            pairs_to_test_df = enrich_pairs_with_target_metadata(
+                pairs_to_test_df, guide_var
+            )
 
         aggregated_df = (
             pairs_to_test_df[["gene_id", element_key]].drop_duplicates().assign(value=1)
@@ -124,8 +197,12 @@ def run_perturbo(
         },
     )
 
+    if control_guides is not None and isinstance(control_guides[0], str):
+        control_guides = mdata["guide"].var_names.isin(control_guides)
+
     model = perturbo.PERTURBO(
         mdata,
+        control_guides=control_guides,
         likelihood="nb",
         efficiency_mode=efficiency_mode,
         fit_guide_efficacy=fit_guide_efficacy,
@@ -156,11 +233,7 @@ def run_perturbo(
         model.get_element_effects()
         .rename(columns=igvf_name_map)
         .assign(log2_fc=lambda x: x["loc"] / np.log(2))
-        .assign(log2_scale=lambda x: x["scale"] / np.log(2))
-    )
-
-    element_effects.to_csv(
-        "perturbo_results.tsv.gz", index=False, sep="\t", compression="gzip"
+        .assign(log2_fc_std=lambda x: x["scale"] / np.log(2))
     )
 
     # element_effects[element_key] = element_effects[element_key].astype("category")
@@ -171,9 +244,43 @@ def run_perturbo(
             "gene_id",
             element_key,
             "log2_fc",
+            "log2_fc_std",
             "p_value",
         ]
     ]
+
+    if inference_type == "element":
+        test_results = test_results.merge(
+            target_lookup,
+            on="intended_target_key",
+            how="left",
+        )
+        if test_results["intended_target_name"].isna().any():
+            missing_keys = (
+                test_results.loc[
+                    test_results["intended_target_name"].isna(), "intended_target_key"
+                ]
+                .astype(str)
+                .drop_duplicates()
+                .tolist()
+            )
+            raise ValueError(
+                "Unable to map intended_target_key back to target metadata for keys: "
+                + ", ".join(missing_keys[:20])
+            )
+        test_results = test_results[
+            [
+                "gene_id",
+                "intended_target_name",
+                "intended_target_chr",
+                "intended_target_start",
+                "intended_target_end",
+                "log2_fc",
+                "log2_fc_std",
+                "p_value",
+            ]
+        ]
+
     mdata.uns[f"per_{inference_type}_results"] = test_results
 
     # NOTE: this part creates a per-guide output table even when we are running per-element inference.

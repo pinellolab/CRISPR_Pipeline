@@ -31,7 +31,9 @@ workflow mapping_hashing_pipeline {
         SeqSpecResult.barcode_file
     )
 
-    ks_hashing_out_dir_collected = MappingOut.ks_hashing_out_dir.collect()
+    ks_hashing_out_dir_collected = MappingOut.ks_hashing_out_dir
+        .collect()
+        .map { dirs -> dirs.sort { a, b -> a.getName() <=> b.getName() } }
     ks_hashing_out_dir_collected.view()
 
     AnndataConcatenate = anndata_concat(
@@ -41,7 +43,8 @@ workflow mapping_hashing_pipeline {
 
     emit:
     hashing_out_dir = MappingOut.ks_hashing_out_dir
-    ks_hashing_out_dir_collected = MappingOut.ks_hashing_out_dir.collect()
+    ks_hashing_out_dir_collected = MappingOut.ks_hashing_out_dir
+        .collect()
+        .map { dirs -> dirs.sort { a, b -> a.getName() <=> b.getName() } }
     concat_anndata_hashing = AnndataConcatenate.concat_anndata
 }
-

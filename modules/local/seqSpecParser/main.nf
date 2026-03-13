@@ -15,6 +15,11 @@ process seqSpecParser {
     """
     parsing_guide_metadata.py --modalities ${modalities} --yaml_file ${seqSpec_yaml} --whitelist ${barcode_file} --output_file ${modalities}_parsed_seqSpec.txt
     echo "Path to the barcode file: ${barcode_file}"
+    if [[ ! -f "${barcode_file}" ]]; then
+        echo "Barcode whitelist file was not staged into the task directory: ${barcode_file}" >&2
+        ls -la >&2
+        exit 1
+    fi
     cp "${barcode_file}" barcode_file.txt
     """
 }
