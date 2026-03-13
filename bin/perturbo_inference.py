@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import os
 import perturbo
 import mudata as md
 import numpy as np
@@ -10,6 +11,21 @@ from intended_target_key_utils import (
     enrich_pairs_with_target_metadata,
     get_target_lookup,
 )
+
+
+def resolve_num_workers(num_workers=None):
+    if num_workers is not None:
+        return max(int(num_workers), 0)
+
+    assigned_cpus = os.environ.get("NXF_TASK_CPUS")
+    if assigned_cpus is not None:
+        try:
+            return max(int(assigned_cpus) - 1, 0)
+        except ValueError:
+            pass
+
+    detected_cpus = os.cpu_count() or 1
+    return max(detected_cpus - 1, 0)
 
 
 def run_perturbo(
@@ -29,8 +45,9 @@ def run_perturbo(
     test_all_pairs=False,  # whether to test all pairs or only those in pairs_to_test
     inference_type="element",  # can be per-guide or per-element
     drop_ntc_guides=False,  # whether to drop non-targeting control guides in low_MOI analysis
-    num_workers=0,  # number of worker processes for data loading
+    num_workers=None,  # number of worker processes for data loading
 ):
+    num_workers = resolve_num_workers(num_workers)
     scvi.settings.seed = 0
     if num_workers > 0:
         scvi.settings.dl_num_workers = num_workers
@@ -193,9 +210,6 @@ def run_perturbo(
     )
 
     model.view_anndata_setup(mdata, hide_state_registries=True)
-    if batch_size is None:
-        batch_size = int(np.clip(len(mdata) // 20, 512, 10_000))
-
     print(f"Training using batch size of {batch_size}")
     model.train(
         num_epochs,  # max number of epochs
@@ -396,16 +410,10 @@ def main():
         help="Whether to test all pairs or only those in pairs_to_test (default: False)",
     )
     parser.add_argument(
-        "--test_control_guides",
-        type=bool,
-        default=True,
-        help="Whether to remove control guides from the analysis (default: False)",
-    )
-    parser.add_argument(
         "--num_workers",
         type=int,
-        default=0,
-        help="Number of workers for data loading (default: 0)",
+        default=None,
+        help="Number of workers for data loading (default: assigned CPUs minus one)",
     )
 
     # Parse the arguments
@@ -418,7 +426,7 @@ def main():
         fit_guide_efficacy=args.fit_guide_efficacy,
         efficiency_mode=args.efficiency_mode,
         accelerator=args.accelerator,
-        # batch_size=args.batch_size,
+        batch_size=args.batch_size,
         early_stopping=args.early_stopping,
         early_stopping_patience=args.early_stopping_patience,
         lr=args.lr,
@@ -427,6 +435,7 @@ def main():
         guide_modality_name=args.guide_modality_name,
         test_all_pairs=args.test_all_pairs,
         inference_type=args.inference_type,
+        num_workers=args.num_workers,
     )
 
 
