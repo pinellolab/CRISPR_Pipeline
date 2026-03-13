@@ -70,7 +70,14 @@ workflow inference_pipeline {
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
-        SceptreResults = inference_sceptre(mudata_input)
+        SceptreChunkInput = sceptre_chunk_prepare(mudata_input)
+        SceptreChunkResults = inference_sceptre(SceptreChunkInput.mudata_chunks.flatten())
+        SceptreResults = sceptre_chunk_merge(
+            SceptreChunkResults.per_guide_output.collect().map(sort_paths),
+            SceptreChunkResults.per_element_output.collect().map(sort_paths),
+            mudata_input,
+            SceptreChunkInput.chunk_manifest
+        )
         PerturboResults = inference_perturbo(mudata_input,  "perturbo")
         MergedInference = mergedResults(
             SceptreResults.per_guide_output,
@@ -86,7 +93,14 @@ workflow inference_pipeline {
             error "INFERENCE_method='default' requires INFERENCE_target_guide_pairing_strategy='default'"
         }
         // Process cis results
-        SceptreResults_cis = inference_sceptre(PrepareInference.mudata_inference_input)
+        SceptreChunkInput_cis = sceptre_chunk_prepare(PrepareInference.mudata_inference_input)
+        SceptreChunkResults_cis = inference_sceptre(SceptreChunkInput_cis.mudata_chunks.flatten())
+        SceptreResults_cis = sceptre_chunk_merge(
+            SceptreChunkResults_cis.per_guide_output.collect().map(sort_paths),
+            SceptreChunkResults_cis.per_element_output.collect().map(sort_paths),
+            PrepareInference.mudata_inference_input,
+            SceptreChunkInput_cis.chunk_manifest
+        )
         PerturboResults_cis = inference_perturbo(PrepareInference.mudata_inference_input, "perturbo")
         MergedInference_cis = mergedResults(
             SceptreResults_cis.per_guide_output,
