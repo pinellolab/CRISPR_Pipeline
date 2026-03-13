@@ -13,7 +13,6 @@ process inference_perturbo_trans {
     input:
     path mudata
     val inference_method
-    val efficiency_mode
     val dummy // fake dependency to force this to run after cis analysis
 
     output:
@@ -22,12 +21,13 @@ process inference_perturbo_trans {
     path "perturbo_trans_per_guide_output.tsv.gz", emit: per_guide_output
 
     script:
+        def perturboNumWorkers = task.cpus > 1 ? task.cpus - 1 : 0
         """
         # Run PerTurbo inference for per-element results
-        perturbo_inference.py ${mudata} perturbo_trans_per_element_output.tsv.gz --efficiency_mode ${efficiency_mode} --inference_type element --test_all_pairs
+        perturbo_inference_chunked.py ${mudata} perturbo_trans_per_element_output.tsv.gz --chunk_size ${params.INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK} --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers ${perturboNumWorkers} --efficiency_mode scaled --inference_type element --test_all_pairs
         
         # Run PerTurbo inference for per-guide results  
-        perturbo_inference.py ${mudata} perturbo_trans_per_guide_output.tsv.gz --efficiency_mode ${efficiency_mode} --inference_type guide --test_all_pairs
+        perturbo_inference_chunked.py ${mudata} perturbo_trans_per_guide_output.tsv.gz --chunk_size ${params.INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK} --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers ${perturboNumWorkers} --efficiency_mode scaled --inference_type guide --test_all_pairs
         
         # Add both results to the base mudata file
         add_perturbo_results_to_mudata.py \\

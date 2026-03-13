@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import os
 import perturbo
 import mudata as md
 import numpy as np
@@ -12,14 +13,52 @@ from intended_target_key_utils import (
 )
 
 
+def resolve_num_workers(num_workers=None):
+    if num_workers is not None:
+        return max(int(num_workers), 0)
+
+    assigned_cpus = os.environ.get("NXF_TASK_CPUS")
+    if assigned_cpus is not None:
+        try:
+            return max(int(assigned_cpus) - 1, 0)
+        except ValueError:
+            pass
+
+    detected_cpus = os.cpu_count() or 1
+    return max(detected_cpus - 1, 0)
+
+
+def resolve_efficiency_mode(efficiency_mode="scaled"):
+    if efficiency_mode != "scaled":
+        raise ValueError(
+            "PerTurbo only supports efficiency_mode='scaled' in this pipeline"
+        )
+    return "scaled"
+
+
+def resolve_num_workers(num_workers=None):
+    if num_workers is not None:
+        return max(int(num_workers), 0)
+
+    assigned_cpus = os.environ.get("NXF_TASK_CPUS")
+    if assigned_cpus is not None:
+        try:
+            return max(int(assigned_cpus) - 1, 0)
+        except ValueError:
+            pass
+
+    detected_cpus = os.cpu_count() or 1
+    return max(detected_cpus - 1, 0)
+
+
 def run_perturbo(
     mdata_input_fp,
     results_tsv_fp,
     mdata_output_fp=None,
-    fit_guide_efficacy=True,  # whether to fit guide efficacy (if false, overrides efficiency_mode)
-    efficiency_mode="undecided",  # mapping from undecided->auto, low->mixture, high->scaled# can be "mixture" (for low MOI only), "scaled", "undecided" (auto), "low" (mixture), or "high" (scaled)
+    fit_guide_efficacy=True,  # whether to fit guide efficacy
+    efficiency_mode="scaled",  # PerTurbo efficiency mode; only "scaled" is supported
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
-    batch_size=None,  # batch size for training
+    batch_size=4096,  # batch size for training
     early_stopping=False,  # whether to use early stopping
     early_stopping_patience=5,  # patience for early stopping
     lr=0.01,  # learning rate for training
@@ -28,9 +67,13 @@ def run_perturbo(
     guide_modality_name="guide",  # name of the guide modality in the MuData
     test_all_pairs=False,  # whether to test all pairs or only those in pairs_to_test
     inference_type="element",  # can be per-guide or per-element
-    drop_ntc_guides=False,  # whether to drop non-targeting control guides in low_MOI analysis
-    num_workers=0,  # number of worker processes for data loading
+    num_workers=None,  # number of worker processes for data loading
 ):
+    if efficiency_mode != "scaled":
+        raise NotImplementedError(
+            "PerTurbo only supports efficiency_mode='scaled' in this pipeline"
+        )
+    num_workers = resolve_num_workers(num_workers)
     scvi.settings.seed = 0
     if num_workers > 0:
         scvi.settings.dl_num_workers = num_workers
@@ -47,7 +90,9 @@ def run_perturbo(
         raise ValueError("inference_type must be 'guide' or 'element'")
 
     guide_var = mdata["guide"].var
-    target_lookup = get_target_lookup(guide_var) if inference_type == "element" else None
+    target_lookup = (
+        get_target_lookup(guide_var) if inference_type == "element" else None
+    )
 
     control_guide_filter = pd.Series(False, index=guide_var.index)
     if "targeting" in guide_var.columns:
@@ -82,7 +127,6 @@ def run_perturbo(
         control_guides = mdata["guide"].var_names[control_guide_filter].tolist()
     else:
         control_guides = None
-
     mdata[gene_modality_name].obs["log1p_total_guide_umis"] = np.log1p(
         mdata[guide_modality_name].obs["total_guide_umis"]
     )
@@ -91,15 +135,9 @@ def run_perturbo(
         - mdata[gene_modality_name].obs["log1p_total_guide_umis"].mean()
     )
 
-    # efficiency_mode = {"undecided": "auto", "low": "mixture", "high": "scaled"}[
-    #     efficiency_mode
-    # ]
-    efficiency_mode = "scaled"
     fit_guide_efficacy = True
-    # if efficiency_mode == "auto":
     guides_per_element = mdata[guide_modality_name].var[element_key].value_counts()
 
-    # max_guides_per_cell = mdata[guide_modality_name].X.sum(axis=1).max()
     if np.all(guides_per_element <= 1) or inference_type == "guide":
         fit_guide_efficacy = False
         print("Not fitting guide efficiency -- only one guide per element.")
@@ -107,30 +145,6 @@ def run_perturbo(
     intended_targets_df = pd.get_dummies(
         mdata[guide_modality_name].var[element_key]
     ).astype(float)
-
-    if efficiency_mode == "mixture":
-        raise NotImplementedError(
-            "Mixture efficiency mode is not currently supported due to issues with model convergence. Please use 'scaled' or 'undecided' instead."
-        )
-        # don't test for control guides in low_MOI analysis (slightly more robust alternative to just dropping "non-targeting")
-        if drop_ntc_guides:
-            control_elements_idx = (
-                intended_targets_df.loc[control_guides].sum(axis=0) > 0
-            )
-            control_elements = intended_targets_df.columns[
-                control_elements_idx
-            ].tolist()
-            intended_targets_df = intended_targets_df.drop(control_elements, axis=1)
-
-        # filter any cells with >1 guide
-        multi_guide_cells = (
-            mdata[guide_modality_name].layers["guide_assignment"].sum(axis=1) > 1
-        )
-        if multi_guide_cells.any():
-            print(
-                f"Removing {multi_guide_cells.sum()} cells with multiple guides. ({multi_guide_cells.sum() / len(mdata) * 100:.1f}% of total)"
-            )
-            mdata = mdata[~multi_guide_cells, :].copy()
 
     mdata[guide_modality_name].varm["intended_targets"] = intended_targets_df
     mdata.uns[element_key] = intended_targets_df.columns.tolist()
@@ -148,7 +162,9 @@ def run_perturbo(
             raise ValueError("pairs_to_test must be a DataFrame or dictionary")
 
         if element_key not in pairs_to_test_df.columns:
-            pairs_to_test_df = enrich_pairs_with_target_metadata(pairs_to_test_df, guide_var)
+            pairs_to_test_df = enrich_pairs_with_target_metadata(
+                pairs_to_test_df, guide_var
+            )
 
         aggregated_df = (
             pairs_to_test_df[["gene_id", element_key]].drop_duplicates().assign(value=1)
@@ -193,9 +209,6 @@ def run_perturbo(
     )
 
     model.view_anndata_setup(mdata, hide_state_registries=True)
-    if batch_size is None:
-        batch_size = int(np.clip(len(mdata) // 20, 512, 10_000))
-
     print(f"Training using batch size of {batch_size}")
     model.train(
         num_epochs,  # max number of epochs
@@ -325,14 +338,14 @@ def main():
         "--fit_guide_efficacy",
         type=bool,
         default=True,
-        help="Whether to fit guide efficacy (overrides efficiency_mode if false)",
+        help="Whether to fit guide efficacy",
     )
     parser.add_argument(
         "--efficiency_mode",
         type=str,
-        choices=["undecided", "low", "high"],
-        default="undecided",
-        help="Efficiency mode for the model: 'undecided'/'auto' (auto-detect), 'low' (mixture), 'high' (scaled), 'mixture', or 'scaled' (default: undecided)",
+        choices=["scaled"],
+        default="scaled",
+        help="Efficiency mode for the model. Only 'scaled' is supported.",
     )
 
     parser.add_argument(
@@ -342,12 +355,12 @@ def main():
         default="gpu",
         help="Accelerator to use for training (default: gpu)",
     )
-    # parser.add_argument(
-    #     "--batch_size",
-    #     type=int,
-    #     default=4096,
-    #     help="Batch size for training (default: 4096)",
-    # )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=4096,
+        help="Batch size for training (default: 4096)",
+    )
     parser.add_argument(
         "--early_stopping",
         type=bool,
@@ -396,16 +409,10 @@ def main():
         help="Whether to test all pairs or only those in pairs_to_test (default: False)",
     )
     parser.add_argument(
-        "--test_control_guides",
-        type=bool,
-        default=True,
-        help="Whether to remove control guides from the analysis (default: False)",
-    )
-    parser.add_argument(
         "--num_workers",
         type=int,
-        default=0,
-        help="Number of workers for data loading (default: 0)",
+        default=None,
+        help="Number of workers for data loading (default: assigned CPUs minus one)",
     )
 
     # Parse the arguments
@@ -418,7 +425,7 @@ def main():
         fit_guide_efficacy=args.fit_guide_efficacy,
         efficiency_mode=args.efficiency_mode,
         accelerator=args.accelerator,
-        # batch_size=args.batch_size,
+        batch_size=args.batch_size,
         early_stopping=args.early_stopping,
         early_stopping_patience=args.early_stopping_patience,
         lr=args.lr,
@@ -427,6 +434,7 @@ def main():
         guide_modality_name=args.guide_modality_name,
         test_all_pairs=args.test_all_pairs,
         inference_type=args.inference_type,
+        num_workers=args.num_workers,
     )
 
 
