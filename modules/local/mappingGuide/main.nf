@@ -10,12 +10,13 @@ process mappingGuide {
     path t2g_guide
     path parsed_seqSpec_file
     path barcode_file
+    path bc_replacement_file
     val is_10xv3v
     val spacer_tag
 
     output:
     path "*_ks_guide_out"                              , emit: ks_guide_out_dir
-    path "*_ks_guide_out/counts_unfiltered/adata.h5ad" , emit: ks_guide_out_adata
+    path "*_ks_guide_out/counts_unfiltered${params.replace_barcodes ? '_modified' : ''}/adata.h5ad" , emit: ks_guide_out_adata
 
     script:
     def batch = meta.measurement_sets
@@ -59,19 +60,27 @@ process mappingGuide {
 
     echo "Final Chemistry: \$CHEM"
 
+    if [ "${params.replace_barcodes}" = true ] && [ -f "${bc_replacement_file}" ] && [ -s "${bc_replacement_file}" ]; then
+        replacement_args="-r ${bc_replacement_file}"
+    else
+        replacement_args=""
+    fi
+
     # 3. Run kb count
     # We use the calculated \$CHEM and \$WORKFLOW variables
     kb count \\
         -i ${guide_index} \\
         -g ${t2g_guide} \\
         -w ${barcode_file} \\
-        --workflow \$WORKFLOW \\
-        -x \$CHEM \\
-        --h5ad \\
         -o ${batch}_ks_guide_out \\
         -t ${task.cpus} \\
-        --verbose \\
+        -x \$CHEM \\
+        --workflow \$WORKFLOW \\
+        --h5ad \\
         --overwrite \\
+        --verbose \\
+        -w ${barcode_file} \\
+        \${replacement_args} \\
         ${fastq_files}
     """
 }
