@@ -14,6 +14,34 @@ import pandas as pd
 import mudata as md
 
 
+def plan_chunk_ranges(n_genes, chunk_size):
+    """
+    Create balanced half-open gene index ranges.
+
+    Returns a list of ``(start, end)`` pairs whose lengths differ by at most one.
+    If ``chunk_size`` is <= 0, the full gene range is returned as a single chunk.
+    """
+    if n_genes < 0:
+        raise ValueError("n_genes must be non-negative")
+    if n_genes == 0:
+        return []
+    if chunk_size <= 0 or n_genes <= chunk_size:
+        return [(0, n_genes)]
+
+    n_chunks = ceil(n_genes / chunk_size)
+    base = n_genes // n_chunks
+    remainder = n_genes % n_chunks
+
+    ranges = []
+    start = 0
+    for idx in range(n_chunks):
+        current_size = base + (1 if idx < remainder else 0)
+        end = start + current_size
+        ranges.append((start, end))
+        start = end
+    return ranges
+
+
 def chunk_mudata(
     mudata_file,
     output_dir,
@@ -62,15 +90,20 @@ def chunk_mudata(
     os.makedirs(output_dir, exist_ok=True)
 
     n_genes = mdata["gene"].shape[1]
-    n_chunks = ceil(n_genes / chunk_size)
-    print(f"Splitting {n_genes} genes into {n_chunks} chunks of size {chunk_size}")
+    chunk_ranges = plan_chunk_ranges(n_genes, chunk_size)
+    n_chunks = len(chunk_ranges)
+    if chunk_size <= 0:
+        print(
+            f"Chunking disabled (chunk_size={chunk_size}); writing a single chunk with {n_genes} genes"
+        )
+    else:
+        print(
+            f"Splitting {n_genes} genes into {len(chunk_ranges)} balanced chunks with max size {chunk_size}"
+        )
 
     chunk_files = []
 
-    for i in range(n_chunks):
-        # Define gene range for this chunk
-        start = i * chunk_size
-        end = min(start + chunk_size, n_genes)
+    for i, (start, end) in enumerate(chunk_ranges):
         print(f"Processing chunk {i + 1}/{n_chunks}: genes {start} to {end - 1}")
 
         # Extract RNA subset for this chunk

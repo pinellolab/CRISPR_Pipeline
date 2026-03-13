@@ -111,6 +111,8 @@ Update the pipeline-specific parameters in the `params` section, for example:
 
     INFERENCE_method = 'default' // sceptre or perturbo. Default will run sceptre and perturbo in cis and perturbo in trans (for elements and per guide)
     INFERENCE_target_guide_pairing_strategy = 'default'
+    INFERENCE_PERTURBO_BATCH_SIZE = 4096 // Batch size passed to PerTurbo training in both cis and trans runs
+    INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK = 8000 // For trans PerTurbo only; values <= 0 disable chunking and values > 0 cap each balanced gene chunk
 
     INFERENCE_predefined_pairs_to_test = "path/to/file.csv"
     INFERENCE_max_target_distance_bp = 1000000
@@ -546,4 +548,3 @@ You can cite the `nf-core` publication as follows:
 > Philip Ewels, Alexander Peltzer, Sven Fillinger, Harshil Patel, Johannes Alneberg, Andreas Wilm, Maxime Ulysse Garcia, Paolo Di Tommaso & Sven Nahnsen.
 >
 > _Nat Biotechnol._ 2020 Feb 13. doi: [10.1038/s41587-020-0439-x](https://dx.doi.org/10.1038/s41587-020-0439-x).
-

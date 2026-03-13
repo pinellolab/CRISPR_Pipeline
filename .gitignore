@@ -17,3 +17,8 @@ GCP_user_notebook.ipynb
 .params_2026-02-03_23-14-20.json
 .params_2026-02-03_23-14-49.json
 GCP_user_notebook.ipynb
+*.pyc
+__pycache__/
+.DS_Store
+sample_metadata*
+tests/
