@@ -14,7 +14,105 @@ from pathlib import Path
 
 import mudata as md
 import pandas as pd
-import mudata as md
+
+from chunk_mudata import chunk_mudata
+from perturbo_inference import resolve_efficiency_mode, resolve_num_workers
+
+
+def get_gene_count(mdata_input_fp, gene_modality_name):
+    mdata = md.read_h5mu(mdata_input_fp, backed="r")
+    return mdata[gene_modality_name].n_vars
+
+
+def should_chunk(n_genes, chunk_size):
+    return chunk_size > 0 and n_genes > chunk_size
+
+
+def build_perturbo_command(
+    perturbo_script,
+    mdata_input_fp,
+    results_tsv_fp,
+    mdata_output_fp=None,
+    fit_guide_efficacy=True,
+    efficiency_mode="scaled",
+    accelerator="gpu",
+    batch_size=4096,
+    early_stopping=False,
+    early_stopping_patience=5,
+    lr=0.01,
+    num_epochs=100,
+    gene_modality_name="gene",
+    guide_modality_name="guide",
+    inference_type="element",
+    test_all_pairs=False,
+    num_workers=None,
+):
+    resolved_num_workers = resolve_num_workers(num_workers)
+    resolved_efficiency_mode = resolve_efficiency_mode(efficiency_mode)
+    cmd = [
+        sys.executable,
+        str(perturbo_script),
+        mdata_input_fp,
+        results_tsv_fp,
+        "--fit_guide_efficacy",
+        str(fit_guide_efficacy),
+        "--efficiency_mode",
+        resolved_efficiency_mode,
+        "--accelerator",
+        accelerator,
+        "--batch_size",
+        str(batch_size),
+        "--early_stopping",
+        str(early_stopping),
+        "--early_stopping_patience",
+        str(early_stopping_patience),
+        "--lr",
+        str(lr),
+        "--num_epochs",
+        str(num_epochs),
+        "--gene_modality_name",
+        gene_modality_name,
+        "--guide_modality_name",
+        guide_modality_name,
+        "--inference_type",
+        inference_type,
+        "--num_workers",
+        str(resolved_num_workers),
+    ]
+    if mdata_output_fp:
+        cmd.extend(["--mdata_output_fp", mdata_output_fp])
+    if test_all_pairs:
+        cmd.append("--test_all_pairs")
+    return cmd
+
+
+def run_command(cmd):
+    print(f"Running: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.stdout:
+        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+    if result.returncode != 0:
+        if result.stderr:
+            print(result.stderr, end="" if result.stderr.endswith("\n") else "\n")
+        raise RuntimeError(f"Command failed with return code {result.returncode}")
+
+
+def combine_chunk_results(result_files, output_path):
+    dataframes = [pd.read_csv(result_file, sep="\t") for result_file in result_files]
+    combined = pd.concat(dataframes, ignore_index=True) if dataframes else pd.DataFrame()
+
+    if output_path.endswith(".gz"):
+        combined.to_csv(output_path, index=False, sep="\t", compression="gzip")
+    else:
+        combined.to_csv(output_path, index=False, sep="\t")
+
+    return combined
+
+
+def write_results_mudata(base_mdata_path, output_path, inference_type, results_df):
+    mdata = md.read(base_mdata_path)
+    mdata.uns[f"per_{inference_type}_results"] = results_df
+    mdata.write(output_path, compression="gzip")
 
 
 def run_perturbo_chunked(
@@ -22,8 +120,8 @@ def run_perturbo_chunked(
     results_tsv_fp,
     mdata_output_fp=None,
     fit_guide_efficacy=True,
-    efficiency_mode="undecided",
-    accelerator="auto",
+    efficiency_mode="scaled",
+    accelerator="gpu",
     batch_size=4096,
     early_stopping=False,
     early_stopping_patience=5,
@@ -249,9 +347,9 @@ def main():
     parser.add_argument(
         "--efficiency_mode",
         type=str,
-        choices=["undecided", "low", "high"],
-        default="undecided",
-        help="Efficiency mode for the model: 'undecided'/'auto' (auto-detect), 'low' (mixture), 'high' (scaled)",
+        choices=["scaled"],
+        default="scaled",
+        help="Efficiency mode for the model. Only 'scaled' is supported.",
     )
     parser.add_argument(
         "--accelerator",
