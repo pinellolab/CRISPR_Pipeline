@@ -15,7 +15,7 @@ import mudata as md
 import pandas as pd
 
 from chunk_mudata import chunk_mudata
-from perturbo_inference import resolve_num_workers
+from perturbo_inference import resolve_efficiency_mode, resolve_num_workers
 
 
 def get_gene_count(mdata_input_fp, gene_modality_name):
@@ -33,7 +33,7 @@ def build_perturbo_command(
     results_tsv_fp,
     mdata_output_fp=None,
     fit_guide_efficacy=True,
-    efficiency_mode="undecided",
+    efficiency_mode="scaled",
     accelerator="gpu",
     batch_size=4096,
     early_stopping=False,
@@ -47,6 +47,7 @@ def build_perturbo_command(
     num_workers=None,
 ):
     resolved_num_workers = resolve_num_workers(num_workers)
+    resolved_efficiency_mode = resolve_efficiency_mode(efficiency_mode)
     cmd = [
         sys.executable,
         str(perturbo_script),
@@ -55,7 +56,7 @@ def build_perturbo_command(
         "--fit_guide_efficacy",
         str(fit_guide_efficacy),
         "--efficiency_mode",
-        efficiency_mode,
+        resolved_efficiency_mode,
         "--accelerator",
         accelerator,
         "--batch_size",
@@ -119,7 +120,7 @@ def run_perturbo_chunked(
     mdata_output_fp=None,
     chunk_size=8000,
     fit_guide_efficacy=True,
-    efficiency_mode="undecided",
+    efficiency_mode="scaled",
     accelerator="gpu",
     batch_size=4096,
     early_stopping=False,
@@ -251,14 +252,14 @@ def main():
         "--fit_guide_efficacy",
         type=bool,
         default=True,
-        help="Whether to fit guide efficacy (overrides efficiency_mode if false)",
+        help="Whether to fit guide efficacy",
     )
     parser.add_argument(
         "--efficiency_mode",
         type=str,
-        choices=["undecided", "low", "high"],
-        default="undecided",
-        help="Efficiency mode for the model",
+        choices=["scaled"],
+        default="scaled",
+        help="Efficiency mode for the model. Only 'scaled' is supported.",
     )
     parser.add_argument(
         "--accelerator",
