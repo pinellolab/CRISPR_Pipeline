@@ -55,12 +55,12 @@ workflow inference_pipeline {
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "perturbo"){
-        TestResults = inference_perturbo(mudata_input, params.INFERENCE_method, params.Multiplicity_of_infection)
+        TestResults = inference_perturbo(mudata_input, params.INFERENCE_method)
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
         SceptreResults = inference_sceptre(mudata_input)
-        PerturboResults = inference_perturbo(mudata_input,  "perturbo", params.Multiplicity_of_infection)
+        PerturboResults = inference_perturbo(mudata_input,  "perturbo")
         MergedInference = mergedResults(
             SceptreResults.per_guide_output,
             SceptreResults.per_element_output,
@@ -76,7 +76,7 @@ workflow inference_pipeline {
         }
         // Process cis results
         SceptreResults_cis = inference_sceptre(PrepareInference.mudata_inference_input)
-        PerturboResults_cis = inference_perturbo(PrepareInference.mudata_inference_input, "perturbo", params.Multiplicity_of_infection)
+        PerturboResults_cis = inference_perturbo(PrepareInference.mudata_inference_input, "perturbo")
         MergedInference_cis = mergedResults(
             SceptreResults_cis.per_guide_output,
             SceptreResults_cis.per_element_output,
@@ -85,7 +85,7 @@ workflow inference_pipeline {
             PrepareInference.mudata_inference_input
         )
         // Process trans results - use concat_mudata directly
-        MergedInference_trans = inference_perturbo_trans(mudata_concat, "perturbo", params.Multiplicity_of_infection, PerturboResults_cis.inference_mudata)
+        MergedInference_trans = inference_perturbo_trans(mudata_concat, "perturbo", PerturboResults_cis.inference_mudata)
 
         MergedInference = mergeMudata(
             MergedInference_cis.per_guide_output,
