@@ -19,6 +19,6 @@ GCP_user_notebook.ipynb
 GCP_user_notebook.ipynb
 *.pyc
 __pycache__/
-__pycache__/
 .DS_Store
 sample_metadata*
+tests/

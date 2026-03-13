@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import os
 import perturbo
 import mudata as md
 import numpy as np
@@ -15,15 +16,17 @@ from intended_target_key_utils import (
 def resolve_num_workers(num_workers=None):
     if num_workers is not None:
         return max(int(num_workers), 0)
-    return 0
 
+    assigned_cpus = os.environ.get("NXF_TASK_CPUS")
+    if assigned_cpus is not None:
+        try:
+            return max(int(assigned_cpus) - 1, 0)
+        except ValueError:
+            pass
 
-def resolve_efficiency_mode(efficiency_mode="scaled"):
-    if efficiency_mode != "scaled":
-        raise ValueError(
-            "PerTurbo only supports efficiency_mode='scaled' in this pipeline"
-        )
-    return "scaled"
+    detected_cpus = os.cpu_count() or 1
+    return max(detected_cpus - 1, 0)
+
 
 def run_perturbo(
     mdata_input_fp,
@@ -41,9 +44,9 @@ def run_perturbo(
     guide_modality_name="guide",  # name of the guide modality in the MuData
     test_all_pairs=False,  # whether to test all pairs or only those in pairs_to_test
     inference_type="element",  # can be per-guide or per-element
+    drop_ntc_guides=False,  # whether to drop non-targeting control guides in low_MOI analysis
     num_workers=None,  # number of worker processes for data loading
 ):
-    efficiency_mode = resolve_efficiency_mode(efficiency_mode)
     num_workers = resolve_num_workers(num_workers)
     scvi.settings.seed = 0
     if num_workers > 0:
