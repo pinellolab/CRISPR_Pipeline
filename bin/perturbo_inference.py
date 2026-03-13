@@ -34,6 +34,8 @@ def run_perturbo(
     mdata_output_fp=None,
     fit_guide_efficacy=True,  # whether to fit guide efficacy
     efficiency_mode="scaled",  # PerTurbo efficiency mode; only "scaled" is supported
+    fit_guide_efficacy=True,  # whether to fit guide efficacy
+    efficiency_mode="scaled",  # PerTurbo efficiency mode; only "scaled" is supported
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
     batch_size=4096,  # batch size for training
     early_stopping=False,  # whether to use early stopping
@@ -44,9 +46,12 @@ def run_perturbo(
     guide_modality_name="guide",  # name of the guide modality in the MuData
     test_all_pairs=False,  # whether to test all pairs or only those in pairs_to_test
     inference_type="element",  # can be per-guide or per-element
-    drop_ntc_guides=False,  # whether to drop non-targeting control guides in low_MOI analysis
     num_workers=None,  # number of worker processes for data loading
 ):
+    if efficiency_mode != "scaled":
+        raise NotImplementedError(
+            "PerTurbo only supports efficiency_mode='scaled' in this pipeline"
+        )
     num_workers = resolve_num_workers(num_workers)
     scvi.settings.seed = 0
     if num_workers > 0:
@@ -63,42 +68,6 @@ def run_perturbo(
     else:
         raise ValueError("inference_type must be 'guide' or 'element'")
 
-    guide_var = mdata["guide"].var
-    target_lookup = get_target_lookup(guide_var) if inference_type == "element" else None
-
-    control_guide_filter = pd.Series(False, index=guide_var.index)
-    if "targeting" in guide_var.columns:
-        targeting_series = guide_var["targeting"]
-        if targeting_series.dtype != bool:
-            targeting_series = (
-                targeting_series.astype(str)
-                .str.lower()
-                .isin(["true", "1", "t", "yes", "y"])
-            )
-        control_guide_filter |= ~targeting_series
-    if "type" in guide_var.columns:
-        control_guide_filter |= (
-            guide_var["type"].astype(str).str.lower().eq("non-targeting")
-        )
-    if "intended_target_name" in guide_var.columns:
-        control_guide_filter |= (
-            guide_var["intended_target_name"]
-            .astype(str)
-            .str.contains("non-targeting", case=False, na=False)
-        )
-
-    if not any(
-        [c in guide_var.columns for c in ["targeting", "type", "intended_target_name"]]
-    ):
-        raise KeyError(
-            "guide.var is missing all of: 'targeting', 'type', 'intended_target_name'. "
-            "Cannot identify control guides."
-        )
-
-    if np.any(control_guide_filter):
-        control_guides = mdata["guide"].var_names[control_guide_filter].tolist()
-    else:
-        control_guides = None
     mdata[gene_modality_name].obs["log1p_total_guide_umis"] = np.log1p(
         mdata[guide_modality_name].obs["total_guide_umis"]
     )
@@ -110,7 +79,7 @@ def run_perturbo(
     fit_guide_efficacy = True
     guides_per_element = mdata[guide_modality_name].var[element_key].value_counts()
 
-    if np.all(guides_per_element <= 1) or inference_type == "guide":
+    if np.all(guides_per_element <= 1):
         fit_guide_efficacy = False
         print("Not fitting guide efficiency -- only one guide per element.")
 
