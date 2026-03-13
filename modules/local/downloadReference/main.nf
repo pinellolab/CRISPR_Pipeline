@@ -8,6 +8,8 @@ process downloadReference {
     output:
     path "transcriptome_index.idx", emit: transcriptome_idx
     path "transcriptome_t2g.txt", emit: t2g_transcriptome_index
+    path "cdna.txt", emit: cdna
+    path "nascent_index.txt", emit: nascent_index
 
     script:
     def igvf_url = "https://api.data.igvf.org/reference-files/IGVFFI9561BASO/@@download/IGVFFI9561BASO.tar.gz"
@@ -19,6 +21,8 @@ process downloadReference {
         tar -xzf igvf_reference.tar.gz -C igvf_extracted
         mv igvf_extracted/*.idx transcriptome_index.idx
         mv igvf_extracted/t2g.txt transcriptome_t2g.txt
+        mv igvf_extracted/cdna.txt cdna.txt
+        mv igvf_extracted/nascent.txt nascent_index.txt
         """
     } else {
         """
