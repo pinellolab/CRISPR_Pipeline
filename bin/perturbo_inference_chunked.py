@@ -207,116 +207,65 @@ def run_perturbo_chunked(
         return
 
     temp_dir = tempfile.mkdtemp(prefix="perturbo_chunks_")
-    print(f"Using temporary directory: {temp_dir}")
+    print(
+        f"Chunking {n_genes} genes with max chunk size {chunk_size} into balanced subsets in {temp_dir}"
+    )
+    print("Chunks will be processed sequentially, one at a time.")
 
     try:
-        # Step 1: Create chunks using chunk_mudata.py
-        print(f"\nStep 1: Chunking MuData into {chunk_size} genes per chunk...")
-        chunk_cmd = [
-            "python",
-            chunk_script,
-            mdata_input_fp,
-            temp_dir,
-            "--chunk-size",
-            str(chunk_size),
-            "--output-prefix",
-            "chunk",
-        ]
+        chunk_files = chunk_mudata(
+            mudata_file=mdata_input_fp,
+            output_dir=temp_dir,
+            chunk_size=chunk_size,
+            test_all_pairs=test_all_pairs,
+            output_prefix="chunk",
+        )
+        total_chunks = len(chunk_files)
+        print(f"Created {total_chunks} chunk(s) for {inference_type} inference.")
 
-        if test_all_pairs:
-            chunk_cmd.append(
-                "--test-all-pairs"
-            )  # Add flag when we want to test all pairs
-
-        print(f"Running: {' '.join(chunk_cmd)}")
-        result = subprocess.run(chunk_cmd, capture_output=True, text=True)
-
-        if result.returncode != 0:
-            print(f"Error in chunking: {result.stderr}")
-            raise RuntimeError(f"Chunking failed with return code {result.returncode}")
-
-        print("Chunking completed successfully")
-
-        # Step 2: Find all chunk files
-        chunk_files = []
-        for filename in os.listdir(temp_dir):
-            if filename.startswith("chunk.") and filename.endswith(".h5mu"):
-                chunk_files.append(os.path.join(temp_dir, filename))
-
-        chunk_files.sort()  # Ensure consistent order
-        print(f"Found {len(chunk_files)} chunk files")
-
-        if not chunk_files:
-            raise RuntimeError("No chunk files were created")
-
-        # Step 3: Run PerTurbo on each chunk
-        processed_chunks = []
-
-        for i, chunk_file in enumerate(chunk_files):
+        result_files = []
+        for chunk_index, chunk_file in enumerate(chunk_files, start=1):
+            chunk_result = os.path.splitext(chunk_file)[0] + ".tsv.gz"
             print(
-                f"\nStep 3.{i + 1}: Processing chunk {i + 1}/{len(chunk_files)}: {os.path.basename(chunk_file)}"
+                f"Starting chunk {chunk_index}/{total_chunks}: {os.path.basename(chunk_file)}"
+            )
+            run_command(
+                build_perturbo_command(
+                    perturbo_script=perturbo_script,
+                    mdata_input_fp=chunk_file,
+                    results_tsv_fp=chunk_result,
+                    fit_guide_efficacy=fit_guide_efficacy,
+                    efficiency_mode=efficiency_mode,
+                    accelerator=accelerator,
+                    batch_size=batch_size,
+                    early_stopping=early_stopping,
+                    early_stopping_patience=early_stopping_patience,
+                    lr=lr,
+                    num_epochs=num_epochs,
+                    gene_modality_name=gene_modality_name,
+                    guide_modality_name=guide_modality_name,
+                    inference_type=inference_type,
+                    test_all_pairs=test_all_pairs,
+                    num_workers=num_workers,
+                )
+            )
+            result_files.append(chunk_result)
+            print(
+                f"Finished chunk {chunk_index}/{total_chunks}: {os.path.basename(chunk_file)}"
             )
 
-            # Create output file for this chunk
-            chunk_output = chunk_file.replace(".h5mu", "_results.h5mu")
+        if not result_files:
+            raise RuntimeError("Chunked PerTurbo did not produce any result files")
 
-            # Build command for perturbo_inference.py
-            perturbo_cmd = [
-                "python",
-                perturbo_script,
-                chunk_file,
-                chunk_output,
-                "--fit_guide_efficacy",
-                str(fit_guide_efficacy),
-                "--efficiency_mode",
-                efficiency_mode,
-                "--accelerator",
-                accelerator,
-                "--batch_size",
-                str(batch_size),
-                "--early_stopping",
-                str(early_stopping),
-                "--early_stopping_patience",
-                str(early_stopping_patience),
-                "--lr",
-                str(lr),
-                "--num_epochs",
-                str(num_epochs),
-                "--gene_modality_name",
-                gene_modality_name,
-                "--guide_modality_name",
-                guide_modality_name,
-                "--test_control_guides",
-                str(test_control_guides),
-                "--num_workers",
-                str(num_workers),
-            ]
-
-            if test_all_pairs:
-                perturbo_cmd.append("--test_all_pairs")
-
-            print(f"Running: {' '.join(perturbo_cmd)}")
-            result = subprocess.run(perturbo_cmd, capture_output=True, text=True)
-
-            if result.returncode != 0:
-                print(f"Error in chunk {i + 1}: {result.stderr}")
-                print(f"Skipping chunk {i + 1}")
-                continue
-
-            processed_chunks.append(chunk_output)
-            print(f"Successfully processed chunk {i + 1}")
-
-        if not processed_chunks:
-            raise RuntimeError("No chunks were successfully processed")
-
-        # Step 4: Combine results
-        print(
-            f"\nStep 4: Combining results from {len(processed_chunks)} processed chunks..."
-        )
-        combine_chunk_results(processed_chunks, mdata_input_fp, mdata_output_fp)
-
-        print(f"Results saved to {mdata_output_fp}")
-
+        combined_results = combine_chunk_results(result_files, results_tsv_fp)
+        if mdata_output_fp:
+            write_results_mudata(
+                base_mdata_path=mdata_input_fp,
+                output_path=mdata_output_fp,
+                inference_type=inference_type,
+                results_df=combined_results,
+            )
+        print(f"Wrote combined chunked results to {results_tsv_fp}")
     finally:
         shutil.rmtree(temp_dir)
 

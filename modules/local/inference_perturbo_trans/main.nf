@@ -23,10 +23,10 @@ process inference_perturbo_trans {
     script:
         """
         # Run PerTurbo inference for per-element results
-        perturbo_inference_chunked.py ${mudata} perturbo_trans_per_element_output.tsv.gz --chunk_size ${params.INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK} --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers ${perturboNumWorkers} --efficiency_mode scaled --inference_type element --test_all_pairs
+        perturbo_inference_chunked.py ${mudata} perturbo_trans_per_element_output.tsv.gz --chunk_size ${params.INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK} --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers 0 --efficiency_mode scaled --inference_type element --test_all_pairs
         
         # Run PerTurbo inference for per-guide results  
-        perturbo_inference_chunked.py ${mudata} perturbo_trans_per_guide_output.tsv.gz --chunk_size ${params.INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK} --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers ${perturboNumWorkers} --efficiency_mode scaled --inference_type guide --test_all_pairs
+        perturbo_inference_chunked.py ${mudata} perturbo_trans_per_guide_output.tsv.gz --chunk_size ${params.INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK} --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers 0 --efficiency_mode scaled --inference_type guide --test_all_pairs
         
         # Add both results to the base mudata file
         add_perturbo_results_to_mudata.py \\
