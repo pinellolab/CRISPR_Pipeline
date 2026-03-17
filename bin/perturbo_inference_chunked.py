@@ -174,6 +174,7 @@ def run_perturbo_chunked(
     print(
         f"Chunking {n_genes} genes with max chunk size {chunk_size} into balanced subsets in {temp_dir}"
     )
+    print("Chunks will be processed sequentially, one at a time.")
 
     try:
         chunk_files = chunk_mudata(
@@ -183,10 +184,15 @@ def run_perturbo_chunked(
             test_all_pairs=test_all_pairs,
             output_prefix="chunk",
         )
+        total_chunks = len(chunk_files)
+        print(f"Created {total_chunks} chunk(s) for {inference_type} inference.")
 
         result_files = []
-        for chunk_file in chunk_files:
+        for chunk_index, chunk_file in enumerate(chunk_files, start=1):
             chunk_result = os.path.splitext(chunk_file)[0] + ".tsv.gz"
+            print(
+                f"Starting chunk {chunk_index}/{total_chunks}: {os.path.basename(chunk_file)}"
+            )
             run_command(
                 build_perturbo_command(
                     perturbo_script=perturbo_script,
@@ -208,6 +214,9 @@ def run_perturbo_chunked(
                 )
             )
             result_files.append(chunk_result)
+            print(
+                f"Finished chunk {chunk_index}/{total_chunks}: {os.path.basename(chunk_file)}"
+            )
 
         if not result_files:
             raise RuntimeError("Chunked PerTurbo did not produce any result files")
