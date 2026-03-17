@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import argparse
-import os
 import perturbo
 import mudata as md
 import numpy as np
@@ -16,16 +15,7 @@ from intended_target_key_utils import (
 def resolve_num_workers(num_workers=None):
     if num_workers is not None:
         return max(int(num_workers), 0)
-
-    assigned_cpus = os.environ.get("NXF_TASK_CPUS")
-    if assigned_cpus is not None:
-        try:
-            return max(int(assigned_cpus) - 1, 0)
-        except ValueError:
-            pass
-
-    detected_cpus = os.cpu_count() or 1
-    return max(detected_cpus - 1, 0)
+    return 0
 
 
 def resolve_efficiency_mode(efficiency_mode="scaled"):
@@ -34,22 +24,6 @@ def resolve_efficiency_mode(efficiency_mode="scaled"):
             "PerTurbo only supports efficiency_mode='scaled' in this pipeline"
         )
     return "scaled"
-
-
-def resolve_num_workers(num_workers=None):
-    if num_workers is not None:
-        return max(int(num_workers), 0)
-
-    assigned_cpus = os.environ.get("NXF_TASK_CPUS")
-    if assigned_cpus is not None:
-        try:
-            return max(int(assigned_cpus) - 1, 0)
-        except ValueError:
-            pass
-
-    detected_cpus = os.cpu_count() or 1
-    return max(detected_cpus - 1, 0)
-
 
 def run_perturbo(
     mdata_input_fp,
@@ -69,10 +43,7 @@ def run_perturbo(
     inference_type="element",  # can be per-guide or per-element
     num_workers=None,  # number of worker processes for data loading
 ):
-    if efficiency_mode != "scaled":
-        raise NotImplementedError(
-            "PerTurbo only supports efficiency_mode='scaled' in this pipeline"
-        )
+    efficiency_mode = resolve_efficiency_mode(efficiency_mode)
     num_workers = resolve_num_workers(num_workers)
     scvi.settings.seed = 0
     if num_workers > 0:
