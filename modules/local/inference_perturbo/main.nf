@@ -13,7 +13,6 @@ process inference_perturbo {
     input:
     path mudata
     val inference_method
-    val efficiency_mode
     
     output:
     path "inference_mudata.h5mu", emit: inference_mudata
@@ -23,10 +22,10 @@ process inference_perturbo {
     script:
         """
         # Run PerTurbo inference for per-element results
-        perturbo_inference.py ${mudata} perturbo_cis_per_element_output.tsv.gz --efficiency_mode ${efficiency_mode} --inference_type element
+        perturbo_inference.py ${mudata} perturbo_cis_per_element_output.tsv.gz --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers 0 --efficiency_mode scaled --inference_type element
         
         # Run PerTurbo inference for per-guide results  
-        perturbo_inference.py ${mudata} perturbo_cis_per_guide_output.tsv.gz --efficiency_mode ${efficiency_mode} --inference_type guide
+        perturbo_inference.py ${mudata} perturbo_cis_per_guide_output.tsv.gz --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers 0 --efficiency_mode scaled --inference_type guide
         
         # Add both results to the base mudata file
         add_perturbo_results_to_mudata.py \\
