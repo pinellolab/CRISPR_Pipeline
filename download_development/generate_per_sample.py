@@ -161,7 +161,7 @@ def generate_per_sample_tsv(analysis_set_accession, output_path, auth, hash_seqs
             barcode_onlist = measurement_sets_to_propertes[measurement_sets[0]]['barcode_onlist']
             onlist_method = measurement_sets_to_propertes[measurement_sets[0]]['onlist_method']
             strand_specificity = measurement_sets_to_propertes[measurement_sets[0]]['strand_specificity']
-            measurement_sets = ', '.join([measurement_set.split('/')[-2] for measurement_set in measurement_sets])
+            measurement_sets = ', '.join([measurement_set.split('/')[-2] for measurement_set in measurement_sets if measurement_set in input_file_sets])  # auxiliary sets may be reused across analyses, so only include measurement sets that are inputs to the current analysis set
 
 
         # Get hashtag reference
