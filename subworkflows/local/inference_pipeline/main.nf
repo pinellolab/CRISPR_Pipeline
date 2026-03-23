@@ -66,7 +66,6 @@ workflow inference_pipeline {
     }
     else if (params.INFERENCE_method == "perturbo"){
         TestResults = inference_perturbo(mudata_input, params.INFERENCE_method)
-        TestResults = inference_perturbo(mudata_input, params.INFERENCE_method)
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
@@ -110,7 +109,6 @@ workflow inference_pipeline {
             PrepareInference.mudata_inference_input
         )
         // Process trans results - use concat_mudata directly
-        MergedInference_trans = inference_perturbo_trans(mudata_concat, "perturbo", PerturboResults_cis.inference_mudata)
         MergedInference_trans = inference_perturbo_trans(mudata_concat, "perturbo", PerturboResults_cis.inference_mudata)
 
         MergedInference = mergeMudata(

@@ -1,20 +1,12 @@
 #!/usr/bin/env python
-"""
-Run PerTurbo inference on balanced gene chunks and concatenate TSV outputs.
-Run PerTurbo inference on balanced gene chunks and concatenate TSV outputs.
-"""
+"""Run PerTurbo inference on balanced gene chunks and concatenate TSV outputs."""
 
 import argparse
 import os
 import shutil
-import shutil
 import subprocess
 import sys
-import sys
 import tempfile
-from pathlib import Path
-
-import mudata as md
 from pathlib import Path
 
 import mudata as md
@@ -36,8 +28,6 @@ def should_chunk(n_genes, chunk_size):
 def build_perturbo_command(
     perturbo_script,
     mdata_input_fp,
-    results_tsv_fp,
-    mdata_output_fp=None,
     results_tsv_fp,
     mdata_output_fp=None,
     fit_guide_efficacy=True,
@@ -259,17 +249,6 @@ def main():
         help="Optional output file path for MuData; if omitted the MuData will not be written",
     )
     parser.add_argument(
-        "results_tsv_fp",
-        type=str,
-        help="Output TSV file path for concatenated PerTurbo results",
-    )
-    parser.add_argument(
-        "--mdata_output_fp",
-        type=str,
-        default=None,
-        help="Optional output file path for MuData; if omitted the MuData will not be written",
-    )
-    parser.add_argument(
         "--chunk_size",
         "-c",
         type=int,
@@ -293,8 +272,6 @@ def main():
         "--accelerator",
         type=str,
         choices=["auto", "gpu", "cpu"],
-        default="gpu",
-        help="Accelerator to use for training",
         default="gpu",
         help="Accelerator to use for training",
     )
@@ -343,12 +320,7 @@ def main():
     parser.add_argument(
         "--inference_type",
         type=str,
-        default="element",
-        help="Unit to test for effects on each gene: 'guide' or 'element'",
-    )
-    parser.add_argument(
-        "--inference_type",
-        type=str,
+        choices=["guide", "element"],
         default="element",
         help="Unit to test for effects on each gene: 'guide' or 'element'",
     )
@@ -356,13 +328,10 @@ def main():
         "--test_all_pairs",
         action="store_true",
         help="Whether to test all pairs or only those in pairs_to_test",
-        help="Whether to test all pairs or only those in pairs_to_test",
     )
     parser.add_argument(
         "--num_workers",
         type=int,
-        default=None,
-        help="Number of workers for data loading (default: assigned CPUs minus one)",
         default=None,
         help="Number of workers for data loading (default: assigned CPUs minus one)",
     )
@@ -387,27 +356,7 @@ def main():
         test_all_pairs=args.test_all_pairs,
         num_workers=args.num_workers,
     )
-    run_perturbo_chunked(
-        mdata_input_fp=args.mdata_input_fp,
-        results_tsv_fp=args.results_tsv_fp,
-        mdata_output_fp=args.mdata_output_fp,
-        chunk_size=args.chunk_size,
-        fit_guide_efficacy=args.fit_guide_efficacy,
-        efficiency_mode=args.efficiency_mode,
-        accelerator=args.accelerator,
-        batch_size=args.batch_size,
-        early_stopping=args.early_stopping,
-        early_stopping_patience=args.early_stopping_patience,
-        lr=args.lr,
-        num_epochs=args.num_epochs,
-        gene_modality_name=args.gene_modality_name,
-        guide_modality_name=args.guide_modality_name,
-        inference_type=args.inference_type,
-        test_all_pairs=args.test_all_pairs,
-        num_workers=args.num_workers,
-    )
 
 
 if __name__ == "__main__":
-    main()
     main()
