@@ -44,7 +44,6 @@ def run_perturbo(
     num_workers=None,  # number of worker processes for data loading
 ):
     efficiency_mode = resolve_efficiency_mode(efficiency_mode)
-    efficiency_mode = resolve_efficiency_mode(efficiency_mode)
     num_workers = resolve_num_workers(num_workers)
     scvi.settings.seed = 0
     if num_workers > 0:
