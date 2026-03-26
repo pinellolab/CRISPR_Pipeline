@@ -42,6 +42,74 @@ def resolve_input_path(path):
         raise ValueError(f"Input path is neither a file nor a directory: {path}")
 
     candidates = []
+    fallback_files = []
+    for root, _, files in os.walk(path):
+        for name in files:
+            candidate = os.path.join(root, name)
+            if os.path.isfile(candidate):
+                fallback_files.append(candidate)
+            if infer_filetype(candidate):
+                candidates.append(candidate)
+
+    if not candidates:
+        if len(fallback_files) == 1:
+            return fallback_files[0]
+        if not fallback_files:
+            raise FileNotFoundError(
+                f"No FASTQ/FASTA file found inside directory input: {path}"
+            )
+        raise ValueError(
+            f"Directory input contains files, but none look like FASTQ/FASTA: {path}. "
+            f"Files: {', '.join(sorted(os.path.relpath(candidate, path) for candidate in fallback_files))}"
+        )
+
+    dir_stem = strip_sequence_extension(os.path.basename(os.path.normpath(path))).lower()
+    stem_matches = [
+        candidate for candidate in candidates
+        if strip_sequence_extension(os.path.basename(candidate)).lower() == dir_stem
+    ]
+    if len(stem_matches) == 1:
+        return stem_matches[0]
+
+    if len(candidates) == 1:
+        return candidates[0]
+
+    raise ValueError(
+        f"Directory input contains multiple FASTQ/FASTA files: {path}. "
+        f"Candidates: {', '.join(sorted(os.path.relpath(candidate, path) for candidate in candidates))}"
+    )
+
+SUPPORTED_SEQUENCE_EXTENSIONS = (
+    '.fastq.gz', '.fq.gz', '.fasta.gz', '.fa.gz',
+    '.fastq', '.fq', '.fasta', '.fa'
+)
+
+def infer_filetype(filename):
+    lower_filename = filename.lower()
+    if lower_filename.endswith(('.fastq.gz', '.fq.gz', '.fastq', '.fq')):
+        return 'fastq'
+    if lower_filename.endswith(('.fasta.gz', '.fa.gz', '.fasta', '.fa')):
+        return 'fasta'
+    return None
+
+def strip_sequence_extension(filename):
+    lower_filename = filename.lower()
+    for ext in SUPPORTED_SEQUENCE_EXTENSIONS:
+        if lower_filename.endswith(ext):
+            return filename[:-len(ext)]
+    return os.path.splitext(filename)[0]
+
+def resolve_input_path(path):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Input path does not exist: {path}")
+
+    if os.path.isfile(path):
+        return path
+
+    if not os.path.isdir(path):
+        raise ValueError(f"Input path is neither a file nor a directory: {path}")
+
+    candidates = []
     for root, _, files in os.walk(path):
         for name in files:
             candidate = os.path.join(root, name)
@@ -72,10 +140,13 @@ def resolve_input_path(path):
 def is_gzipped(filename):
     if not os.path.isfile(filename):
         return False
+    if not os.path.isfile(filename):
+        return False
     with open(filename, 'rb') as f:
         return f.read(2) == b'\x1f\x8b'
 
 def open_file(filename, mode='rt'):
+    filename = resolve_input_path(filename)
     filename = resolve_input_path(filename)
     if is_gzipped(filename):
         return gzip.open(filename, mode)
@@ -94,6 +165,12 @@ def calculate_gini(array):
 
 def readFastq(filename, max_reads):
     sequences = []
+    try:
+        filename = resolve_input_path(filename)
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        print(f"Warning: skipping unreadable input {filename}: {exc}")
+        return []
+    filetype = infer_filetype(filename)
     filename = resolve_input_path(filename)
     filetype = infer_filetype(filename)
 
@@ -410,3 +487,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

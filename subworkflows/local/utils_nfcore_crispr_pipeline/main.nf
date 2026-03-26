@@ -74,8 +74,11 @@ workflow PIPELINE_INITIALISATION {
                 barcode_hashtag_map: row.barcode_hashtag_map
             ]
 
+            def r1_path = row.R1_path ? file(row.R1_path) : null
+            def r2_path = row.R2_path ? file(row.R2_path) : null
+
             // Return structured tuple with meta and file paths
-            [ meta, row.R1_path, row.R2_path ]
+            [ meta, r1_path, r2_path ]
         }
         .map {
             meta, r1_path, r2_path ->
@@ -232,4 +235,3 @@ def methodsDescriptionText(mqc_methods_yaml) {
 
     return description_html.toString()
 }
-
