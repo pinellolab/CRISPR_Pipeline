@@ -9,15 +9,8 @@ workflow guideWorkflow {
     ch_guide_design
 
     main:
-    ch_guide_split = ch_guide.map { meta, reads ->
-        def r1 = reads[0]  // First file is R1
-        def r2 = reads[1]  // Second file is R2
-        [meta, r1, r2]
-    }
-
     guide_seqSpecCheck = seqSpecCheck(
-        ch_guide_split.map { meta, r1, r2 -> r1 },  // R1 channel
-        ch_guide_split.map { meta, r1, r2 -> r2 },  // R2 channel
+        ch_guide,
         ch_guide_design,
         'guide'
     )
@@ -33,15 +26,8 @@ workflow hashWorkflow {
     ch_barcode_hashtag_map
 
     main:
-    ch_hash_split = ch_hash.map { meta, reads ->
-        def r1 = reads[0]  // First file is R1
-        def r2 = reads[1]  // Second file is R2
-        [meta, r1, r2]
-    }
-
     hash_seqSpecCheck = seqSpecCheck(
-        ch_hash_split.map { meta, r1, r2 -> r1 },  // R1 channel
-        ch_hash_split.map { meta, r1, r2 -> r2 },  // R2 channel
+        ch_hash,
         ch_barcode_hashtag_map,
         'hashing'
     )
