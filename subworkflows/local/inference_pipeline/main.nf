@@ -111,7 +111,6 @@ workflow inference_pipeline {
         )
         // Process trans results - use concat_mudata directly
         MergedInference_trans = inference_perturbo_trans(mudata_concat, "perturbo", PerturboResults_cis.inference_mudata)
-        MergedInference_trans = inference_perturbo_trans(mudata_concat, "perturbo", PerturboResults_cis.inference_mudata)
 
         MergedInference = mergeMudata(
             MergedInference_cis.per_guide_output,

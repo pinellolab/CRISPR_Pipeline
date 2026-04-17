@@ -305,14 +305,10 @@ def main():
         type=bool,
         default=True,
         help="Whether to fit guide efficacy",
-        help="Whether to fit guide efficacy",
     )
     parser.add_argument(
         "--efficiency_mode",
         type=str,
-        choices=["scaled"],
-        default="scaled",
-        help="Efficiency mode for the model. Only 'scaled' is supported.",
         choices=["scaled"],
         default="scaled",
         help="Efficiency mode for the model. Only 'scaled' is supported.",

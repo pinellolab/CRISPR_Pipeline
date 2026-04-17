@@ -1,20 +1,13 @@
 #!/usr/bin/env python
 """
 Run PerTurbo inference on balanced gene chunks and concatenate TSV outputs.
-Run PerTurbo inference on balanced gene chunks and concatenate TSV outputs.
 """
 
 import argparse
-import os
-import shutil
 import shutil
 import subprocess
 import sys
-import sys
 import tempfile
-from pathlib import Path
-
-import mudata as md
 from pathlib import Path
 
 import mudata as md
@@ -36,8 +29,6 @@ def should_chunk(n_genes, chunk_size):
 def build_perturbo_command(
     perturbo_script,
     mdata_input_fp,
-    results_tsv_fp,
-    mdata_output_fp=None,
     results_tsv_fp,
     mdata_output_fp=None,
     fit_guide_efficacy=True,
@@ -95,13 +86,7 @@ def build_perturbo_command(
 
 def run_command(cmd):
     print(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.stdout:
-        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-    if result.returncode != 0:
-        if result.stderr:
-            print(result.stderr, end="" if result.stderr.endswith("\n") else "\n")
-        raise RuntimeError(f"Command failed with return code {result.returncode}")
+    subprocess.run(cmd, check=True)
 
 
 def combine_chunk_results(result_files, output_path):
@@ -126,6 +111,7 @@ def run_perturbo_chunked(
     mdata_input_fp,
     results_tsv_fp,
     mdata_output_fp=None,
+    chunk_size=8000,
     fit_guide_efficacy=True,
     efficiency_mode="scaled",
     accelerator="gpu",
@@ -141,69 +127,40 @@ def run_perturbo_chunked(
     num_workers=None,
 ):
     """
-    Run PerTurbo inference on chunks of genes by calling external scripts.
-
-    This function:
-    1. Uses chunk_mudata.py to create gene chunks
-    2. Calls perturbo_inference.py on each chunk via subprocess
-    3. Combines the results and saves them back to the original MuData
-
-    Parameters:
-    -----------
-    mdata_input_fp : str
-        Path to input MuData file
-    mdata_output_fp : str
-        Path to output MuData file
-    chunk_size : int
-        Number of genes per chunk (default: 8000)
-    Other parameters match those in perturbo_inference.py
+    Run PerTurbo inference on chunks of genes by calling perturbo_inference.py.
     """
 
+    perturbo_script = Path(__file__).with_name("perturbo_inference.py")
+    n_genes = get_gene_count(mdata_input_fp, gene_modality_name)
+
     print(f"Starting chunked PerTurbo inference on {mdata_input_fp}...")
-    mdata = md.read_h5mu(mdata_input_fp, backed="r")
-    if mdata[gene_modality_name].n_vars <= chunk_size:
+    print(f"Detected {n_genes} genes in modality '{gene_modality_name}'.")
+
+    if not should_chunk(n_genes, chunk_size):
         print(
-            "Number of genes is less than or equal to chunk size; running standard PerTurbo inference instead."
+            "Gene count does not exceed chunk_size; running standard PerTurbo inference."
         )
-        perturbo_script = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "perturbo_inference.py"
+        run_command(
+            build_perturbo_command(
+                perturbo_script=perturbo_script,
+                mdata_input_fp=mdata_input_fp,
+                results_tsv_fp=results_tsv_fp,
+                mdata_output_fp=mdata_output_fp,
+                fit_guide_efficacy=fit_guide_efficacy,
+                efficiency_mode=efficiency_mode,
+                accelerator=accelerator,
+                batch_size=batch_size,
+                early_stopping=early_stopping,
+                early_stopping_patience=early_stopping_patience,
+                lr=lr,
+                num_epochs=num_epochs,
+                gene_modality_name=gene_modality_name,
+                guide_modality_name=guide_modality_name,
+                inference_type=inference_type,
+                test_all_pairs=test_all_pairs,
+                num_workers=num_workers,
+            )
         )
-        perturbo_cmd = [
-            "python",
-            perturbo_script,
-            mdata_input_fp,
-            mdata_output_fp,
-            "--fit_guide_efficacy",
-            str(fit_guide_efficacy),
-            "--efficiency_mode",
-            efficiency_mode,
-            "--accelerator",
-            accelerator,
-            "--batch_size",
-            str(batch_size),
-            "--early_stopping",
-            str(early_stopping),
-            "--early_stopping_patience",
-            str(early_stopping_patience),
-            "--lr",
-            str(lr),
-            "--num_epochs",
-            str(num_epochs),
-            "--gene_modality_name",
-            gene_modality_name,
-            "--guide_modality_name",
-            guide_modality_name,
-            "--test_control_guides",
-            str(test_control_guides),
-            "--num_workers",
-            str(num_workers),
-        ]
-
-        if test_all_pairs:
-            perturbo_cmd.append("--test_all_pairs")
-
-        print(f"Running: {' '.join(perturbo_cmd)}")
-        subprocess.run(perturbo_cmd)
         return
 
     temp_dir = tempfile.mkdtemp(prefix="perturbo_chunks_")
@@ -225,9 +182,9 @@ def run_perturbo_chunked(
 
         result_files = []
         for chunk_index, chunk_file in enumerate(chunk_files, start=1):
-            chunk_result = os.path.splitext(chunk_file)[0] + ".tsv.gz"
+            chunk_result = str(Path(chunk_file).with_suffix(".tsv.gz"))
             print(
-                f"Starting chunk {chunk_index}/{total_chunks}: {os.path.basename(chunk_file)}"
+                f"Starting chunk {chunk_index}/{total_chunks}: {Path(chunk_file).name}"
             )
             run_command(
                 build_perturbo_command(
@@ -251,7 +208,7 @@ def run_perturbo_chunked(
             )
             result_files.append(chunk_result)
             print(
-                f"Finished chunk {chunk_index}/{total_chunks}: {os.path.basename(chunk_file)}"
+                f"Finished chunk {chunk_index}/{total_chunks}: {Path(chunk_file).name}"
             )
 
         if not result_files:
@@ -288,17 +245,6 @@ def main():
         help="Optional output file path for MuData; if omitted the MuData will not be written",
     )
     parser.add_argument(
-        "results_tsv_fp",
-        type=str,
-        help="Output TSV file path for concatenated PerTurbo results",
-    )
-    parser.add_argument(
-        "--mdata_output_fp",
-        type=str,
-        default=None,
-        help="Optional output file path for MuData; if omitted the MuData will not be written",
-    )
-    parser.add_argument(
         "--chunk_size",
         "-c",
         type=int,
@@ -322,8 +268,6 @@ def main():
         "--accelerator",
         type=str,
         choices=["auto", "gpu", "cpu"],
-        default="gpu",
-        help="Accelerator to use for training",
         default="gpu",
         help="Accelerator to use for training",
     )
@@ -372,26 +316,18 @@ def main():
     parser.add_argument(
         "--inference_type",
         type=str,
+        choices=["guide", "element"],
         default="element",
-        help="Unit to test for effects on each gene: 'guide' or 'element'",
-    )
-    parser.add_argument(
-        "--inference_type",
-        type=str,
-        default="element",
-        help="Unit to test for effects on each gene: 'guide' or 'element'",
+        help="Unit to test for effects on each gene",
     )
     parser.add_argument(
         "--test_all_pairs",
         action="store_true",
         help="Whether to test all pairs or only those in pairs_to_test",
-        help="Whether to test all pairs or only those in pairs_to_test",
     )
     parser.add_argument(
         "--num_workers",
         type=int,
-        default=None,
-        help="Number of workers for data loading (default: assigned CPUs minus one)",
         default=None,
         help="Number of workers for data loading (default: assigned CPUs minus one)",
     )
@@ -416,27 +352,7 @@ def main():
         test_all_pairs=args.test_all_pairs,
         num_workers=args.num_workers,
     )
-    run_perturbo_chunked(
-        mdata_input_fp=args.mdata_input_fp,
-        results_tsv_fp=args.results_tsv_fp,
-        mdata_output_fp=args.mdata_output_fp,
-        chunk_size=args.chunk_size,
-        fit_guide_efficacy=args.fit_guide_efficacy,
-        efficiency_mode=args.efficiency_mode,
-        accelerator=args.accelerator,
-        batch_size=args.batch_size,
-        early_stopping=args.early_stopping,
-        early_stopping_patience=args.early_stopping_patience,
-        lr=args.lr,
-        num_epochs=args.num_epochs,
-        gene_modality_name=args.gene_modality_name,
-        guide_modality_name=args.guide_modality_name,
-        inference_type=args.inference_type,
-        test_all_pairs=args.test_all_pairs,
-        num_workers=args.num_workers,
-    )
 
 
 if __name__ == "__main__":
-    main()
     main()
