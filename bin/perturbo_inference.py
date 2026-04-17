@@ -31,8 +31,6 @@ def run_perturbo(
     mdata_output_fp=None,
     fit_guide_efficacy=True,  # whether to fit guide efficacy
     efficiency_mode="scaled",  # PerTurbo efficiency mode; only "scaled" is supported
-    fit_guide_efficacy=True,  # whether to fit guide efficacy
-    efficiency_mode="scaled",  # PerTurbo efficiency mode; only "scaled" is supported
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
     batch_size=4096,  # batch size for training
     early_stopping=False,  # whether to use early stopping
