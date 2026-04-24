@@ -67,6 +67,8 @@ def main():
         args.file_path_list, key=lambda x: os.path.basename(x)
     )
     print(sorted_file_path_list)
+
+    mm = args.mm.lower() in ["true", "1", "yes"]
     bc_replacement = args.bc_replacement.lower() in ["true", "1", "yes"]
     if bc_replacement:
         folder_ = "counts_unfiltered_modified"
@@ -78,11 +80,11 @@ def main():
         print(f"Processing {h5ad_path}")
 
         adata = ad.read_h5ad(h5ad_path)
-        adata.X = adata.X.astype(np.float32)
         if all(
             layer in adata.layers
             for layer in ["mature", "nascent", "ambiguous"]
         ):
+            adata.X = adata.X.astype(np.float32)
             adata.X = (
                 adata.layers["mature"].astype(np.float32)
                 + adata.layers["nascent"].astype(np.float32)
@@ -96,15 +98,15 @@ def main():
             print(
                 "Nascent (nac) workflow detected: combining mature, nascent, and ambiguous counts into .X"
             )
-            mm = args.mm.lower() in ["true", "1", "yes"]
-            if mm:
-                # Round values for downstream compatibility
-                if hasattr(adata.X, "toarray"):
-                    adata.X.data = np.round(adata.X.data)
-                else:
-                    adata.X = np.round(adata.X)
         else:
             print("Standard workflow detected: Using existing .X matrix")
+
+        if mm:
+            # Round values for downstream compatibility
+            if hasattr(adata.X, "toarray"):
+                adata.X.data = np.round(adata.X.data)
+            else:
+                adata.X = np.round(adata.X)
 
         if idx == 0 and adata.var_names.name is not None:
             var_index_name = adata.var_names.name
