@@ -1,9 +1,5 @@
-<h1>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/nf-core-crispr_logo_dark.png">
-    <img alt="nf-core/crispr" src="docs/images/nf-core-crispr_logo_light.png">
-  </picture>
-</h1>
+![Alt text](https://github.com/pinellolab/CRISPR_Pipeline/blob/main/images/crispr_pipeline.png)
+
 
 [![nf-test](https://img.shields.io/badge/unit_tests-nf--test-337ab7.svg)](https://www.nf-test.com)
 
