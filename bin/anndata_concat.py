@@ -5,6 +5,7 @@ import os
 import re
 import argparse
 import pandas as pd
+from pathlib import Path
 
 def extract_batch_num(filename):
     match = re.search(r'(.+)_ks_', filename)
@@ -60,10 +61,10 @@ def main():
     # Use concat_on_disk with the processed file paths
     print(f"Concatenating files: {processed_files}")
     combined_adata = ad.experimental.concat_on_disk(
-        processed_files, 
+        [Path(path) for path in processed_files],
         join='outer', 
         index_unique="_", 
-        out_file=args.output
+        out_file=Path(args.output)
     )
     
     if var_index_name:
