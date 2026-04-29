@@ -102,8 +102,8 @@ Update the pipeline-specific parameters in the `params` section, for example:
     GUIDE_ASSIGNMENT_method = 'sceptre'
     GUIDE_ASSIGNMENT_capture_method = 'CROP-seq'
     GUIDE_ASSIGNMENT_cleanser_probability_threshold = 1
-    GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold = 'default'
-    GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep = 'default'
+    GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold = 0.8
+    GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep = 5
 
     INFERENCE_method = 'default' // sceptre or perturbo. Default will run sceptre and perturbo in cis and perturbo in trans (for elements and per guide)
     INFERENCE_target_guide_pairing_strategy = 'default'

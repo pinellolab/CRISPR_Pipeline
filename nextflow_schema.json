@@ -1,0 +1,336 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://raw.githubusercontent.com/pinellolab/CRISPR_Pipeline/main/nextflow_schema.json",
+    "title": "CRISPR Pipeline parameters",
+    "description": "Pipeline parameters for single-cell Perturb-seq CRISPR screen processing and inference.",
+    "type": "object",
+    "additionalProperties": true,
+    "$defs": {
+        "input_output_options": {
+            "title": "Input/output options",
+            "type": "object",
+            "fa_icon": "fas fa-terminal",
+            "description": "Define the input samplesheet and output directory.",
+            "required": [
+                "input",
+                "outdir"
+            ],
+            "properties": {
+                "input": {
+                    "type": "string",
+                    "format": "file-path",
+                    "mimetype": "text/csv",
+                    "pattern": "^\\S+\\.(csv|tsv)$",
+                    "description": "Path to the pipeline samplesheet.",
+                    "help_text": "The samplesheet should contain the modality-specific FASTQ paths and metadata columns used by the pipeline, including R1_path, R2_path, file_modality, measurement_sets, seqspec, barcode_onlist, guide_design, and barcode_hashtag_map when hashing is enabled."
+                },
+                "outdir": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "default": "./pipeline_outputs",
+                    "description": "Directory where pipeline outputs will be written."
+                }
+            }
+        },
+        "assay_options": {
+            "title": "Assay and library options",
+            "type": "object",
+            "fa_icon": "fas fa-dna",
+            "description": "Options describing the assay design and library structure.",
+            "properties": {
+                "ENABLE_DATA_HASHING": {
+                    "type": "boolean",
+                    "description": "Enable cell hashing processing.",
+                    "help_text": "When enabled, the samplesheet must include hash modality rows and barcode_hashtag_map metadata."
+                },
+                "ENABLE_SCRUBLET": {
+                    "type": "boolean",
+                    "description": "Run Scrublet doublet detection before guide assignment."
+                },
+                "is_10x3v3": {
+                    "type": "boolean",
+                    "description": "Use 10x Genomics 3' v3 chemistry handling for guide mapping."
+                },
+                "reverse_complement_guides": {
+                    "type": "boolean",
+                    "description": "Reverse-complement guide sequences before guide reference construction."
+                },
+                "spacer_tag": {
+                    "type": "string",
+                    "description": "Optional fixed sequence immediately upstream of the guide spacer.",
+                    "help_text": "When provided, the guide mapper searches for the spacer tag and ignore the expected guide position defined in the seqspec. In some cases you will need to check if the quality of your reads is sufficient to reliably find the spacer tag. If not, you can set this to null and the mapper will search for guides in the expected position defined by the seqspec."
+                },
+                "DUAL_GUIDE": {
+                    "type": "boolean",
+                    "description": "Enable dual-guide handling during guide assignment aggregation."
+                },
+                "Multiplicity_of_infection": {
+                    "type": "string",
+                    "default": "high",
+                    "enum": [
+                        "high",
+                        "low"
+                    ],
+                    "description": "Expected CRISPR screen multiplicity of infection.",
+                    "help_text": "This  parameter affects SCEPTRE's low- versus high-MOI assumptions and is also stored inside the Mudata object"
+                },
+                "GUIDE_ASSIGNMENT_capture_method": {
+                    "type": "string",
+                    "default": "CROP-seq",
+                    "description": "Guide capture method used when creating MuData and running Cleanser guide assignment."
+                }
+            }
+        },
+        "reference_options": {
+            "title": "Reference options",
+            "type": "object",
+            "fa_icon": "fas fa-book",
+            "description": "Reference transcriptome and annotation inputs.",
+            "properties": {
+                "use_igvf_reference": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Use the prebuilt IGVF transcriptome reference for RNA mapping and ignores other reference-related parameters when true."
+                },
+                "REFERENCE_transcriptome": {
+                    "type": "string",
+                    "default": "human",
+                    "description": "Transcriptome name passed to kb-python when not using the prebuilt IGVF reference. Set use_igvf_reference to false to use a custom reference transcriptome."
+                },
+                "REFERENCE_gtf_download_path": {
+                    "type": "string",
+                    "format": "uri",
+                    "default": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_46/gencode.v46.annotation.gtf.gz",
+                    "description": "URL for the GTF annotation to download when no local GTF is available. "
+                },
+                "REFERENCE_gtf_local_path": {
+                    "type": "string",
+                    "format": "file-path",
+                    "default": "/path/to/gencode_gtf.gtf.gz",
+                    "description": "Optional local GTF annotation path.",
+                    "help_text": "If this file exists at runtime, the pipeline uses it instead of downloading REFERENCE_gtf_download_path. Use with use_igvf_reference set to false."
+                }
+            }
+        },
+        "quality_control_options": {
+            "title": "Quality control options",
+            "type": "object",
+            "fa_icon": "fas fa-filter",
+            "description": "Cell and gene filtering options used during preprocessing.",
+            "properties": {
+                "QC_min_genes_per_cell": {
+                    "type": "integer",
+                    "default": 500,
+                    "minimum": 0,
+                    "description": "Minimum number of detected genes with more than >UMI required to keep a cell."
+                },
+                "QC_min_cells_per_gene": {
+                    "type": "number",
+                    "default": 0.05,
+                    "minimum": 0,
+                    "description": "Minimum fractions of cell support required to keep a gene.",
+                    "help_text": "The current pipeline passes this value to preprocessing and guide-assignment aggregation. It is commonly used as a fraction of cells."
+                },
+                "QC_pct_mito": {
+                    "type": "number",
+                    "default": 15,
+                    "minimum": 0,
+                    "maximum": 100,
+                    "description": "Maximum mitochondrial read percentage allowed per cell."
+                },
+                "QC_batch_col": {
+                    "type": "string",
+                    "default": "batch",
+                    "description": "Observation metadata column used as the batch label in additional QC plots."
+                },
+                "QC_barcode_filter": {
+                    "type": "string",
+                    "default": "stringent",
+                    "enum": [
+                        "manual",
+                        "stringent",
+                        "less_stringent"
+                    ],
+                    "description": "Barcode filtering method used during RNA preprocessing.manual will the  QC_min_genes_per_cell . Strigent in an automatic procedure based in the elbow/knee detection that works in most of the cases. Less stringent is similar to stringent but with a more permissive threshold that can be useful when the dataset presents some heterogeneous populations of cells (see 10x documentation https://www.10xgenomics.com/support/software/cell-ranger/latest/advanced/cr-barcode-rank-plot#barcode-rank-plots-of-heterogeneous-samples-1734b4)."
+                }
+            }
+        },
+        "guide_assignment_options": {
+            "title": "Guide assignment options",
+            "type": "object",
+            "fa_icon": "fas fa-barcode",
+            "description": "Guide assignment method and thresholds.",
+            "properties": {
+                "GUIDE_ASSIGNMENT_method": {
+                    "type": "string",
+                    "default": "sceptre",
+                    "enum": [
+                        "sceptre",
+                        "cleanser"
+                    ],
+                    "description": "Method used to assign guide RNAs to cells."
+                },
+                "GUIDE_ASSIGNMENT_cleanser_probability_threshold": {
+                    "type": "number",
+                    "default": 1.0,
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "description": "float with the probability threshold passed to Cleanser guide assignment."
+                },
+                "GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold": {
+                    "type": "number",
+                    "default": 0.8,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Probability threshold for SCEPTRE mixture-based guide assignment.",
+                    "help_text": "Set a number between 0 and 1 to pass as probability_threshold to sceptre::assign_grnas(method = \"mixture\"). The default is 0.8, matching the SCEPTRE mixture-method default in both the sceptre-igvf pinned source and the sjiang9/sceptre-igvf:0.1 runtime image."
+                },
+                "GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep": {
+                    "type": "integer",
+                    "default": 5,
+                    "minimum": 1,
+                    "description": "Number of EM repetitions passed to SCEPTRE guide assignment.",
+                    "help_text": "Number of EM initializations passed as n_em_rep to sceptre::assign_grnas(method = \"mixture\"). The default is 5, matching the SCEPTRE mixture-method default in both the sceptre-igvf pinned source and the sjiang9/sceptre-igvf:0.1 runtime image."
+                }
+            }
+        },
+        "inference_options": {
+            "title": "Inference options",
+            "type": "object",
+            "fa_icon": "fas fa-chart-line",
+            "description": "Differential expression and perturbation inference settings.",
+            "properties": {
+                "INFERENCE_method": {
+                    "type": "string",
+                    "default": "default",
+                    "enum": [
+                        "default",
+                        "sceptre",
+                        "perturbo",
+                        "sceptre,perturbo"
+                    ],
+                    "description": "Inference method to run.",
+                    "help_text": "The default mode runs cis SCEPTRE, cis Perturbo, and trans Perturbo using the default guide-target pairing strategy."
+                },
+                "INFERENCE_target_guide_pairing_strategy": {
+                    "type": "string",
+                    "default": "default",
+                    "enum": [
+                        "default",
+                        "by_distance",
+                        "predefined_pairs"
+                    ],
+                    "description": "Strategy used to define guide-target pairs for inference."
+                },
+                "INFERENCE_predefined_pairs_to_test": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "format": "file-path",
+                    "description": "CSV file containing predefined guide-target pairs.",
+                    "help_text": "Required when INFERENCE_target_guide_pairing_strategy is set to predefined_pairs."
+                },
+                "INFERENCE_max_target_distance_bp": {
+                    "type": "integer",
+                    "default": 1000000,
+                    "minimum": 0,
+                    "description": "Maximum genomic distance, in base pairs, for guide-target pairing when using distance-based pairing."
+                },
+                "INFERENCE_SCEPTRE_side": {
+                    "type": "string",
+                    "default": "both",
+                    "enum": [
+                        "both",
+                        "left",
+                        "right"
+                    ],
+                    "description": "Alternative-hypothesis side passed to SCEPTRE inference."
+                },
+                "INFERENCE_SCEPTRE_grna_integration_strategy": {
+                    "type": "string",
+                    "default": "union",
+                    "description": "Guide RNA integration strategy passed to SCEPTRE inference."
+                },
+                "INFERENCE_SCEPTRE_resampling_approximation": {
+                    "type": "string",
+                    "default": "skew_normal",
+                    "description": "Resampling approximation passed to SCEPTRE inference."
+                },
+                "INFERENCE_SCEPTRE_control_group": {
+                    "type": "string",
+                    "default": "complement",
+                    "description": "Control group strategy passed to SCEPTRE inference."
+                },
+                "INFERENCE_SCEPTRE_resampling_mechanism": {
+                    "type": "string",
+                    "default": "default",
+                    "description": "Resampling mechanism passed to SCEPTRE inference."
+                }
+            }
+        },
+        "benchmark_options": {
+            "title": "Benchmark options",
+            "type": "object",
+            "fa_icon": "fas fa-vial",
+            "description": "Optional benchmark analysis against ENCODE BED files.",
+            "properties": {
+                "ENABLE_BENCHMARK": {
+                    "type": "boolean",
+                    "description": "Run transcription factor benchmark analysis."
+                },
+                "ENCODE_BED_DIR": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "default": "${projectDir}/encode_bed_files",
+                    "description": "Directory containing ENCODE BED files for benchmark analysis."
+                }
+            }
+        },
+        "network_options": {
+            "title": "Network plot options",
+            "type": "object",
+            "fa_icon": "fas fa-project-diagram",
+            "description": "Optional network-plot display settings.",
+            "properties": {
+                "NETWORK_custom_central_nodes": {
+                    "type": "string",
+                    "default": "undefined",
+                    "description": "Comma-separated custom central nodes to highlight in network plots."
+                },
+                "NETWORK_central_nodes_num": {
+                    "type": "integer",
+                    "default": 1,
+                    "minimum": 0,
+                    "description": "Number of central nodes to highlight in network plots when custom nodes are not provided."
+                }
+            }
+        }
+    },
+    "allOf": [
+        {
+            "$ref": "#/$defs/input_output_options"
+        },
+        {
+            "$ref": "#/$defs/assay_options"
+        },
+        {
+            "$ref": "#/$defs/reference_options"
+        },
+        {
+            "$ref": "#/$defs/quality_control_options"
+        },
+        {
+            "$ref": "#/$defs/guide_assignment_options"
+        },
+        {
+            "$ref": "#/$defs/inference_options"
+        },
+        {
+            "$ref": "#/$defs/benchmark_options"
+        },
+        {
+            "$ref": "#/$defs/network_options"
+        }
+    ]
+}
