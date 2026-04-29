@@ -1,0 +1,23 @@
+// TODO nf-core: Once you have added the required tests, please run the following command to build this file:
+// nf-core modules test filter_hashing
+nextflow_process {
+
+    name "Test Process filter_hashing"
+    script "../main.nf"
+    process "filter_hashing"
+
+    tag "modules"
+    tag "modules_"
+    tag "filter_hashing"
+
+    test("stub") {
+
+        options "-stub"
+
+        then {
+            assert process.success
+        }
+
+    }
+
+}

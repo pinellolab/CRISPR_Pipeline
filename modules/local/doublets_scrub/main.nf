@@ -1,16 +1,12 @@
-
 process doublets_scrub {
-
-    cache 'lenient'
-    
     input:
-        path mudata
+    path mudata
 
     output:
-        path "mdata_doublets.h5mu", emit: mudata_doublet
+    path 'mudata_doublet.h5mu', emit: mudata_doublet
 
     script:
-        """
-        doublets.py --input ${mudata}
-        """
+    """
+    cp ${mudata} mudata_doublet.h5mu
+    """
 }

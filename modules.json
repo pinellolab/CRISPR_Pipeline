@@ -1,6 +1,6 @@
 {
-    "name": "nf-core/crispr",
-    "homePage": "https://github.com/nf-core/crispr",
+    "name": "nf-core/perturbseq",
+    "homePage": "https://github.com/nf-core/perturbseq",
     "repos": {
         "https://github.com/nf-core/modules.git": {
             "modules": {

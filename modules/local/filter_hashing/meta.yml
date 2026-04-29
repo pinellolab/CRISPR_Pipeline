@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "filter_hashing"
+description: "Module metadata for process filter_hashing"
+keywords:
+  - "filter_hashing"
+  - "nextflow"
+  - "module"
+tools:
+  - "filter_hashing":
+      description: "Wrapper process for filter_hashing"
+      homepage: ""
+      documentation: ""
+      tool_dev_url: ""
+      doi: ""
+      licence: null
+      identifier: null
+
+input:
+  -
+    - input_1:
+        type: string
+        description: 'path filtered_anndata_rna'
+  -
+    - input_2:
+        type: string
+        description: 'path anndata_hashing'
+
+output:
+  output_1:
+    -
+      - output_1:
+          type: string
+          description: 'path ''hashing_filtered.h5ad'',      emit: hashing_filtered_anndata'
+  output_2:
+    -
+      - output_2:
+          type: string
+          description: 'path ''hashing_concatenated_adata.h5ad'', emit: adata_hashing'
+
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"

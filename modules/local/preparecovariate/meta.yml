@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "preparecovariate"
+description: "Module metadata for process PREPARECOVARIATE"
+keywords:
+  - "preparecovariate"
+  - "nextflow"
+  - "module"
+tools:
+  - "preparecovariate":
+      description: "Wrapper process for PREPARECOVARIATE"
+      homepage: ""
+      documentation: ""
+      tool_dev_url: ""
+      doi: ""
+      licence: null
+      identifier: null
+
+input:
+  -
+    - input_1:
+        type: string
+        description: 'val covariate_list  // val: JSON-serialisable map/list of batch covariates, e.g. [batch: [''A'', ''B'']]'
+
+output:
+  output_1:
+    -
+      - output_1:
+          type: string
+          description: 'path "parse_covariate.csv", emit: parsed_covariate_file'
+  output_2:
+    -
+      - output_2:
+          type: string
+          description: 'path "cov_string.txt",      emit: covariate_string'
+  output_3:
+    -
+      - output_3:
+          type: string
+          description: 'path "versions.yml",        emit: versions'
+
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"

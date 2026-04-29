@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "CreateMuData"
+description: "Module metadata for process CreateMuData"
+keywords:
+  - "CreateMuData"
+  - "nextflow"
+  - "module"
+tools:
+  - "CreateMuData":
+      description: "Wrapper process for CreateMuData"
+      homepage: ""
+      documentation: ""
+      tool_dev_url: ""
+      doi: ""
+      licence: null
+      identifier: null
+
+input:
+  -
+    - input_1:
+        type: string
+        description: 'path adata_rna'
+  -
+    - input_2:
+        type: string
+        description: 'path adata_guide'
+  -
+    - input_3:
+        type: string
+        description: 'path guide_metadata'
+  -
+    - input_4:
+        type: string
+        description: 'path gtf_file'
+  -
+    - input_5:
+        type: string
+        description: 'val  moi'
+  -
+    - input_6:
+        type: string
+        description: 'val  capture_method'
+  -
+    - input_7:
+        type: string
+        description: 'path adata_hashing'
+
+output:
+  output_1:
+    -
+      - output_1:
+          type: string
+          description: 'path ''mudata.h5mu'',                 emit: mudata'
+  output_2:
+    -
+      - output_2:
+          type: string
+          description: 'path ''guide_concatenated_adata.h5ad'', emit: adata_guide'
+
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"

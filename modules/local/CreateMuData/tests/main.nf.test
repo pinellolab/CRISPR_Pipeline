@@ -1,0 +1,23 @@
+// TODO nf-core: Once you have added the required tests, please run the following command to build this file:
+// nf-core modules test CreateMuData
+nextflow_process {
+
+    name "Test Process CreateMuData"
+    script "../main.nf"
+    process "CreateMuData"
+
+    tag "modules"
+    tag "modules_"
+    tag "CreateMuData"
+
+    test("stub") {
+
+        options "-stub"
+
+        then {
+            assert process.success
+        }
+
+    }
+
+}

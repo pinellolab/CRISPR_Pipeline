@@ -1,0 +1,88 @@
+nextflow_process {
+
+    name "Test Process PREPARECOVARIATE"
+    script "../main.nf"
+    process "PREPARECOVARIATE"
+
+    tag "modules"
+    tag "modules_local"
+    tag "preparecovariate"
+
+    // -------------------------------------------------------------------------
+    // Multiple batches — formula string should be non-empty
+    // -------------------------------------------------------------------------
+    test("covariate_list - multiple batches") {
+
+        when {
+            process {
+                """
+                // Provide a map with more than one unique batch value so that
+                // prepare_formula.py produces a non-empty formula string.
+                input[0] = [batch: ['sampleA', 'sampleB', 'sampleA']]
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            assertAll(
+                { assert file(process.out.parsed_covariate_file[0]).exists() },
+                { assert file(process.out.parsed_covariate_file[0]).text.contains('batch') },
+                { assert file(process.out.covariate_string[0]).exists() },
+                { assert file(process.out.covariate_string[0]).text.trim() == 'batch' },
+                { assert snapshot(process.out.versions).match("versions_multi") }
+            )
+        }
+
+    }
+
+    // -------------------------------------------------------------------------
+    // Single batch — all values identical, formula string should be empty
+    // -------------------------------------------------------------------------
+    test("covariate_list - single batch value") {
+
+        when {
+            process {
+                """
+                // All rows have the same batch value; the formula should be empty.
+                input[0] = [batch: ['sampleA', 'sampleA', 'sampleA']]
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            assertAll(
+                { assert file(process.out.parsed_covariate_file[0]).exists() },
+                { assert file(process.out.covariate_string[0]).text.trim() == '' },
+                { assert snapshot(process.out.versions).match("versions_single") }
+            )
+        }
+
+    }
+
+    // -------------------------------------------------------------------------
+    // Stub test — verifies output files are created without a container
+    // -------------------------------------------------------------------------
+    test("covariate_list - multiple batches - stub") {
+
+        options "-stub"
+
+        when {
+            process {
+                """
+                input[0] = [batch: ['sampleA', 'sampleB']]
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            assertAll(
+                { assert snapshot(process.out).match() }
+            )
+        }
+
+    }
+
+}

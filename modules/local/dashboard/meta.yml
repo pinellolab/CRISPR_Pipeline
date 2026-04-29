@@ -1,0 +1,123 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "dashboard"
+description: "Module metadata for process DASHBOARD"
+keywords:
+  - "dashboard"
+  - "nextflow"
+  - "module"
+tools:
+  - "dashboard":
+      description: "Wrapper process for DASHBOARD"
+      homepage: ""
+      documentation: ""
+      tool_dev_url: ""
+      doi: ""
+      licence: null
+      identifier: null
+
+input:
+  -
+    - input_1:
+        type: string
+        description: 'path guide_seqspec_plots'
+  -
+    - input_2:
+        type: string
+        description: 'path guide_fq_tbl'
+  -
+    - input_3:
+        type: string
+        description: 'path hashing_seqspec_plots'
+  -
+    - input_4:
+        type: string
+        description: 'path hashing_fq_tbl'
+  -
+    - input_5:
+        type: string
+        description: 'path mudata'
+  -
+    - input_6:
+        type: string
+        description: 'path gene_ann'
+  -
+    - input_7:
+        type: string
+        description: 'path gene_ann_filtered'
+  -
+    - input_8:
+        type: string
+        description: 'path guide_ann'
+  -
+    - input_9:
+        type: string
+        description: 'path hashing_ann'
+  -
+    - input_10:
+        type: string
+        description: 'path hashing_demux'
+  -
+    - input_11:
+        type: string
+        description: 'path hashing_unfiltered_demux'
+  -
+    - input_12:
+        type: string
+        description: 'path ks_transcripts_out_dir_collected'
+  -
+    - input_13:
+        type: string
+        description: 'path ks_guide_out_dir_collected'
+  -
+    - input_14:
+        type: string
+        description: 'path ks_hashing_out_dir_collected'
+  -
+    - input_15:
+        type: string
+        description: 'path additional_qc_dir'
+  -
+    - input_16:
+        type: string
+        description: 'path figures_dir'
+  -
+    - input_17:
+        type: string
+        description: 'path evaluation_output_dir'
+  -
+    - input_18:
+        type: string
+        description: 'path css'
+  -
+    - input_19:
+        type: string
+        description: 'path js'
+  -
+    - input_20:
+        type: string
+        description: 'path svg'
+  -
+    - input_21:
+        type: string
+        description: 'path controls_evaluation_output_dir'
+  -
+    - input_22:
+        type: string
+        description: 'path benchmark_output_dir'
+
+output:
+  output_1:
+    -
+      - output_1:
+          type: string
+          description: 'tuple path("evaluation_output"), path("figures"), path("guide_seqSpec_plots"), path("hashing_seqSpec_plots"), path("additional_qc"), path("dashboard.html"), path("svg"), path("inference_mudata.h5mu"), path("benchmark_output")'
+  output_2:
+    -
+      - output_2:
+          type: string
+          description: 'path "versions.yml", emit: versions'
+
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"

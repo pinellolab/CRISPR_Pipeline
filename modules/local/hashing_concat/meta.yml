@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "hashing_concat"
+description: "Module metadata for process hashing_concat"
+keywords:
+  - "hashing_concat"
+  - "nextflow"
+  - "module"
+tools:
+  - "hashing_concat":
+      description: "Wrapper process for hashing_concat"
+      homepage: ""
+      documentation: ""
+      tool_dev_url: ""
+      doi: ""
+      licence: null
+      identifier: null
+
+input:
+  -
+    - input_1:
+        type: string
+        description: 'path hashing_demux_anndata'
+  -
+    - input_2:
+        type: string
+        description: 'path hashing_unfiltered_demux_anndata'
+
+output:
+  output_1:
+    -
+      - output_1:
+          type: string
+          description: 'path ''concatenated_hashing_demux.h5ad'',            emit: concatenated_hashing_demux'
+  output_2:
+    -
+      - output_2:
+          type: string
+          description: 'path ''concatenated_unfiltered_hashing_demux.h5ad'', emit: concatenated_hashing_unfiltered_demux'
+
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"

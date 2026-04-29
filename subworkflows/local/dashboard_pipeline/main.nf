@@ -1,7 +1,5 @@
-nextflow.enable.dsl=2
-
-include { createDashboard } from '../../../modules/local/dashboard'
-include { createDashboard_default } from '../../../modules/local/dashboard_default'
+include { DASHBOARD as DASHBOARD_STD         } from '../../../modules/local/dashboard'
+include { DASHBOARD as DASHBOARD_STD_DEFAULT } from '../../../modules/local/dashboard'
 
 workflow dashboard_pipeline {
     take:
@@ -19,19 +17,25 @@ workflow dashboard_pipeline {
     controls_evaluation_output_dir
     benchmark_output_dir
 
-
     main:
+    def ch_empty = channel.value([])
 
     if (params.INFERENCE_method == 'default') {
-        createDashboard_default(
+        DASHBOARD_STD_DEFAULT(
             guide_seqSpecCheck_plots,
             guide_position_table,
+            ch_empty,
+            ch_empty,
             mdata,
             concat_anndata_rna,
             filtered_anndata_rna,
             concat_anndata_guide,
+            ch_empty,
+            ch_empty,
+            ch_empty,
             ks_transcripts_out_dir_collected,
             ks_guide_out_dir_collected,
+            ch_empty,
             additional_qc_dir,
             figures_dir,
             evaluation_output_dir,
@@ -42,15 +46,21 @@ workflow dashboard_pipeline {
             benchmark_output_dir
         )
     } else {
-        createDashboard(
+        DASHBOARD_STD(
             guide_seqSpecCheck_plots,
             guide_position_table,
+            ch_empty,
+            ch_empty,
             mdata,
             concat_anndata_rna,
             filtered_anndata_rna,
             concat_anndata_guide,
+            ch_empty,
+            ch_empty,
+            ch_empty,
             ks_transcripts_out_dir_collected,
             ks_guide_out_dir_collected,
+            ch_empty,
             additional_qc_dir,
             figures_dir,
             evaluation_output_dir,
@@ -62,4 +72,6 @@ workflow dashboard_pipeline {
         )
     }
 
+    emit:
+    dashboard_output = (params.INFERENCE_method == 'default' ? DASHBOARD_STD_DEFAULT.out : DASHBOARD_STD.out)
 }

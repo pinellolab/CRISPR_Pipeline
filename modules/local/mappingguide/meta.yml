@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "mappingguide"
+description: "Module metadata for process MAPPINGGUIDE"
+keywords:
+  - "mappingguide"
+  - "nextflow"
+  - "module"
+tools:
+  - "mappingguide":
+      description: "Wrapper process for MAPPINGGUIDE"
+      homepage: ""
+      documentation: ""
+      tool_dev_url: ""
+      doi: ""
+      licence: null
+      identifier: null
+
+input:
+  -
+    - input_1:
+        type: string
+        description: 'tuple val(meta), path(bam)'
+
+output:
+  output_1:
+    -
+      - output_1:
+          type: string
+          description: 'tuple val(meta), path("*.bam"), emit: bam'
+  output_2:
+    -
+      - output_2:
+          type: string
+          description: 'tuple val("${task.process}"), val(''mappingguide''), eval("mappingguide --version"), topic: versions, emit: versions_mappingguide'
+
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"

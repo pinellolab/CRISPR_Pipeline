@@ -1,0 +1,23 @@
+// TODO nf-core: Once you have added the required tests, please run the following command to build this file:
+// nf-core modules test hashing_concat
+nextflow_process {
+
+    name "Test Process hashing_concat"
+    script "../main.nf"
+    process "hashing_concat"
+
+    tag "modules"
+    tag "modules_"
+    tag "hashing_concat"
+
+    test("stub") {
+
+        options "-stub"
+
+        then {
+            assert process.success
+        }
+
+    }
+
+}

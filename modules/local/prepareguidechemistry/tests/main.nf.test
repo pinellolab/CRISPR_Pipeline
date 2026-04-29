@@ -1,0 +1,23 @@
+// TODO nf-core: Once you have added the required tests, please run the following command to build this file:
+// nf-core modules test prepareguidechemistry
+nextflow_process {
+
+    name "Test Process PREPAREGUIDECHEMISTRY"
+    script "../main.nf"
+    process "PREPAREGUIDECHEMISTRY"
+
+    tag "modules"
+    tag "modules_"
+    tag "prepareguidechemistry"
+
+    test("stub") {
+
+        options "-stub"
+
+        then {
+            assert process.success
+        }
+
+    }
+
+}

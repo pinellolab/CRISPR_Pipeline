@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "createguideref"
+description: "Module metadata for process CREATEGUIDEREF"
+keywords:
+  - "createguideref"
+  - "nextflow"
+  - "module"
+tools:
+  - "createguideref":
+      description: "Wrapper process for CREATEGUIDEREF"
+      homepage: ""
+      documentation: ""
+      tool_dev_url: ""
+      doi: ""
+      licence: null
+      identifier: null
+
+input:
+  - []
+
+output:
+  output_1:
+    -
+      - output_1:
+          type: string
+          description: 'path "guide_index.idx",   emit: guide_index'
+  output_2:
+    -
+      - output_2:
+          type: string
+          description: 'path "t2guide.txt",       emit: t2g_guide'
+  output_3:
+    -
+      - output_3:
+          type: string
+          description: 'path "guide_mismatch.fa", emit: guide_mismatch_fa'
+  output_4:
+    -
+      - output_4:
+          type: string
+          description: 'path "versions.yml",      emit: versions'
+
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"

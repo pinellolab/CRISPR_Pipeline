@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "additional_qc_plots"
+description: "Module metadata for process additional_qc_plots"
+keywords:
+  - "additional_qc_plots"
+  - "nextflow"
+  - "module"
+tools:
+  - "additional_qc_plots":
+      description: "Wrapper process for additional_qc_plots"
+      homepage: ""
+      documentation: ""
+      tool_dev_url: ""
+      doi: ""
+      licence: null
+      identifier: null
+
+input:
+  -
+    - input_1:
+        type: string
+        description: 'path inference_mudata'
+
+output:
+  output_1:
+    -
+      - output_1:
+          type: string
+          description: 'path ''additional_qc'', emit: additional_qc'
+
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"

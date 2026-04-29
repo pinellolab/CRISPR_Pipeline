@@ -1,0 +1,23 @@
+// TODO nf-core: Once you have added the required tests, please run the following command to build this file:
+// nf-core modules test additional_qc_plots
+nextflow_process {
+
+    name "Test Process additional_qc_plots"
+    script "../main.nf"
+    process "additional_qc_plots"
+
+    tag "modules"
+    tag "modules_"
+    tag "additional_qc_plots"
+
+    test("stub") {
+
+        options "-stub"
+
+        then {
+            assert process.success
+        }
+
+    }
+
+}

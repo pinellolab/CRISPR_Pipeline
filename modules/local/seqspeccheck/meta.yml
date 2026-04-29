@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "seqspeccheck"
+description: "Module metadata for process SEQSPECCHECK"
+keywords:
+  - "seqspeccheck"
+  - "nextflow"
+  - "module"
+tools:
+  - "seqspeccheck":
+      description: "Wrapper process for SEQSPECCHECK"
+      homepage: ""
+      documentation: ""
+      tool_dev_url: ""
+      doi: ""
+      licence: null
+      identifier: null
+
+input:
+  -
+    - input_1:
+        type: string
+        description: 'tuple val(meta), path(reads)'
+  -
+    - input_2:
+        type: string
+        description: 'path  metadata         // seqspec YAML or guide-design TSV depending on data_type'
+  -
+    - input_3:
+        type: string
+        description: 'val   data_type        // string: ''rna'', ''guide'', or ''hash'' — used as output prefix'
+
+output:
+  output_1:
+    -
+      - output_1:
+          type: string
+          description: 'path "${data_type}_seqSpec_plots", emit: seqSpecCheck_plots'
+  output_2:
+    -
+      - output_2:
+          type: string
+          description: 'path "${data_type}_position_table.csv", emit: position_table'
+  output_3:
+    -
+      - output_3:
+          type: string
+          description: 'path "versions.yml", emit: versions'
+
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"

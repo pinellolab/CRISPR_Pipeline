@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "demultiplex"
+description: "Module metadata for process demultiplex"
+keywords:
+  - "demultiplex"
+  - "nextflow"
+  - "module"
+tools:
+  - "demultiplex":
+      description: "Wrapper process for demultiplex"
+      homepage: ""
+      documentation: ""
+      tool_dev_url: ""
+      doi: ""
+      licence: null
+      identifier: null
+
+input:
+  -
+    - input_1:
+        type: string
+        description: 'path hashing_filtered_anndata'
+
+output:
+  output_1:
+    -
+      - output_1:
+          type: string
+          description: 'path ''hashing_demux.h5ad'',            emit: hashing_demux_anndata'
+  output_2:
+    -
+      - output_2:
+          type: string
+          description: 'path ''hashing_demux_unfiltered.h5ad'', emit: hashing_demux_unfiltered_anndata'
+
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"
