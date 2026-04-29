@@ -24,6 +24,7 @@ process ANNDATACONCAT {
         'https://depot.galaxyproject.org/singularity/YOUR-TOOL-HERE':
         'quay.io/biocontainers/YOUR-TOOL-HERE' }"
 
+    input:
     path parsed_covariate_df
     path adata_filepath
 

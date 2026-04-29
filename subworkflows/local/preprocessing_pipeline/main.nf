@@ -2,6 +2,7 @@ process PREPROCESSING_STUB {
     input:
     path concat_anndata_rna
     path trans_out_dir
+    path gtf_reference
 
     output:
     path 'filtered_anndata_rna.h5ad', emit: filtered_anndata_rna
@@ -15,9 +16,7 @@ process PREPROCESSING_STUB {
     cp ${concat_anndata_rna} adata_rna.h5ad
     mkdir -p figures
     touch figures/placeholder.txt
-    cat <<'EOF' > gencode.gtf
-chr1\tstub\tgene\t1\t1000\t.\t+\t.\tgene_id "GENE0"; gene_name "GENE0";
-EOF
+    cp ${gtf_reference} gencode.gtf
     """
 }
 
@@ -25,9 +24,10 @@ workflow preprocessing_pipeline {
     take:
     concat_anndata_rna
     trans_out_dir
+    gtf_reference
 
     main:
-    PREPROCESSING_STUB(concat_anndata_rna, trans_out_dir)
+    PREPROCESSING_STUB(concat_anndata_rna, trans_out_dir, gtf_reference)
 
     emit:
     filtered_anndata_rna = PREPROCESSING_STUB.out.filtered_anndata_rna

@@ -50,6 +50,10 @@ workflow PERTURBSEQ {
 
     take:
     ch_samplesheet // channel: samplesheet read in from --input
+    ch_transcriptome_index
+    ch_transcriptome_t2g
+    ch_reference_gtf
+    ch_reference_versions
     multiqc_config
     multiqc_logo
     multiqc_methods_description
@@ -60,10 +64,9 @@ workflow PERTURBSEQ {
     def ch_versions = channel.empty()
     def ch_multiqc_files = channel.empty()
     def ch_empty_file = channel.value([])
-    def ch_rna_workflow = channel.value('standard')
     def ch_hash_workflow = channel.value('kite')
-    def ch_transcriptome_index = channel.value(file(params.transcriptome_index, checkIfExists: true))
-    def ch_transcriptome_t2g = channel.value(file(params.transcriptome_t2g, checkIfExists: true))
+    ch_versions = ch_versions.mix(ch_reference_versions)
+    def ch_rna_workflow = channel.value('standard')
 
     // Parse the samplesheet and create channels for each modality
     def ch_samples = ch_samplesheet.map { meta, fastqs ->
@@ -236,7 +239,8 @@ workflow PERTURBSEQ {
     // Common preprocessing for both workflows
     def Preprocessing = preprocessing_pipeline(
         ConcatRna.out.concat_anndata,
-        QuantRna.out.count.map { _meta, count_dir -> count_dir }
+        QuantRna.out.count.map { _meta, count_dir -> count_dir },
+        ch_reference_gtf
     )
 
     def benchmark_output_dir
