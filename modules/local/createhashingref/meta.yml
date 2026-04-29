@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "createhashingref"
+description: "Module metadata for process CREATEHASHINGREF"
+keywords:
+  - "createhashingref"
+  - "nextflow"
+  - "module"
+tools:
+  - "createhashingref":
+      description: "Wrapper process for CREATEHASHINGREF"
+      homepage: ""
+      documentation: ""
+      tool_dev_url: ""
+      doi: ""
+      licence: null
+      identifier: null
+
+input:
+  -
+    - input_1:
+        type: string
+        description: 'path hashing_metadata'
+
+output:
+  output_1:
+    -
+      - output_1:
+          type: string
+          description: 'path "hashing_index.idx",  emit: hashing_index'
+  output_2:
+    -
+      - output_2:
+          type: string
+          description: 'path "t2g_hashing.txt",    emit: t2g_hashing'
+  output_3:
+    -
+      - output_3:
+          type: string
+          description: 'path "hashing_mismatch.fa", emit: hashing_mismatch_fa'
+  output_4:
+    -
+      - output_4:
+          type: string
+          description: 'path "versions.yml",       emit: versions'
+
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"

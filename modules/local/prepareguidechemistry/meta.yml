@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "prepareguidechemistry"
+description: "Module metadata for process PREPAREGUIDECHEMISTRY"
+keywords:
+  - "prepareguidechemistry"
+  - "nextflow"
+  - "module"
+tools:
+  - "prepareguidechemistry":
+      description: "Wrapper process for PREPAREGUIDECHEMISTRY"
+      homepage: ""
+      documentation: ""
+      tool_dev_url: ""
+      doi: ""
+      licence: null
+      identifier: null
+
+input:
+  -
+    - input_1:
+        type: string
+        description: 'path raw_technology_file'
+  -
+    - input_2:
+        type: string
+        description: 'val  is_10x3v3'
+  -
+    - input_3:
+        type: string
+        description: 'val  spacer_tag'
+
+output:
+  output_1:
+    -
+      - output_1:
+          type: string
+          description: 'path "kb_technology.txt", emit: technology_file'
+  output_2:
+    -
+      - output_2:
+          type: string
+          description: 'path "kb_workflow.txt",   emit: workflow_file'
+  output_3:
+    -
+      - output_3:
+          type: string
+          description: 'path "versions.yml",      emit: versions'
+
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"

@@ -1,0 +1,23 @@
+// TODO nf-core: Once you have added the required tests, please run the following command to build this file:
+// nf-core modules test doublets_scrub
+nextflow_process {
+
+    name "Test Process doublets_scrub"
+    script "../main.nf"
+    process "doublets_scrub"
+
+    tag "modules"
+    tag "modules_"
+    tag "doublets_scrub"
+
+    test("stub") {
+
+        options "-stub"
+
+        then {
+            assert process.success
+        }
+
+    }
+
+}

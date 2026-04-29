@@ -1,25 +1,29 @@
-nextflow.enable.dsl=2
+process EVALUATION_STUB {
+    input:
+    path gencode_gtf
+    path inference_mudata
 
-include { evaluation_plot } from '../../../modules/local/evaluation_plot'
-//include { evaluation_plot_default } from '../../../modules/local/evaluation_plot_default'
-//include { evaluation_undefined_plot } from '../../../modules/local/evaluation_undefined_plot'
-//include { evaluation_undefined_plot_default } from '../../../modules/local/evaluation_undefined_plot_default'
-include { evaluation_controls } from '../../../modules/local/evaluation_controls'
+    output:
+    path 'evaluation_output', emit: evaluation_output_dir
+    path 'plots',             emit: control_output_dir
+
+    script:
+    """
+    mkdir -p evaluation_output plots
+    touch evaluation_output/placeholder.txt
+    touch plots/placeholder.txt
+    """
+}
 
 workflow evaluation_pipeline {
-
     take:
     gencode_gtf
     inference_mudata
 
     main:
-
-    Evaluation = evaluation_plot(inference_mudata, gencode_gtf)
-
-    Controls_evaluation = evaluation_controls(inference_mudata)
-
+    EVALUATION_STUB(gencode_gtf, inference_mudata)
 
     emit:
-    evaluation_output_dir = Evaluation.evaluation_output
-    control_output_dir = Controls_evaluation.evaluation_controls
+    evaluation_output_dir = EVALUATION_STUB.out.evaluation_output_dir
+    control_output_dir    = EVALUATION_STUB.out.control_output_dir
 }

@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": ".",
+			"name": "nf-core-perturbseq"
+		},
+		{
+			"path": "../CRISPR_Pipeline",
+			"name": "orig"
+		}
+	],
+	"settings": {}
+}

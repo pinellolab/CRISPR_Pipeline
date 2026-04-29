@@ -1,0 +1,90 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://raw.githubusercontent.com/nf-core/perturbseq/master/assets/schema_input.json",
+    "title": "nf-core/perturbseq pipeline - params.input schema",
+    "description": "Schema for the file provided with params.input",
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "R1_path": {
+                "type": "string",
+                "errorMessage": "R1 FASTQ path (local file or URL) must be provided",
+                "meta": ["R1_path"]
+            },
+            "R1_md5sum": {
+                "type": "string",
+                "errorMessage": "R1 md5sum must be a string",
+                "meta": ["R1_md5sum"]
+            },
+            "R2_path": {
+                "type": "string",
+                "errorMessage": "R2 FASTQ path (local file or URL) must be a string",
+                "meta": ["R2_path"]
+            },
+            "R2_md5sum": {
+                "type": "string",
+                "errorMessage": "R2 md5sum must be a string",
+                "meta": ["R2_md5sum"]
+            },
+            "file_modality": {
+                "type": "string",
+                "enum": ["scRNA", "gRNA", "hash"],
+                "errorMessage": "file_modality must be one of: scRNA, gRNA, hash",
+                "meta": ["modality"]
+            },
+            "file_set": {
+                "type": "string",
+                "meta": ["file_set"]
+            },
+            "measurement_sets": {
+                "type": "string",
+                "errorMessage": "measurement_sets must be provided and cannot contain spaces",
+                "meta": ["measurement_sets"]
+            },
+            "sequencing_run": {
+                "type": "string",
+                "meta": ["sequencing_run"]
+            },
+            "lane": {
+                "type": "string",
+                "meta": ["lane"]
+            },
+            "flowcell_id": {
+                "type": "string",
+                "meta": ["flowcell_id"]
+            },
+            "index": {
+                "type": "string",
+                "meta": ["index"]
+            },
+            "seqspec": {
+                "type": "string",
+                "errorMessage": "seqspec path or URL must be provided",
+                "meta": ["seqspec"]
+            },
+            "barcode_onlist": {
+                "type": "string",
+                "errorMessage": "barcode_onlist path or URL must be provided",
+                "meta": ["barcode_onlist"]
+            },
+            "onlist_method": {
+                "type": "string",
+                "meta": ["onlist_method"]
+            },
+            "strand_specificity": {
+                "type": "string",
+                "meta": ["strand_specificity"]
+            },
+            "guide_design": {
+                "type": "string",
+                "meta": ["guide_design"]
+            },
+            "barcode_hashtag_map": {
+                "type": "string",
+                "meta": ["barcode_hashtag_map"]
+            }
+        },
+        "required": ["R1_path", "file_modality", "measurement_sets", "seqspec", "barcode_onlist"]
+    }
+}

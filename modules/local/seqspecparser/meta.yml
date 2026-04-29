@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "seqspecparser"
+description: "Module metadata for process SEQSPECPARSER"
+keywords:
+  - "seqspecparser"
+  - "nextflow"
+  - "module"
+tools:
+  - "seqspecparser":
+      description: "Wrapper process for SEQSPECPARSER"
+      homepage: ""
+      documentation: ""
+      tool_dev_url: ""
+      doi: ""
+      licence: null
+      identifier: null
+
+input:
+  -
+    - input_1:
+        type: string
+        description: 'path seqspec_yaml'
+  -
+    - input_2:
+        type: string
+        description: 'path barcode_file'
+  -
+    - input_3:
+        type: string
+        description: 'val  modality'
+
+output:
+  output_1:
+    -
+      - output_1:
+          type: string
+          description: 'path "${modality}_parsed_seqspec.txt", emit: parsed_seqspec'
+  output_2:
+    -
+      - output_2:
+          type: string
+          description: 'path "barcode_file.txt",              emit: barcode_file'
+  output_3:
+    -
+      - output_3:
+          type: string
+          description: 'path "versions.yml",                  emit: versions'
+
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"

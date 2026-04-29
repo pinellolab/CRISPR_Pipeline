@@ -1,0 +1,113 @@
+nextflow_process {
+
+    name "Test Process SEQSPECCHECK"
+    script "../main.nf"
+    process "SEQSPECCHECK"
+
+    tag "modules"
+    tag "modules_local"
+    tag "seqspeccheck"
+
+    // -------------------------------------------------------------------------
+    // RNA modality — real test
+    // TODO: replace the dummy paths below with actual test data before running
+    // -------------------------------------------------------------------------
+    test("scrna - fastq_gz - rna modality") {
+
+        when {
+            process {
+                """
+                // TODO: replace with real scRNA R1/R2 FASTQ files
+                input[0] = [
+                    [ id: 'test_rna', single_end: false, modality: 'scrna' ],
+                    [
+                        file('/TODO/path/to/rna_R1.fastq.gz', checkIfExists: true),
+                        file('/TODO/path/to/rna_R2.fastq.gz', checkIfExists: true),
+                    ]
+                ]
+                // TODO: replace with a real seqspec YAML for the RNA library
+                input[1] = file('/TODO/path/to/rna_seqspec.yaml', checkIfExists: true)
+                input[2] = 'rna'
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            assertAll(
+                { assert file(process.out.seqSpecCheck_plots[0]).isDirectory() },
+                { assert file(process.out.position_table[0]).exists() },
+                { assert snapshot(process.out.versions).match("versions_rna") }
+            )
+        }
+
+    }
+
+    // -------------------------------------------------------------------------
+    // gRNA modality — real test
+    // TODO: replace the dummy paths below with actual test data before running
+    // -------------------------------------------------------------------------
+    test("grna - fastq_gz - guide modality") {
+
+        when {
+            process {
+                """
+                // TODO: replace with real gRNA R1/R2 FASTQ files
+                input[0] = [
+                    [ id: 'test_guide', single_end: false, modality: 'grna' ],
+                    [
+                        file('/TODO/path/to/guide_R1.fastq.gz', checkIfExists: true),
+                        file('/TODO/path/to/guide_R2.fastq.gz', checkIfExists: true),
+                    ]
+                ]
+                // TODO: replace with a real guide-design TSV or seqspec YAML for the gRNA library
+                input[1] = file('/TODO/path/to/guide_metadata.tsv', checkIfExists: true)
+                input[2] = 'guide'
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            assertAll(
+                { assert file(process.out.seqSpecCheck_plots[0]).isDirectory() },
+                { assert file(process.out.position_table[0]).exists() },
+                { assert snapshot(process.out.versions).match("versions_guide") }
+            )
+        }
+
+    }
+
+    // -------------------------------------------------------------------------
+    // Stub test — runs without real data, just verifies output structure
+    // -------------------------------------------------------------------------
+    test("scrna - fastq_gz - rna modality - stub") {
+
+        options "-stub"
+
+        when {
+            process {
+                """
+                input[0] = [
+                    [ id: 'test_stub', single_end: false, modality: 'scrna' ],
+                    [
+                        file('/TODO/path/to/rna_R1.fastq.gz'),
+                        file('/TODO/path/to/rna_R2.fastq.gz'),
+                    ]
+                ]
+                input[1] = file('/TODO/path/to/rna_seqspec.yaml')
+                input[2] = 'rna'
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            assertAll(
+                { assert snapshot(process.out).match() }
+            )
+        }
+
+    }
+
+}

@@ -1,7 +1,5 @@
-nextflow.enable.dsl=2
-
-include { createDashboard_HASHING } from '../../../modules/local/dashboard_HASHING'
-include { createDashboard_HASHING_default } from '../../../modules/local/dashboard_HASHING_default'
+include { DASHBOARD as DASHBOARD_HASH         } from '../../../modules/local/dashboard'
+include { DASHBOARD as DASHBOARD_HASH_DEFAULT } from '../../../modules/local/dashboard'
 
 workflow dashboard_pipeline_HASHING {
     take:
@@ -26,9 +24,8 @@ workflow dashboard_pipeline_HASHING {
     benchmark_output_dir
 
     main:
-
     if (params.INFERENCE_method == 'default') {
-        createDashboard_HASHING_default(
+        DASHBOARD_HASH_DEFAULT(
             guide_seqSpecCheck_plots,
             guide_position_table,
             hashing_seqSpecCheck_plots,
@@ -53,7 +50,7 @@ workflow dashboard_pipeline_HASHING {
             benchmark_output_dir
         )
     } else {
-        createDashboard_HASHING(
+        DASHBOARD_HASH(
             guide_seqSpecCheck_plots,
             guide_position_table,
             hashing_seqSpecCheck_plots,
@@ -79,4 +76,6 @@ workflow dashboard_pipeline_HASHING {
         )
     }
 
+    emit:
+    dashboard_output = (params.INFERENCE_method == 'default' ? DASHBOARD_HASH_DEFAULT.out : DASHBOARD_HASH.out)
 }

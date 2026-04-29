@@ -1,11 +1,11 @@
 #!/usr/bin/env nextflow
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    nf-core/crispr
+    nf-core/perturbseq
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Github : https://github.com/nf-core/crispr
-    Website: https://nf-co.re/crispr
-    Slack  : https://nfcore.slack.com/channels/crispr
+    Github : https://github.com/nf-core/perturbseq
+    Website: https://nf-co.re/perturbseq
+    Slack  : https://nfcore.slack.com/channels/perturbseq
 ----------------------------------------------------------------------------------------
 */
 
@@ -15,9 +15,22 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-include { CRISPR_PIPELINE }  from './workflows/crispr_pipeline'
-include { PIPELINE_INITIALISATION } from './subworkflows/local/utils_nfcore_crispr_pipeline'
-include { PIPELINE_COMPLETION     } from './subworkflows/local/utils_nfcore_crispr_pipeline'
+include { PERTURBSEQ  } from './workflows/perturbseq'
+include { PIPELINE_INITIALISATION } from './subworkflows/local/utils_nfcore_perturbseq_pipeline'
+include { PIPELINE_COMPLETION     } from './subworkflows/local/utils_nfcore_perturbseq_pipeline'
+include { getGenomeAttribute      } from './subworkflows/local/utils_nfcore_perturbseq_pipeline'
+
+/*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    GENOME PARAMETER VALUES
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*/
+
+// TODO nf-core: Remove this line if you don't need a FASTA file
+//   This is an example of how to use getGenomeAttribute() to fetch parameters
+//   from igenomes.config using `--genome`
+params.fasta = getGenomeAttribute('fasta')
+
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     NAMED WORKFLOWS FOR PIPELINE
@@ -27,18 +40,25 @@ include { PIPELINE_COMPLETION     } from './subworkflows/local/utils_nfcore_cris
 //
 // WORKFLOW: Run main analysis pipeline depending on type of input
 //
-workflow NFCORE_CRISPR {
+workflow NFCORE_PERTURBSEQ {
 
     take:
     samplesheet // channel: samplesheet read in from --input
 
     main:
+
     //
     // WORKFLOW: Run pipeline
     //
-    CRISPR_PIPELINE(
-        samplesheet
-        )
+    PERTURBSEQ (
+        samplesheet,
+        params.multiqc_config,
+        params.multiqc_logo,
+        params.multiqc_methods_description,
+        params.outdir,
+    )
+    emit:
+    multiqc_report = PERTURBSEQ.out.multiqc_report // channel: /path/to/multiqc_report.html
 }
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -50,7 +70,7 @@ workflow {
 
     main:
     //
-    // Run initialisation tasks
+    // SUBWORKFLOW: Run initialisation tasks
     //
     PIPELINE_INITIALISATION (
         params.version,
@@ -58,20 +78,19 @@ workflow {
         params.monochrome_logs,
         args,
         params.outdir,
-        params.input //updated_samplesheet
+        params.input,
+        params.help,
+        params.help_full,
+        params.show_hidden
     )
-
-    PIPELINE_INITIALISATION.out.samplesheet.view { meta, fastqs ->
-        "Sample: ${meta.id}, Single-end: ${meta.single_end}, Files: ${fastqs}"
-    }
 
     //
     // WORKFLOW: Run main workflow
     //
-    NFCORE_CRISPR (
+    NFCORE_PERTURBSEQ (
         PIPELINE_INITIALISATION.out.samplesheet
     )
-
+    //
     // SUBWORKFLOW: Run completion tasks
     //
     PIPELINE_COMPLETION (
@@ -80,8 +99,7 @@ workflow {
         params.plaintext_email,
         params.outdir,
         params.monochrome_logs,
-        params.hook_url,
-
+        NFCORE_PERTURBSEQ.out.multiqc_report
     )
 }
 

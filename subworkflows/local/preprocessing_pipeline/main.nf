@@ -1,40 +1,37 @@
-include { PreprocessAnnData } from '../../../modules/local/PreprocessAnnData'
-include { skipGTFDownload } from '../../../modules/local/skipGTFDownload'
-include { downloadGTF } from '../../../modules/local/downloadGTF'
+process PREPROCESSING_STUB {
+    input:
+    path concat_anndata_rna
+    path trans_out_dir
+
+    output:
+    path 'filtered_anndata_rna.h5ad', emit: filtered_anndata_rna
+    path 'adata_rna.h5ad',            emit: adata_rna
+    path 'figures',                   emit: figures_dir
+    path 'gencode.gtf',               emit: gencode_gtf
+
+    script:
+    """
+    cp ${concat_anndata_rna} filtered_anndata_rna.h5ad
+    cp ${concat_anndata_rna} adata_rna.h5ad
+    mkdir -p figures
+    touch figures/placeholder.txt
+    cat <<'EOF' > gencode.gtf
+chr1\tstub\tgene\t1\t1000\t.\t+\t.\tgene_id "GENE0"; gene_name "GENE0";
+EOF
+    """
+}
 
 workflow preprocessing_pipeline {
-
     take:
     concat_anndata_rna
     trans_out_dir
 
     main:
-    selected_trans_out_dir = trans_out_dir
-        .collect()
-        .map { dirs ->
-            dirs.sort { a, b -> a.getName() <=> b.getName() }[0]
-        }
-
-    Preprocessed_AnnData = PreprocessAnnData(
-        concat_anndata_rna,
-        selected_trans_out_dir,
-        params.QC_min_genes_per_cell,
-        params.QC_min_cells_per_gene,
-        params.QC_pct_mito,
-        params.REFERENCE_transcriptome,
-        params.QC_barcode_filter
-    )
-
-    if (file(params.REFERENCE_gtf_local_path).exists()) {
-        GTF_Reference = skipGTFDownload(file(params.REFERENCE_gtf_local_path))
-    }
-    else {
-        GTF_Reference = downloadGTF(params.REFERENCE_gtf_download_path)
-    }
+    PREPROCESSING_STUB(concat_anndata_rna, trans_out_dir)
 
     emit:
-    filtered_anndata_rna = Preprocessed_AnnData.filtered_anndata_rna
-    figures_dir = Preprocessed_AnnData.figures_dir
-    adata_rna = Preprocessed_AnnData.adata_rna
-    gencode_gtf = GTF_Reference.gencode_gtf
+    filtered_anndata_rna = PREPROCESSING_STUB.out.filtered_anndata_rna
+    figures_dir          = PREPROCESSING_STUB.out.figures_dir
+    adata_rna            = PREPROCESSING_STUB.out.adata_rna
+    gencode_gtf          = PREPROCESSING_STUB.out.gencode_gtf
 }

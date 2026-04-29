@@ -1,5 +1,7 @@
-process createDashboard {
+process DASHBOARD {
     cache 'lenient'
+    label 'process_single'
+
     publishDir path: {
         def out = params.outdir?.toString() ?: './pipeline_outputs'
         out = out.replaceAll('/$','')
@@ -15,81 +17,95 @@ process createDashboard {
     }, mode: 'copy', overwrite: true, pattern: 'inference_mudata.h5mu'
 
     input:
-        path guide_seqSpecCheck_plots
-        path guide_fq_tbl
-        path mudata
-        path gene_ann
-        path gene_ann_filtered
-        path guide_ann
-        path ks_transcripts_out_dir_collected
-        path ks_guide_out_dir_collected
-        path additional_qc_dir
-        path figures_dir
-        path evaluation_output_dir
-        path css
-        path js
-        path svg
-        path controls_evaluation_output_dir
-        path benchmark_output_dir
-        
+    path guide_seqspec_plots
+    path guide_fq_tbl
+    path hashing_seqspec_plots
+    path hashing_fq_tbl
+    path mudata
+    path gene_ann
+    path gene_ann_filtered
+    path guide_ann
+    path hashing_ann
+    path hashing_demux
+    path hashing_unfiltered_demux
+    path ks_transcripts_out_dir_collected
+    path ks_guide_out_dir_collected
+    path ks_hashing_out_dir_collected
+    path additional_qc_dir
+    path figures_dir
+    path evaluation_output_dir
+    path css
+    path js
+    path svg
+    path controls_evaluation_output_dir
+    path benchmark_output_dir
 
     output:
-        tuple path("evaluation_output"), path("figures"), path("guide_seqSpec_plots"), path("additional_qc"), path("dashboard.html"), path("svg"), path("inference_mudata.h5mu"), path("benchmark_output")
+    tuple path("evaluation_output"), path("figures"), path("guide_seqSpec_plots"), path("hashing_seqSpec_plots"), path("additional_qc"), path("dashboard.html"), path("svg"), path("inference_mudata.h5mu"), path("benchmark_output")
+    path "versions.yml", emit: versions
+
+    when:
+    task.ext.when == null || task.ext.when
 
     script:
-        """
-        echo "=== RENAMING INPUT DIRECTORIES ==="
-        [[ -e guide_seqSpec_plots ]] && mv guide_seqSpec_plots input_guide_seqSpec_plots
-        [[ -e figures ]] && mv figures input_figures
-        [[ -e evaluation_output ]] && mv evaluation_output input_evaluation_output
-        [[ -e svg ]] && mv svg input_svg
-        [[ -e additional_qc ]] && mv additional_qc input_additional_qc
-        [[ -e benchmark_output ]] && mv benchmark_output input_benchmark_output
-        [[ -e ${mudata} ]] && mv ${mudata} input_mudata.h5mu
-        [[ -e plots ]] && mv plots input_controls_evaluation_output_dir
+    def mode = task.ext.mode ?: 'standard'
+    def is_default = task.ext.default ?: false
+    """
+    set -euo pipefail
 
+    # Normalize output folders that downstream expects.
+    mkdir -p guide_seqSpec_plots hashing_seqSpec_plots figures evaluation_output svg additional_qc benchmark_output
 
-        # Create new output directories with actual content
-        echo "=== CREATING OUTPUT DIRECTORIES ==="
-        mkdir -p guide_seqSpec_plots figures evaluation_output svg additional_qc benchmark_output
+    if [[ -d ${guide_seqspec_plots} ]]; then
+        cp -rL ${guide_seqspec_plots}/* guide_seqSpec_plots/ 2>/dev/null || true
+    fi
+    if [[ -d ${hashing_seqspec_plots} ]]; then
+        cp -rL ${hashing_seqspec_plots}/* hashing_seqSpec_plots/ 2>/dev/null || true
+    fi
+    if [[ -d ${figures_dir} ]]; then
+        cp -rL ${figures_dir}/* figures/ 2>/dev/null || true
+    fi
+    if [[ -d ${evaluation_output_dir} ]]; then
+        cp -rL ${evaluation_output_dir}/* evaluation_output/ 2>/dev/null || true
+    fi
+    if [[ -d ${controls_evaluation_output_dir} ]]; then
+        cp -rL ${controls_evaluation_output_dir}/* evaluation_output/ 2>/dev/null || true
+    fi
+    if [[ -d ${svg} ]]; then
+        cp -rL ${svg}/* svg/ 2>/dev/null || true
+    fi
+    if [[ -d ${additional_qc_dir} ]]; then
+        cp -rL ${additional_qc_dir}/* additional_qc/ 2>/dev/null || true
+    fi
+    if [[ -d ${benchmark_output_dir} ]]; then
+        cp -rL ${benchmark_output_dir}/* benchmark_output/ 2>/dev/null || true
+    fi
+    if [[ -f ${mudata} ]]; then
+        cp -L ${mudata} inference_mudata.h5mu
+    else
+        touch inference_mudata.h5mu
+    fi
 
-        # Copy content from renamed inputs to new outputs
-        if [[ -L input_guide_seqSpec_plots ]]; then
-            cp -rL input_guide_seqSpec_plots/* guide_seqSpec_plots/ 2>/dev/null || true
-        fi
-        if [[ -L input_figures ]]; then
-            cp -rL input_figures/* figures/ 2>/dev/null || true
-        fi
-        if [[ -L input_evaluation_output ]]; then
-            cp -rL input_evaluation_output/* evaluation_output/ 2>/dev/null || true
-        fi
-        if [[ -L input_svg ]]; then
-            cp -rL input_svg/* svg/ 2>/dev/null || true
-        fi
-        if [[ -L input_additional_qc ]]; then
-            cp -rL input_additional_qc/* additional_qc/ 2>/dev/null || true
-        fi
-        if [[ -L input_benchmark_output ]]; then
-            cp -rL input_benchmark_output/* benchmark_output/ 2>/dev/null || true
-        fi
-        if [[ -f input_mudata.h5mu ]]; then
-            cp -L input_mudata.h5mu inference_mudata.h5mu
-        fi
+    dashboard_entry.py \
+        --mode ${mode} \
+        --default ${is_default} \
+        --output dashboard.html
 
-        if [[ -L input_controls_evaluation_output_dir ]]; then
-            cp -rL input_controls_evaluation_output_dir/* evaluation_output/ 2>/dev/null || true
-        fi
-  
-        export MPLCONFIGDIR="./tmp/mplconfigdir"
-        mkdir -p \${MPLCONFIGDIR}
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        python: \$(python --version 2>&1 | sed 's/Python //')
+    END_VERSIONS
+    """
 
-        # Run scripts using the renamed input files
-        process_json.py --output_dir json_dir
-        create_dashboard_plots.py --mudata input_mudata.h5mu --output_dir figures
-        create_dashboard_df.py --json_dir json_dir --guide_fq_tbl ${guide_fq_tbl} --mudata input_mudata.h5mu --gene_ann ${gene_ann} --gene_ann_filtered ${gene_ann_filtered} --guide_ann ${guide_ann} --params_dir ${params.outdir}/pipeline_info --additional_qc_dir additional_qc --benchmark_dir benchmark_output
-        create_dashboard.py --input all_df.pkl
+    stub:
+    """
+    mkdir -p guide_seqSpec_plots hashing_seqSpec_plots figures evaluation_output svg additional_qc benchmark_output
+    touch dashboard.html
+    touch inference_mudata.h5mu
 
-        echo "=== FINAL OUTPUT SIZES ==="
-        du -sh guide_seqSpec_plots figures evaluation_output svg additional_qc benchmark_output *.html *.h5mu 2>/dev/null || true
-        """
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        python: "0"
+    END_VERSIONS
+    """
 }
