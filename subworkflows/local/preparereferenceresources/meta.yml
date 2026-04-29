@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/subworkflows/yaml-schema.json
+name: "preparereferenceresources"
+description: Prepare transcriptome reference resources for kb count.
+keywords:
+  - kallisto
+  - bustools
+  - reference
+  - transcriptome
+components:
+  - kallistobustools/ref
+input:
+  - ch_fasta:
+      type: file
+      description: |
+        Reference genome/transcriptome FASTA.
+        Structure: [ path(fasta) ]
+      pattern: "*.{fa,fasta,fa.gz,fasta.gz}"
+  - ch_gtf:
+      type: file
+      description: |
+        Gene annotation in GTF format.
+        Structure: [ path(gtf) ]
+      pattern: "*.{gtf,gtf.gz}"
+  - ch_workflow_mode:
+      type: string
+      description: |
+        kb workflow mode passed to kallistobustools/ref (for example standard or lamanno).
+        Structure: [ val(mode) ]
+output:
+  - transcriptome_index:
+      type: file
+      description: |
+        Kallisto index for transcriptome quantification.
+        Structure: [ path(index) ]
+      pattern: "*.idx"
+  - transcriptome_t2g:
+      type: file
+      description: |
+        Transcript-to-gene mapping table.
+        Structure: [ path(t2g) ]
+      pattern: "*.txt"
+  - reference_gtf:
+      type: file
+      description: |
+        The input GTF propagated downstream.
+        Structure: [ path(gtf) ]
+      pattern: "*.{gtf,gtf.gz}"
+  - versions:
+      type: file
+      description: |
+        File containing software versions.
+        Structure: [ path(versions.yml) ]
+      pattern: "versions.yml"
+authors:
+  - "@cmatKhan"
+maintainers:
+  - "@cmatKhan"

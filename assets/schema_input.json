@@ -43,11 +43,11 @@
                 "meta": ["measurement_sets"]
             },
             "sequencing_run": {
-                "type": "string",
+                "type": ["string", "integer"],
                 "meta": ["sequencing_run"]
             },
             "lane": {
-                "type": "string",
+                "type": ["string", "integer"],
                 "meta": ["lane"]
             },
             "flowcell_id": {

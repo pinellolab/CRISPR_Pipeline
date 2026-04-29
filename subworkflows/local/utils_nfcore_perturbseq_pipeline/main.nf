@@ -26,10 +26,9 @@ workflow PIPELINE_INITIALISATION {
     take:
     version           // boolean: Display version and exit
     validate_params   // boolean: Validate parameters against the schema
-    monochrome_logs   // boolean: Do not use coloured log outputs
+    _monochrome_logs  // boolean: Do not use coloured log outputs
     nextflow_cli_args //   array: List of positional nextflow CLI args
     outdir            //  string: Output directory where results are saved
-    _input            //  string: Path to input samplesheet
     help              // boolean: Display help message and exit
     help_full         // boolean: Show the full help message
     show_hidden       // boolean: Show hidden parameters in the help message
@@ -59,31 +58,6 @@ workflow PIPELINE_INITIALISATION {
     UTILS_NFCORE_PIPELINE (
         nextflow_cli_args
     )
-
-    ch_input = file(_input, checkIfExists: true)
-
-    samplesheet = Channel
-        .fromPath(ch_input)
-        .splitCsv(header: true)
-        .map { row ->
-            def meta = [
-                id: row.file_set ?: row.measurement_sets ?: row.R1_path?.tokenize('/')?.last(),
-                measurement_sets: row.measurement_sets,
-                modality: (row.file_modality ?: '').toLowerCase(),
-                seqspec: row.seqspec,
-                barcode_onlist: row.barcode_onlist,
-                guide_design: row.guide_design,
-                barcode_hashtag_map: row.barcode_hashtag_map,
-            ]
-            def reads = [file(row.R1_path, checkIfExists: true)]
-            if (row.R2_path) {
-                reads += file(row.R2_path, checkIfExists: true)
-            }
-            [meta, reads]
-        }
-
-    emit:
-    samplesheet // channel: [ meta, [ reads ] ]
 }
 
 /*

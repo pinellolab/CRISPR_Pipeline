@@ -25,6 +25,7 @@ process CREATEGUIDEREF {
         'https://depot.galaxyproject.org/singularity/YOUR-TOOL-HERE':
         'quay.io/biocontainers/YOUR-TOOL-HERE' }"
 
+    input:
     path guide_metadata
     val  rev_comp
     val  spacer_tag

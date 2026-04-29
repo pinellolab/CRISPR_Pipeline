@@ -26,10 +26,8 @@ include { getGenomeAttribute      } from './subworkflows/local/utils_nfcore_pert
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-// TODO nf-core: Remove this line if you don't need a FASTA file
-//   This is an example of how to use getGenomeAttribute() to fetch parameters
-//   from igenomes.config using `--genome`
-params.fasta = getGenomeAttribute('fasta')
+params.reference_fasta = params.reference_fasta ?: getGenomeAttribute('fasta')
+params.reference_gtf   = params.reference_gtf   ?: getGenomeAttribute('gtf')
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -78,29 +76,51 @@ workflow {
         params.monochrome_logs,
         args,
         params.outdir,
-        params.input,
         params.help,
         params.help_full,
         params.show_hidden
     )
 
-    //
-    // WORKFLOW: Run main workflow
-    //
-    NFCORE_PERTURBSEQ (
-        PIPELINE_INITIALISATION.out.samplesheet
-    )
-    //
-    // SUBWORKFLOW: Run completion tasks
-    //
-    PIPELINE_COMPLETION (
-        params.email,
-        params.email_on_fail,
-        params.plaintext_email,
-        params.outdir,
-        params.monochrome_logs,
-        NFCORE_PERTURBSEQ.out.multiqc_report
-    )
+    def ch_input = file(params.input, checkIfExists: true)
+    def ch_samplesheet = channel
+        .fromPath(ch_input)
+        .splitCsv(header: true)
+        .map { row ->
+            def meta = [
+                id: "sample_${row.file_modality}_${row.measurement_sets}",
+                measurement_sets: row.measurement_sets,
+                modality: (row.file_modality ?: '').toLowerCase(),
+                seqspec: row.seqspec,
+                barcode_onlist: row.barcode_onlist,
+                guide_design: row.guide_design,
+                barcode_hashtag_map: row.barcode_hashtag_map,
+            ]
+            def reads = [file(row.R1_path, checkIfExists: true)]
+            if (row.R2_path) {
+                reads += file(row.R2_path, checkIfExists: true)
+            }
+            [meta, reads]
+        }
+    
+    ch_samplesheet.view()
+
+    // //
+    // // WORKFLOW: Run main workflow
+    // //
+    // NFCORE_PERTURBSEQ (
+    //     ch_samplesheet
+    // )
+    // //
+    // // SUBWORKFLOW: Run completion tasks
+    // //
+    // PIPELINE_COMPLETION (
+    //     params.email,
+    //     params.email_on_fail,
+    //     params.plaintext_email,
+    //     params.outdir,
+    //     params.monochrome_logs,
+    //     NFCORE_PERTURBSEQ.out.multiqc_report
+    // )
 }
 
 /*
