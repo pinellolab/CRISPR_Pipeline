@@ -19,6 +19,7 @@ include { PERTURBSEQ  } from './workflows/perturbseq'
 include { PIPELINE_INITIALISATION } from './subworkflows/local/utils_nfcore_perturbseq_pipeline'
 include { PIPELINE_COMPLETION     } from './subworkflows/local/utils_nfcore_perturbseq_pipeline'
 include { getGenomeAttribute      } from './subworkflows/local/utils_nfcore_perturbseq_pipeline'
+include { PREPAREREFERENCERESOURCES } from './subworkflows/local/preparereferenceresources'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -42,6 +43,10 @@ workflow NFCORE_PERTURBSEQ {
 
     take:
     samplesheet // channel: samplesheet read in from --input
+    transcriptome_index
+    transcriptome_t2g
+    reference_gtf
+    reference_versions
 
     main:
 
@@ -50,6 +55,10 @@ workflow NFCORE_PERTURBSEQ {
     //
     PERTURBSEQ (
         samplesheet,
+        transcriptome_index,
+        transcriptome_t2g,
+        reference_gtf,
+        reference_versions,
         params.multiqc_config,
         params.multiqc_logo,
         params.multiqc_methods_description,
@@ -101,15 +110,31 @@ workflow {
             }
             [meta, reads]
         }
-    
-    ch_samplesheet.view()
 
-    // //
-    // // WORKFLOW: Run main workflow
-    // //
-    // NFCORE_PERTURBSEQ (
-    //     ch_samplesheet
-    // )
+    def ch_rna_workflow = channel.value('standard')
+    def ch_reference_fasta = params.reference_fasta
+        ? channel.value(file(params.reference_fasta, checkIfExists: true))
+        : channel.empty()
+    def ch_reference_gtf = params.reference_gtf
+        ? channel.value(file(params.reference_gtf, checkIfExists: true))
+        : channel.empty()
+
+    def ReferenceResources = PREPAREREFERENCERESOURCES(
+        ch_reference_fasta,
+        ch_reference_gtf,
+        ch_rna_workflow
+    )
+
+    //
+    // WORKFLOW: Run main workflow
+    //
+    NFCORE_PERTURBSEQ (
+        ch_samplesheet,
+        ReferenceResources.out.transcriptome_index,
+        ReferenceResources.out.transcriptome_t2g,
+        ReferenceResources.out.reference_gtf,
+        ReferenceResources.out.versions
+    )
     // //
     // // SUBWORKFLOW: Run completion tasks
     // //

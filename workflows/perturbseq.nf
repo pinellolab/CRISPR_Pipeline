@@ -21,7 +21,6 @@ include { ANNDATACONCAT as ANNDATACONCAT_HASH  } from '../modules/local/anndatac
 include { QUANT_TRANSCRIPTOME as QUANT_RNA   } from '../subworkflows/local/quant_transcriptome'
 include { QUANT_TRANSCRIPTOME as QUANT_GUIDE } from '../subworkflows/local/quant_transcriptome'
 include { QUANT_TRANSCRIPTOME as QUANT_HASH  } from '../subworkflows/local/quant_transcriptome'
-include { PREPAREREFERENCERESOURCES      } from '../subworkflows/local/preparereferenceresources'
 include { preprocessing_pipeline         } from '../subworkflows/local/preprocessing_pipeline'
 include { guide_assignment_pipeline      } from '../subworkflows/local/guide_assignment_pipeline'
 include { inference_pipeline             } from '../subworkflows/local/inference_pipeline'
@@ -51,6 +50,10 @@ workflow PERTURBSEQ {
 
     take:
     ch_samplesheet // channel: samplesheet read in from --input
+    ch_transcriptome_index
+    ch_transcriptome_t2g
+    ch_reference_gtf
+    ch_reference_versions
     multiqc_config
     multiqc_logo
     multiqc_methods_description
@@ -61,17 +64,9 @@ workflow PERTURBSEQ {
     def ch_versions = channel.empty()
     def ch_multiqc_files = channel.empty()
     def ch_empty_file = channel.value([])
-    def ch_rna_workflow = channel.value('standard')
     def ch_hash_workflow = channel.value('kite')
-    def ch_reference_fasta = channel.value(file(params.reference_fasta, checkIfExists: true))
-    def ch_reference_gtf = channel.value(file(params.reference_gtf, checkIfExists: true))
-
-    def ReferenceResources = PREPAREREFERENCERESOURCES(
-        ch_reference_fasta,
-        ch_reference_gtf,
-        ch_rna_workflow
-    )
-    ch_versions = ch_versions.mix(ReferenceResources.out.versions)
+    ch_versions = ch_versions.mix(ch_reference_versions)
+    def ch_rna_workflow = channel.value('standard')
 
     // Parse the samplesheet and create channels for each modality
     def ch_samples = ch_samplesheet.map { meta, fastqs ->
@@ -169,8 +164,8 @@ workflow PERTURBSEQ {
 
     def QuantRna = QUANT_RNA(
         ch_rna_for_count,
-        ReferenceResources.out.transcriptome_index,
-        ReferenceResources.out.transcriptome_t2g,
+        ch_transcriptome_index,
+        ch_transcriptome_t2g,
         SeqSpecRna.out.barcode_file,
         ch_empty_file,
         ch_empty_file,
@@ -245,7 +240,7 @@ workflow PERTURBSEQ {
     def Preprocessing = preprocessing_pipeline(
         ConcatRna.out.concat_anndata,
         QuantRna.out.count.map { _meta, count_dir -> count_dir },
-        ReferenceResources.out.reference_gtf
+        ch_reference_gtf
     )
 
     def benchmark_output_dir
