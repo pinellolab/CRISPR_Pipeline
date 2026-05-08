@@ -10,14 +10,11 @@ Schemas follow igvfd (matrix_file, tabular_file). Content types match portal enu
   - *per_guide*.tsv.gz -> tabular_file, "differential guide quantifications"
   - *per_element*.tsv.gz -> tabular_file, "differential element quantifications"
 
-reference_files: ``genome`` + ``transcriptome`` portal accessions.
-The pipeline run only materializes a transcriptome index for md5 matching;
-the **genome** is taken from ``--species`` (GRCh38 -> IGVFFI0653VCGH, GRCm39 -> IGVFFI9282QLXO).
-The **transcriptome** is resolved by md5-hashing ``downloadreference/transcriptome_index.idx``
-(relative to the run prefix) and requiring **exactly one** ``ReferenceFile`` on the
-portal with that ``md5sum``; zero or multiple matches is an error (no fallback).
-
-Override with ``--reference-files genome_acc,transcriptome_acc`` to skip lookup.
+reference_files are derived from the portal ``ReferenceFile`` record for the pipeline
+transcriptome index. The script md5-hashes
+``downloadreference/transcriptome_index.idx`` (relative to the run prefix), requires
+**exactly one** portal ``ReferenceFile`` with that ``md5sum``, then uses that object's
+``derived_from`` references as the submitted ``reference_files`` values.
 
 ReferenceFile md5 searches use the same API host as submissions: ``-m prod`` →
 ``api.data.igvf.org``, ``-m staging`` → ``api.staging.igvf.org`` (or ``IGVF_MODE``
@@ -54,10 +51,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
-
-# Genome assembly ReferenceFile accessions (not used for transcriptome md5 matching).
-REFERENCE_GENOME_GRCH38 = "IGVFFI0653VCGH"
-REFERENCE_GENOME_GRCM39 = "IGVFFI9282QLXO"
 
 # Same hosts as igvf_utils.connection / IGVF_MODES (search index matches submission target).
 _DEFAULT_PORTAL_API_BY_MODE = {
@@ -246,33 +239,40 @@ def _search_reference_files_by_md5(api_base: str, md5_hex: str) -> List[str]:
     return accessions
 
 
-def _genome_reference_accession(species: str) -> str:
-    sp = species.strip().lower().replace(" ", "")
-    mouse_keys = ("mouse", "mm", "grcm39", "musmusculus")
-    if sp in mouse_keys:
-        return REFERENCE_GENOME_GRCM39
-    return REFERENCE_GENOME_GRCH38
+def _get_reference_file_object(api_base: str, ref_accession: str) -> Dict[str, Any]:
+    """
+    Fetch a ReferenceFile object payload from the portal by accession.
+    """
+    ref = ref_accession.strip()
+    url = urllib.parse.urljoin(
+        api_base.rstrip("/") + "/",
+        f"reference-files/{urllib.parse.quote(ref)}/@@object?format=json",
+    )
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            payload = json.load(resp)
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(
+            f"Failed to fetch ReferenceFile {ref!r} ({exc.code}): {exc.reason}"
+        ) from exc
+    return payload
 
 
 def _resolve_reference_files(
     gs_prefix: str,
     use_gsutil_hash: bool,
     api_base: str,
-    species: str,
     idx_suffix: str,
 ) -> Tuple[List[str], List[str]]:
     """
-    Returns ``[genome_accession, transcriptome_accession]`` and log lines.
-
-    Transcriptome is matched via portal md5 of the pipeline transcriptome index only.
+    Returns reference_files and log lines.
+    Resolves transcriptome index via md5, then uses that ReferenceFile's
+    ``derived_from`` values as ``reference_files``.
     """
-    genome_acc = _genome_reference_accession(species)
     base = gs_prefix.rstrip("/")
     idx_uri = f"{base}/{idx_suffix.lstrip('/')}"
-    log: List[str] = [
-        f"genome ReferenceFile from --species: {genome_acc} "
-        f"({'GRCm39' if genome_acc == REFERENCE_GENOME_GRCM39 else 'GRCh38'})"
-    ]
+    log: List[str] = []
     try:
         md5 = _md5_for_uri(idx_uri, use_gsutil_hash)
     except Exception as exc:
@@ -297,15 +297,24 @@ def _resolve_reference_files(
             "Expected exactly one; resolve on the portal before submitting."
         )
 
-    transcriptome_acc = hits[0]
-    if transcriptome_acc == genome_acc:
+    transcriptome_index_acc = hits[0]
+    transcriptome_idx_obj = _get_reference_file_object(api_base, transcriptome_index_acc)
+    derived_from_raw = transcriptome_idx_obj.get("derived_from") or []
+    derived_from_accs: List[str] = []
+    for item in derived_from_raw:
+        acc = _normalize_link_identifier(item)
+        if acc and acc not in derived_from_accs:
+            derived_from_accs.append(acc)
+    if len(derived_from_accs) < 2:
         raise RuntimeError(
-            f"Transcriptome md5 resolved to {transcriptome_acc!r}, same as genome accession; check data."
+            f"ReferenceFile {transcriptome_index_acc!r} matched by transcriptome index md5 "
+            f"has insufficient derived_from entries for reference_files: {derived_from_raw!r}"
         )
-
-    combined = [genome_acc, transcriptome_acc]
-    log.append(f"matrix_file reference_files order (genome, transcriptome): {','.join(combined)}")
-    return combined, log
+    log.append(
+        f"transcriptome index ReferenceFile {transcriptome_index_acc} derived_from -> "
+        f"{','.join(derived_from_accs)}"
+    )
+    return derived_from_accs, log
 
 
 # --- Re-upload (same analysis set, md5-matched File records) -----------------
@@ -728,22 +737,11 @@ def _main_generate(argv: Sequence[str]) -> int:
         help="analysis set alias or accession (e.g. charles-gersbach:my_analysis_set or IGVFDS5057HJKP).",
     )
     p.add_argument(
-        "--reference-files",
-        default="",
-        help="Comma-separated genome,transcriptome ReferenceFile accessions; skips portal md5 lookup.",
-    )
-    p.add_argument(
         "--portal-api",
         default=None,
         dest="portal_api",
         help="Override API origin for ReferenceFile search (default: from -m / IGVF_MODE, "
         "same host as igvf_utils submissions).",
-    )
-    p.add_argument(
-        "--species",
-        default="human",
-        help="Species for the **genome** ReferenceFile: human/GRCh38 -> "
-        f"{REFERENCE_GENOME_GRCH38}; mouse/GRCm39/mm -> {REFERENCE_GENOME_GRCM39} (default: human).",
     )
     p.add_argument(
         "--reference-index-suffix",
@@ -789,30 +787,16 @@ def _main_generate(argv: Sequence[str]) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    manual_refs = [x.strip() for x in args.reference_files.split(",") if x.strip()]
-    if manual_refs:
-        if len(manual_refs) < 2:
-            p.error(
-                "--reference-files must include at least two accessions: genome,transcriptome "
-                f"(got {len(manual_refs)})."
-            )
-        ref_files = manual_refs
-        ref_log = [
-            "reference_files from --reference-files (genome, transcriptome, ...): "
-            + ",".join(ref_files)
-        ]
-    else:
-        try:
-            ref_files, ref_log = _resolve_reference_files(
-                args.gs_prefix,
-                args.use_gsutil_hash,
-                portal_api,
-                args.species,
-                args.reference_index_suffix,
-            )
-        except RuntimeError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
+    try:
+        ref_files, ref_log = _resolve_reference_files(
+            args.gs_prefix,
+            args.use_gsutil_hash,
+            portal_api,
+            args.reference_index_suffix,
+        )
+    except RuntimeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
     sec_dims = [x.strip() for x in args.secondary_dimensions.split(",") if x.strip()]
     if not sec_dims:
