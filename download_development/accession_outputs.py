@@ -13,7 +13,7 @@ Schemas follow igvfd (matrix_file, tabular_file). Content types match portal enu
 reference_files are resolved from the pipeline params and portal metadata:
   - if ``pipeline_info/params*.json`` says ``use_igvf_reference=true`` (default),
     the script uses IGVF reference ``IGVFFI9561BASO`` and submits its
-    ``derived_from`` values as ``reference_files``
+    own accession plus ``derived_from`` values as ``reference_files``
   - if ``use_igvf_reference`` is false, pass ``--reference-files`` explicitly
     (comma-separated accessions or aliases)
 
@@ -27,8 +27,9 @@ another file set, or if the set contains a File whose md5 is not one of the pipe
 outputs, or a File with no md5sum). Requires igvf_utils ``Connection``, API keys, and
 AWS keys per igvf_utils.
 
-Requires: gsutil on PATH for listing; ``igvf_utils`` with CLI/registrar for POST. For
-md5sum on gs:// objects without hashing via registrar deps, pass ``--use-gsutil-hash``.
+Requires: ``igvf_utils`` with CLI/registrar for POST. If input is ``gs://``, requires
+``gsutil`` on PATH for listing/params read; for md5sum on gs:// objects without hashing
+via registrar deps, pass ``--use-gsutil-hash``.
 
 After building rows, syncs with the portal: for each pipeline md5 that already exists on
 the analysis set, if ``upload_status`` is neither ``validated`` nor ``validation exempted``,
@@ -41,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import re
@@ -51,6 +53,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 # Same hosts as igvf_utils.connection / IGVF_MODES (search index matches submission target).
@@ -58,6 +61,9 @@ _DEFAULT_PORTAL_API_BY_MODE = {
     "prod": "https://api.data.igvf.org",
     "staging": "https://api.staging.igvf.org",
 }
+
+_MATRIX_PRINCIPAL_DIMENSION = "CRISPR guide capture"
+_MATRIX_SECONDARY_DIMENSIONS = ["gene expression"]
 
 
 def _resolve_portal_api_for_mode(
@@ -120,30 +126,46 @@ def _run_iu_register(
         ]
     if dry_run:
         cmd.append("--dry-run")
-    if no_upload_file:
+    effective_no_upload = no_upload_file or dry_run
+    if effective_no_upload:
         cmd.append("--no-upload-file")
     print("Running:", " ".join(cmd), flush=True)
     return subprocess.run(cmd, check=False).returncode
 
 
 def _run_gsutil_ls(prefix: str) -> List[str]:
-    prefix = prefix.rstrip("/") + "/"
-    proc = subprocess.run(
-        ["gsutil", "ls", prefix],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"gsutil ls failed ({proc.returncode}): {proc.stderr.strip() or proc.stdout.strip()}"
+    if prefix.startswith("gs://"):
+        prefix = prefix.rstrip("/") + "/"
+        proc = subprocess.run(
+            ["gsutil", "ls", prefix],
+            capture_output=True,
+            text=True,
+            check=False,
         )
-    lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
-    return lines
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"gsutil ls failed ({proc.returncode}): {proc.stderr.strip() or proc.stdout.strip()}"
+            )
+        return [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+
+    root = Path(prefix).expanduser().resolve()
+    if not root.exists():
+        raise RuntimeError(f"Input directory does not exist: {str(root)!r}")
+    if not root.is_dir():
+        raise RuntimeError(f"Input path is not a directory: {str(root)!r}")
+    return [str(p) for p in sorted(root.iterdir(), key=lambda x: x.name)]
 
 
 def _first_n_files(uris: Sequence[str], n: int) -> List[str]:
-    files = [u for u in uris if not u.endswith("/")]
+    files: List[str] = []
+    for u in uris:
+        if u.startswith("gs://"):
+            if not u.endswith("/"):
+                files.append(u)
+        else:
+            p = Path(u)
+            if p.exists() and p.is_file():
+                files.append(str(p))
     return files[:n]
 
 
@@ -189,6 +211,20 @@ def _md5_and_size_gs(uri: str) -> Tuple[str, int]:
     return calculate_md5sum(uri), calculate_file_size(uri)
 
 
+def _md5_and_size_local(path: str) -> Tuple[str, int]:
+    p = Path(path).expanduser().resolve()
+    if not p.exists():
+        raise RuntimeError(f"Local file not found: {str(p)!r}")
+    if not p.is_file():
+        raise RuntimeError(f"Local path is not a file: {str(p)!r}")
+
+    md5 = hashlib.md5()
+    with p.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            md5.update(chunk)
+    return md5.hexdigest(), p.stat().st_size
+
+
 def _md5_gsutil_hash(uri: str) -> str:
     proc = subprocess.run(
         ["gsutil", "hash", "-m", uri],
@@ -208,13 +244,31 @@ def _md5_gsutil_hash(uri: str) -> str:
 
 
 def _md5_for_uri(uri: str, use_gsutil_hash: bool) -> str:
+    if not uri.startswith("gs://"):
+        md5, _ = _md5_and_size_local(uri)
+        return md5
     if use_gsutil_hash:
         return _md5_gsutil_hash(uri)
-    md5, _ = _md5_and_size_gs(uri)
-    return md5
+    try:
+        md5, _ = _md5_and_size_gs(uri)
+        return md5
+    except Exception as exc:
+        # igvf_utils GCS lookup can fail when local ADC credentials are expired.
+        # Fall back to gsutil, which may still have valid auth context.
+        print(
+            f"warning: igvf_utils md5 lookup failed for {uri!r}: {exc}; "
+            "falling back to gsutil hash -m",
+            file=sys.stderr,
+        )
+        return _md5_gsutil_hash(uri)
 
 
 def _run_gsutil_cat(uri: str) -> str:
+    if not uri.startswith("gs://"):
+        p = Path(uri).expanduser().resolve()
+        if not p.exists() or not p.is_file():
+            raise RuntimeError(f"Local params file not found: {str(p)!r}")
+        return p.read_text(encoding="utf-8")
     proc = subprocess.run(
         ["gsutil", "cat", uri],
         capture_output=True,
@@ -289,7 +343,8 @@ def _derived_from_reference(api_base: str, ref_identifier: str) -> Tuple[str, Li
             f"ReferenceFile {ref_acc!r} has insufficient derived_from entries "
             f"for reference_files: {derived_from_raw!r}"
         )
-    return ref_acc, derived_from_accs
+    # Include the index ReferenceFile itself plus upstream references.
+    return ref_acc, [ref_acc, *derived_from_accs]
 
 
 def _parse_bool(value: Any) -> bool:
@@ -306,12 +361,9 @@ def _parse_bool(value: Any) -> bool:
 
 def _detect_use_igvf_reference(gs_prefix: str) -> Tuple[bool, str]:
     base = gs_prefix.rstrip("/")
-    params_prefix = f"{base}/pipeline_info/"
-    params_candidates = [
-        u
-        for u in _run_gsutil_ls(params_prefix)
-        if not u.endswith("/") and "/params" in u and u.endswith(".json")
-    ]
+    params_prefix = f"{base}/pipeline_info/" if base.startswith("gs://") else str(Path(base) / "pipeline_info")
+    params_candidates = [u for u in _run_gsutil_ls(params_prefix) if not u.endswith("/")]
+    params_candidates = [u for u in params_candidates if "params" in Path(u).name and u.endswith(".json")]
     if not params_candidates:
         raise RuntimeError(
             f"Could not find pipeline params JSON under {params_prefix!r} "
@@ -789,6 +841,8 @@ def _main_generate(argv: Sequence[str]) -> int:
             "  python accession_outputs.py -m staging --analysis-set IGVFDS5057HJKP "
             "--reference-files IGVFFI1234ABCD,IGVFFI5678EFGH "
             "gs://my-bucket/pipeline_runs/run_01/\n\n"
+            "  python accession_outputs.py -m staging --analysis-set IGVFDS5057HJKP "
+            "/path/to/local/run_01/\n\n"
             "Tip: add --reupload to push blobs onto existing File records only."
         ),
     )
@@ -802,7 +856,7 @@ def _main_generate(argv: Sequence[str]) -> int:
     )
     p.add_argument(
         "gs_prefix",
-        help="GCS directory prefix, e.g. gs://bucket/.../Engreitz_ccPerturb",
+        help="Input run directory prefix: gs://bucket/.../Engreitz_ccPerturb or /local/path/run",
     )
     p.add_argument(
         "--analysis-set",
@@ -822,23 +876,13 @@ def _main_generate(argv: Sequence[str]) -> int:
         default="",
         help="Optional comma-separated reference file accessions/aliases. "
         "If pipeline params set use_igvf_reference=true, defaults to IGVFFI9561BASO "
-        "(resolved to its derived_from values). If use_igvf_reference=false, this argument is required.",
+        "(resolved to itself plus its derived_from values). If use_igvf_reference=false, this argument is required.",
     )
     p.add_argument(
         "--alias-prefix",
         default="",
         help="Prefix for aliases; sanitized basename is appended. "
         "Default: igvf:{analysis_set_accession}_uniform_perturb_seq_pipeline_",
-    )
-    p.add_argument(
-        "--principal-dimension",
-        default="CRISPR guide capture",
-        help="matrix_file principal_dimension (default: CRISPR guide capture).",
-    )
-    p.add_argument(
-        "--secondary-dimensions",
-        default="gene expression",
-        help="Comma-separated matrix_file secondary_dimensions (default: gene expression).",
     )
     p.add_argument(
         "--use-gsutil-hash",
@@ -872,10 +916,6 @@ def _main_generate(argv: Sequence[str]) -> int:
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-
-    sec_dims = [x.strip() for x in args.secondary_dimensions.split(",") if x.strip()]
-    if not sec_dims:
-        p.error("--secondary-dimensions must list at least one dimension.")
 
     all_uris = _run_gsutil_ls(args.gs_prefix)
     picked = _first_n_files(all_uris, 5)
@@ -950,8 +990,8 @@ def _main_generate(argv: Sequence[str]) -> int:
                 ctype,
                 args.analysis_set,
                 ",".join(ref_files),
-                args.principal_dimension,
-                ",".join(sec_dims),
+                _MATRIX_PRINCIPAL_DIMENSION,
+                ",".join(_MATRIX_SECONDARY_DIMENSIONS),
             ]
         else:
             row = [
