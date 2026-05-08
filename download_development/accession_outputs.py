@@ -169,6 +169,23 @@ def _first_n_files(uris: Sequence[str], n: int) -> List[str]:
     return files[:n]
 
 
+def _tabular_submission_rank(row: List[str]) -> int:
+    """
+    Ensure tabular rows are POSTed in derived_from-safe order.
+    per_guide records must exist before per_element records.
+    """
+    alias = row[3].lower() if len(row) > 3 else ""
+    if "cis_per_guide" in alias:
+        return 0
+    if "trans_per_guide" in alias:
+        return 1
+    if "cis_per_element" in alias:
+        return 2
+    if "trans_per_element" in alias:
+        return 3
+    return 99
+
+
 def _classify(basename: str) -> Tuple[str, str]:
     """
     Returns (profile_id, content_type) for igvf_utils Connection / iu_register.
@@ -359,7 +376,21 @@ def _parse_bool(value: Any) -> bool:
     raise RuntimeError(f"Expected boolean for use_igvf_reference, got {value!r}")
 
 
-def _detect_use_igvf_reference(gs_prefix: str) -> Tuple[bool, str]:
+def _run_token_from_params_uri(params_uri: str) -> str:
+    """
+    Build a deterministic run token from params filename:
+    params_YYYY-MM-DD_HH-MM-SS.json -> YYYYMMDD_HHMMSS
+    Fallback: short hash of params URI/path.
+    """
+    name = Path(params_uri).name
+    m = re.match(r"^params_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})\.json$", name)
+    if m:
+        y, mo, d, h, mi, s = m.groups()
+        return f"{y}{mo}{d}_{h}{mi}{s}"
+    return hashlib.sha1(params_uri.encode("utf-8")).hexdigest()[:10]
+
+
+def _detect_use_igvf_reference(gs_prefix: str) -> Tuple[bool, str, str]:
     base = gs_prefix.rstrip("/")
     params_prefix = f"{base}/pipeline_info/" if base.startswith("gs://") else str(Path(base) / "pipeline_info")
     params_candidates = [u for u in _run_gsutil_ls(params_prefix) if not u.endswith("/")]
@@ -378,23 +409,25 @@ def _detect_use_igvf_reference(gs_prefix: str) -> Tuple[bool, str]:
         raise RuntimeError(
             f"'use_igvf_reference' missing in pipeline params file {params_uri!r}"
         )
-    return _parse_bool(payload["use_igvf_reference"]), params_uri
+    run_token = _run_token_from_params_uri(params_uri)
+    return _parse_bool(payload["use_igvf_reference"]), params_uri, run_token
 
 
 def _resolve_reference_files(
     gs_prefix: str,
     api_base: str,
     reference_files_arg: str,
-) -> Tuple[List[str], List[str]]:
+) -> Tuple[List[str], List[str], str]:
     """
     Returns reference_files and log lines.
     Uses pipeline params to determine whether to use the IGVF default reference
     or require explicit --reference-files.
     """
     log: List[str] = []
-    use_igvf_reference, params_uri = _detect_use_igvf_reference(gs_prefix)
+    use_igvf_reference, params_uri, run_token = _detect_use_igvf_reference(gs_prefix)
     log.append(f"pipeline params: {params_uri}")
     log.append(f"use_igvf_reference={use_igvf_reference}")
+    log.append(f"run_token={run_token}")
 
     if use_igvf_reference:
         ref_seed = reference_files_arg.strip() if reference_files_arg.strip() else "IGVFFI9561BASO"
@@ -403,7 +436,7 @@ def _resolve_reference_files(
             f"use_igvf_reference=true -> ReferenceFile {ref_acc} derived_from -> "
             f"{','.join(derived_from_accs)}"
         )
-        return derived_from_accs, log
+        return derived_from_accs, log, run_token
 
     raw = [x.strip() for x in reference_files_arg.split(",") if x.strip()]
     if not raw:
@@ -420,7 +453,7 @@ def _resolve_reference_files(
             "No valid values parsed from --reference-files; provide comma-separated accessions/aliases."
         )
     log.append(f"use_igvf_reference=false -> using --reference-files: {','.join(out)}")
-    return out, log
+    return out, log, run_token
 
 
 # --- Re-upload (same analysis set, md5-matched File records) -----------------
@@ -836,7 +869,6 @@ def _main_generate(argv: Sequence[str]) -> int:
             "  python accession_outputs.py -m staging --analysis-set IGVFDS5057HJKP "
             "gs://my-bucket/pipeline_runs/run_01/\n"
             "  python accession_outputs.py -m staging --analysis-set charles-gersbach:my_analysis_set "
-            "--alias-prefix igvf:IGVFDS5057HJKP_uniform_perturb_seq_pipeline_ "
             "gs://my-bucket/pipeline_runs/run_01/\n\n"
             "  python accession_outputs.py -m staging --analysis-set IGVFDS5057HJKP "
             "--reference-files IGVFFI1234ABCD,IGVFFI5678EFGH "
@@ -879,12 +911,6 @@ def _main_generate(argv: Sequence[str]) -> int:
         "(resolved to itself plus its derived_from values). If use_igvf_reference=false, this argument is required.",
     )
     p.add_argument(
-        "--alias-prefix",
-        default="",
-        help="Prefix for aliases; sanitized basename is appended. "
-        "Default: igvf:{analysis_set_accession}_uniform_perturb_seq_pipeline_",
-    )
-    p.add_argument(
         "--use-gsutil-hash",
         action="store_true",
         help="Use gsutil hash -m for md5 instead of igvf_utils.",
@@ -908,7 +934,7 @@ def _main_generate(argv: Sequence[str]) -> int:
         return 1
 
     try:
-        ref_files, ref_log = _resolve_reference_files(
+        ref_files, ref_log, run_token = _resolve_reference_files(
             args.gs_prefix,
             portal_api,
             args.reference_files,
@@ -961,11 +987,7 @@ def _main_generate(argv: Sequence[str]) -> int:
         print(f"error: {exc.args[0]}", file=sys.stderr)
         return 1
     print(f"Using award={award!r} and lab={lab!r} for submitted rows.")
-    alias_prefix = (
-        args.alias_prefix.strip()
-        if args.alias_prefix.strip()
-        else f"igvf:{target_fs}_uniform_perturb_seq_pipeline_"
-    )
+    alias_prefix = f"igvf:{target_fs}_uniform_perturb_seq_pipeline_{run_token}_"
     print(f"Using alias prefix: {alias_prefix!r}")
 
     # Build artifact metadata first so intra-run derived_from links can be resolved.
@@ -1133,6 +1155,7 @@ def _main_generate(argv: Sequence[str]) -> int:
     post_matrix_rows, post_tabular_rows, upload_jobs, sync_msgs = (
         _partition_artifacts_for_post_and_upload(conn, on_set_index, artifacts)
     )
+    post_tabular_rows.sort(key=_tabular_submission_rank)
 
     print("\nPortal sync (existing md5 on analysis set):")
     for msg in sync_msgs:
