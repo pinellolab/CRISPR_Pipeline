@@ -968,8 +968,8 @@ def _main_generate(argv: Sequence[str]) -> int:
     )
     print(f"Using alias prefix: {alias_prefix!r}")
 
-    # (uri, md5, profile_id, tsv_row_cells)
-    artifacts: List[Tuple[str, str, str, List[str]]] = []
+    # Build artifact metadata first so intra-run derived_from links can be resolved.
+    built: List[Dict[str, str]] = []
 
     for uri in picked:
         base = uri.rsplit("/", 1)[-1]
@@ -978,6 +978,46 @@ def _main_generate(argv: Sequence[str]) -> int:
 
         alias_stem = _alias_stem_from_basename(base)
         alias = f"{alias_prefix}{re.sub(r'[^0-9a-zA-Z._-]+', '_', alias_stem)}"
+
+        built.append(
+            {
+                "uri": uri,
+                "base": base,
+                "profile": profile,
+                "content_type": ctype,
+                "md5": md5,
+                "alias": alias,
+            }
+        )
+
+    matrix_aliases = [x["alias"] for x in built if x["profile"] == "matrix_file"]
+    matrix_alias = matrix_aliases[0] if matrix_aliases else ""
+    cis_guide_alias = next(
+        (
+            x["alias"]
+            for x in built
+            if x["profile"] == "tabular_file" and "cis_per_guide" in x["base"].lower()
+        ),
+        "",
+    )
+    trans_guide_alias = next(
+        (
+            x["alias"]
+            for x in built
+            if x["profile"] == "tabular_file" and "trans_per_guide" in x["base"].lower()
+        ),
+        "",
+    )
+
+    # (uri, md5, profile_id, tsv_row_cells)
+    artifacts: List[Tuple[str, str, str, List[str]]] = []
+    for item in built:
+        uri = item["uri"]
+        md5 = item["md5"]
+        profile = item["profile"]
+        ctype = item["content_type"]
+        alias = item["alias"]
+        base_lower = item["base"].lower()
 
         if profile == "matrix_file":
             row = [
@@ -992,8 +1032,16 @@ def _main_generate(argv: Sequence[str]) -> int:
                 ",".join(ref_files),
                 _MATRIX_PRINCIPAL_DIMENSION,
                 ",".join(_MATRIX_SECONDARY_DIMENSIONS),
+                "",
             ]
         else:
+            derived_from = ""
+            if "per_guide" in base_lower:
+                derived_from = matrix_alias
+            elif "cis_per_element" in base_lower:
+                derived_from = cis_guide_alias
+            elif "trans_per_element" in base_lower:
+                derived_from = trans_guide_alias
             row = [
                 award,
                 lab,
@@ -1005,6 +1053,7 @@ def _main_generate(argv: Sequence[str]) -> int:
                 args.analysis_set,
                 ",".join(ref_files),
                 "false",
+                derived_from,
             ]
         artifacts.append((uri, md5, profile, row))
 
@@ -1014,6 +1063,18 @@ def _main_generate(argv: Sequence[str]) -> int:
         raise SystemExit(
             f"Expected 1 matrix_file and 4 tabular_file rows; got matrix={n_matrix}, tabular={n_tabular}. "
             "Check the first five objects under the prefix match inference_mudata.h5mu and four *results.tsv.gz files."
+        )
+    if not matrix_alias:
+        raise SystemExit("Could not resolve matrix_file alias for derived_from links.")
+    has_cis_element = any("cis_per_element" in x["base"].lower() for x in built)
+    has_trans_element = any("trans_per_element" in x["base"].lower() for x in built)
+    if has_cis_element and not cis_guide_alias:
+        raise SystemExit(
+            "Found cis_per_element output but could not resolve cis_per_guide alias for derived_from."
+        )
+    if has_trans_element and not trans_guide_alias:
+        raise SystemExit(
+            "Found trans_per_element output but could not resolve trans_per_guide alias for derived_from."
         )
 
     matrix_header = "\t".join(
@@ -1029,6 +1090,7 @@ def _main_generate(argv: Sequence[str]) -> int:
             "reference_files",
             "principal_dimension",
             "secondary_dimensions",
+            "derived_from",
         ]
     )
     tab_header = "\t".join(
@@ -1043,6 +1105,7 @@ def _main_generate(argv: Sequence[str]) -> int:
             "file_set",
             "reference_files",
             "controlled_access",
+            "derived_from",
         ]
     )
 
