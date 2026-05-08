@@ -75,7 +75,7 @@ def _resolve_portal_api_for_mode(
     """
     if portal_api_override:
         return portal_api_override.rstrip("/")
-    mode = (igvf_mode or os.environ.get("IGVF_MODE") or "prod").strip()
+    mode = (igvf_mode or os.environ.get("IGVF_MODE") or "staging").strip()
     if mode not in _DEFAULT_PORTAL_API_BY_MODE:
         raise ValueError(
             f"Invalid portal mode {mode!r}; use prod or staging (or pass --portal-api URL)."
@@ -92,7 +92,7 @@ def _resolve_portal_api_for_mode(
 
 def _submission_igvf_mode(cli_mode: Optional[str]) -> str:
     """Mode string for ``iu_register -m`` (prod or staging)."""
-    return (cli_mode or os.environ.get("IGVF_MODE") or "prod").strip()
+    return (cli_mode or os.environ.get("IGVF_MODE") or "staging").strip()
 
 
 def _run_iu_register(
@@ -168,6 +168,20 @@ def _classify(basename: str) -> Tuple[str, str]:
     if "per_element" in lower:
         return "tabular_file", "differential element quantifications"
     raise ValueError(f"Cannot classify pipeline artifact: {basename!r}")
+
+
+def _alias_stem_from_basename(basename: str) -> str:
+    """
+    Return basename without common file extensions used by this pipeline.
+    Handles compound extensions like .tsv.gz.
+    """
+    lower = basename.lower()
+    for ext in (".tsv.gz", ".fastq.gz", ".yaml.gz", ".h5mu", ".tsv", ".gz", ".yaml"):
+        if lower.endswith(ext):
+            return basename[: -len(ext)]
+    if "." in basename:
+        return basename.rsplit(".", 1)[0]
+    return basename
 
 
 def _md5_and_size_gs(uri: str) -> Tuple[str, int]:
@@ -569,9 +583,10 @@ def _main_reupload(argv: Sequence[str]) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--file-set",
+        "--analysis-set",
         required=True,
-        help="Target analysis / file set accession or alias (e.g. IGVFDS5057HJKP).",
+        dest="analysis_set",
+        help="Target analysis set accession or alias (e.g. IGVFDS5057HJKP).",
     )
     parser.add_argument(
         "gs_prefix",
@@ -629,7 +644,7 @@ def _main_reupload(argv: Sequence[str]) -> int:
         submission=False,
         no_log_file=args.no_log_file,
     )
-    target_fs = _resolve_file_set_accession(conn, args.file_set)
+    target_fs = _resolve_file_set_accession(conn, args.analysis_set)
 
     on_set_index, index_logs, missing_md5_accs = _index_md5_for_file_set(conn, target_fs)
     print(f"Target file_set accession: {target_fs}")
@@ -700,16 +715,17 @@ def _main_generate(argv: Sequence[str]) -> int:
         default=None,
         dest="igvf_mode",
         help="Portal for ReferenceFile md5 search and for ``iu_register -m`` (prod or staging only). "
-        "Default: IGVF_MODE env var, else prod.",
+        "Default: IGVF_MODE env var, else staging.",
     )
     p.add_argument(
         "gs_prefix",
         help="GCS directory prefix, e.g. gs://bucket/.../Engreitz_ccPerturb",
     )
     p.add_argument(
-        "--file-set",
+        "--analysis-set",
         required=True,
-        help="file_set alias or accession (e.g. charles-gersbach:my_analysis_set or IGVFDS5057HJKP).",
+        dest="analysis_set",
+        help="analysis set alias or accession (e.g. charles-gersbach:my_analysis_set or IGVFDS5057HJKP).",
     )
     p.add_argument(
         "--reference-files",
@@ -736,8 +752,9 @@ def _main_generate(argv: Sequence[str]) -> int:
     )
     p.add_argument(
         "--alias-prefix",
-        default="igvf:perturbseq_benchmark",
-        help="Prefix for aliases; basename is appended (default: igvf:perturbseq_benchmark).",
+        default="",
+        help="Prefix for aliases; sanitized basename is appended. "
+        "Default: igvf:{analysis_set_accession}_uniform_perturb_seq_pipeline_",
     )
     p.add_argument(
         "--principal-dimension",
@@ -838,12 +855,19 @@ def _main_generate(argv: Sequence[str]) -> int:
         submission=False,
         no_log_file=False,
     )
+    target_fs = _resolve_file_set_accession(conn, args.analysis_set)
     try:
-        award, lab = _resolve_award_and_lab(conn, args.file_set)
+        award, lab = _resolve_award_and_lab(conn, args.analysis_set)
     except SystemExit as exc:
         print(f"error: {exc.args[0]}", file=sys.stderr)
         return 1
     print(f"Using award={award!r} and lab={lab!r} for submitted rows.")
+    alias_prefix = (
+        args.alias_prefix.strip()
+        if args.alias_prefix.strip()
+        else f"igvf:{target_fs}_uniform_perturb_seq_pipeline_"
+    )
+    print(f"Using alias prefix: {alias_prefix!r}")
 
     # (uri, md5, profile_id, tsv_row_cells)
     artifacts: List[Tuple[str, str, str, List[str]]] = []
@@ -853,7 +877,8 @@ def _main_generate(argv: Sequence[str]) -> int:
         profile, ctype = _classify(base)
         md5 = _md5_for_uri(uri, args.use_gsutil_hash)
 
-        alias = f"{args.alias_prefix}:{re.sub(r'[^0-9a-zA-Z._-]+', '_', base)}"
+        alias_stem = _alias_stem_from_basename(base)
+        alias = f"{alias_prefix}{re.sub(r'[^0-9a-zA-Z._-]+', '_', alias_stem)}"
 
         if profile == "matrix_file":
             row = [
@@ -864,7 +889,7 @@ def _main_generate(argv: Sequence[str]) -> int:
                 uri,
                 "h5mu",
                 ctype,
-                args.file_set,
+                args.analysis_set,
                 ",".join(ref_files),
                 args.principal_dimension,
                 ",".join(sec_dims),
@@ -878,7 +903,7 @@ def _main_generate(argv: Sequence[str]) -> int:
                 uri,
                 "tsv",
                 ctype,
-                args.file_set,
+                args.analysis_set,
                 ",".join(ref_files),
                 "false",
             ]
@@ -922,7 +947,6 @@ def _main_generate(argv: Sequence[str]) -> int:
         ]
     )
 
-    target_fs = _resolve_file_set_accession(conn, args.file_set)
     on_set_index, index_logs, missing_md5_accs = _index_md5_for_file_set(conn, target_fs)
     source_md5_set: Set[str] = {md5 for _, md5, _, _ in artifacts}
 
@@ -975,10 +999,10 @@ def _main_generate(argv: Sequence[str]) -> int:
     if not post_matrix_rows and not post_tabular_rows:
         print("\nNo new File records to POST (all md5s already on analysis set).", flush=True)
         try:
-            _patch_uniform_pipeline_status_completed(conn, args.file_set, dry_run=args.dry_run)
+            _patch_uniform_pipeline_status_completed(conn, args.analysis_set, dry_run=args.dry_run)
         except Exception as exc:
             print(
-                f"error: failed to patch uniform_pipeline_status on {args.file_set!r}: {exc}",
+                f"error: failed to patch uniform_pipeline_status on {args.analysis_set!r}: {exc}",
                 file=sys.stderr,
             )
             return 1
@@ -1026,10 +1050,10 @@ def _main_generate(argv: Sequence[str]) -> int:
         if rc != 0:
             return rc
         try:
-            _patch_uniform_pipeline_status_completed(conn, args.file_set, dry_run=args.dry_run)
+            _patch_uniform_pipeline_status_completed(conn, args.analysis_set, dry_run=args.dry_run)
         except Exception as exc:
             print(
-                f"error: failed to patch uniform_pipeline_status on {args.file_set!r}: {exc}",
+                f"error: failed to patch uniform_pipeline_status on {args.analysis_set!r}: {exc}",
                 file=sys.stderr,
             )
             return 1
