@@ -590,6 +590,14 @@ def _main_reupload(argv: Sequence[str]) -> int:
         description="Re-upload GCS (or local) objects onto existing File records on an analysis set.",
         parents=[igvf_login_parser],
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  python accession_outputs.py --reupload -m staging --analysis-set IGVFDS5057HJKP "
+            "gs://my-bucket/pipeline_runs/run_01/\n"
+            "  python accession_outputs.py --reupload -m staging --analysis-set IGVFDS5057HJKP "
+            "--source-uri gs://my-bucket/pipeline_runs/run_01/inference_mudata.h5mu "
+            "--source-uri gs://my-bucket/pipeline_runs/run_01/per_guide_results.tsv.gz"
+        ),
     )
     parser.add_argument(
         "--analysis-set",
@@ -716,7 +724,16 @@ def _main_reupload(argv: Sequence[str]) -> int:
 def _main_generate(argv: Sequence[str]) -> int:
     p = argparse.ArgumentParser(
         description=__doc__,
-        epilog="Tip: add --reupload to push GCS objects onto existing File records on an analysis set (via igvf_utils).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  python accession_outputs.py -m staging --analysis-set IGVFDS5057HJKP "
+            "gs://my-bucket/pipeline_runs/run_01/\n"
+            "  python accession_outputs.py -m staging --analysis-set charles-gersbach:my_analysis_set "
+            "--alias-prefix igvf:IGVFDS5057HJKP_uniform_perturb_seq_pipeline_ "
+            "gs://my-bucket/pipeline_runs/run_01/\n\n"
+            "Tip: add --reupload to push blobs onto existing File records only."
+        ),
     )
     p.add_argument(
         "-m",
