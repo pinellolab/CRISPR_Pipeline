@@ -328,6 +328,48 @@ def _resolve_file_set_accession(conn: Any, ref: str) -> str:
     return acc
 
 
+def _normalize_link_identifier(value: Any) -> str:
+    """
+    Normalize portal link-like values to identifier tails.
+    Examples:
+      - "/awards/HG012053/" -> "HG012053"
+      - "/labs/charles-gersbach/" -> "charles-gersbach"
+      - "HG012053" -> "HG012053"
+    """
+    if isinstance(value, dict):
+        if value.get("accession"):
+            return str(value["accession"]).strip()
+        value = value.get("@id") or value.get("uuid") or ""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if text.startswith("/"):
+        parts = [p for p in text.strip("/").split("/") if p]
+        if parts:
+            return parts[-1]
+    return text
+
+
+def _resolve_award_and_lab(conn: Any, file_set_ref: str) -> Tuple[str, str]:
+    """
+    Return (award, lab) from analysis-set metadata.
+    """
+    rec = conn.get(rec_ids=file_set_ref.strip(), ignore404=False, database=True, frame="object")
+    award = _normalize_link_identifier(rec.get("award"))
+    lab = _normalize_link_identifier(rec.get("lab"))
+
+    missing = []
+    if not award:
+        missing.append("award")
+    if not lab:
+        missing.append("lab")
+    if missing:
+        raise SystemExit(
+            f"Could not resolve {', '.join(missing)} from analysis set {file_set_ref!r}."
+        )
+    return award, lab
+
+
 def _search_files_by_md5(conn: Any, md5_hex: str) -> List[dict]:
     return conn.search([("type", "File"), ("md5sum", md5_hex)])
 
@@ -640,16 +682,6 @@ def _main_generate(argv: Sequence[str]) -> int:
         help="file_set alias or accession (e.g. charles-gersbach:my_analysis_set or IGVFDS5057HJKP).",
     )
     p.add_argument(
-        "--award",
-        required=True,
-        help="award identifier (e.g. HG012053).",
-    )
-    p.add_argument(
-        "--lab",
-        required=True,
-        help="lab @id tail or alias prefix (e.g. charles-gersbach).",
-    )
-    p.add_argument(
         "--reference-files",
         default="",
         help="Comma-separated genome,transcriptome ReferenceFile accessions; skips portal md5 lookup.",
@@ -746,6 +778,43 @@ def _main_generate(argv: Sequence[str]) -> int:
             f"Expected at least 5 files under {args.gs_prefix!r}; found {len(picked)}: {picked}"
         )
 
+    submit_mode = _submission_igvf_mode(args.igvf_mode)
+    if submit_mode not in _DEFAULT_PORTAL_API_BY_MODE:
+        print(
+            f"error: submission requires igvf mode prod or staging (got {submit_mode!r}); "
+            "set -m prod or -m staging (or IGVF_MODE).",
+            file=sys.stderr,
+        )
+        return 1
+
+    print("\nreference_files resolution:")
+    print(f"  ReferenceFile md5 search API: {portal_api}")
+    for line in ref_log:
+        print(f"  {line}")
+    print(f"  matrix_file & tabular_file reference_files -> {','.join(ref_files)}")
+
+    try:
+        from igvf_utils.connection import Connection
+    except ImportError as exc:
+        print(
+            f"error: portal sync requires igvf_utils (Connection). {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+    conn = Connection(
+        igvf_mode=submit_mode,
+        dry_run=args.dry_run,
+        submission=False,
+        no_log_file=False,
+    )
+    try:
+        award, lab = _resolve_award_and_lab(conn, args.file_set)
+    except SystemExit as exc:
+        print(f"error: {exc.args[0]}", file=sys.stderr)
+        return 1
+    print(f"Using award={award!r} and lab={lab!r} for submitted rows.")
+
     # (uri, md5, profile_id, tsv_row_cells)
     artifacts: List[Tuple[str, str, str, List[str]]] = []
 
@@ -758,8 +827,8 @@ def _main_generate(argv: Sequence[str]) -> int:
 
         if profile == "matrix_file":
             row = [
-                args.award,
-                args.lab,
+                award,
+                lab,
                 md5,
                 alias,
                 uri,
@@ -772,8 +841,8 @@ def _main_generate(argv: Sequence[str]) -> int:
             ]
         else:
             row = [
-                args.award,
-                args.lab,
+                award,
+                lab,
                 md5,
                 alias,
                 uri,
@@ -823,36 +892,6 @@ def _main_generate(argv: Sequence[str]) -> int:
         ]
     )
 
-    submit_mode = _submission_igvf_mode(args.igvf_mode)
-    if submit_mode not in _DEFAULT_PORTAL_API_BY_MODE:
-        print(
-            f"error: submission requires igvf mode prod or staging (got {submit_mode!r}); "
-            "set -m prod or -m staging (or IGVF_MODE).",
-            file=sys.stderr,
-        )
-        return 1
-
-    print("\nreference_files resolution:")
-    print(f"  ReferenceFile md5 search API: {portal_api}")
-    for line in ref_log:
-        print(f"  {line}")
-    print(f"  matrix_file & tabular_file reference_files -> {','.join(ref_files)}")
-
-    try:
-        from igvf_utils.connection import Connection
-    except ImportError as exc:
-        print(
-            f"error: portal sync requires igvf_utils (Connection). {exc}",
-            file=sys.stderr,
-        )
-        return 1
-
-    conn = Connection(
-        igvf_mode=submit_mode,
-        dry_run=args.dry_run,
-        submission=False,
-        no_log_file=False,
-    )
     target_fs = _resolve_file_set_accession(conn, args.file_set)
     on_set_index, index_logs, missing_md5_accs = _index_md5_for_file_set(conn, target_fs)
     source_md5_set: Set[str] = {md5 for _, md5, _, _ in artifacts}
