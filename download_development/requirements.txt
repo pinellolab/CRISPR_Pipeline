@@ -20,7 +20,7 @@ python-dateutil==2.9.0.post0
 pytz==2025.2
 PyYAML==6.0.2
 requests==2.32.4
-rsa==4.9.1
+rsa==4.7.2
 six==1.17.0
 tqdm==4.67.1
 tzdata==2025.2
