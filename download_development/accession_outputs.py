@@ -370,6 +370,36 @@ def _resolve_award_and_lab(conn: Any, file_set_ref: str) -> Tuple[str, str]:
     return award, lab
 
 
+def _patch_uniform_pipeline_status_completed(conn: Any, file_set_ref: str, *, dry_run: bool) -> None:
+    """
+    PATCH the target analysis set with uniform_pipeline_status=completed.
+    """
+    rec = conn.get(rec_ids=file_set_ref.strip(), ignore404=False, database=True, frame="object")
+    rec_id = rec.get("@id")
+    if not rec_id:
+        raise SystemExit(
+            f"Could not determine @id for analysis set {file_set_ref!r} for status patch."
+        )
+    if dry_run:
+        print(
+            f"[dry-run] Would patch {rec_id} with uniform_pipeline_status='completed'.",
+            flush=True,
+        )
+        return
+    conn.set_submission(True)
+    conn.patch(
+        {
+            conn.IGVFID_KEY: rec_id,
+            "uniform_pipeline_status": "completed",
+        },
+        extend_array_values=False,
+    )
+    print(
+        f"Patched {rec_id} with uniform_pipeline_status='completed'.",
+        flush=True,
+    )
+
+
 def _search_files_by_md5(conn: Any, md5_hex: str) -> List[dict]:
     return conn.search([("type", "File"), ("md5sum", md5_hex)])
 
@@ -944,6 +974,14 @@ def _main_generate(argv: Sequence[str]) -> int:
 
     if not post_matrix_rows and not post_tabular_rows:
         print("\nNo new File records to POST (all md5s already on analysis set).", flush=True)
+        try:
+            _patch_uniform_pipeline_status_completed(conn, args.file_set, dry_run=args.dry_run)
+        except Exception as exc:
+            print(
+                f"error: failed to patch uniform_pipeline_status on {args.file_set!r}: {exc}",
+                file=sys.stderr,
+            )
+            return 1
         return 0
 
     with tempfile.TemporaryDirectory(prefix="igvf_register_") as tmp:
@@ -985,7 +1023,17 @@ def _main_generate(argv: Sequence[str]) -> int:
                 dry_run=args.dry_run,
                 no_upload_file=args.no_upload_file,
             )
-        return rc
+        if rc != 0:
+            return rc
+        try:
+            _patch_uniform_pipeline_status_completed(conn, args.file_set, dry_run=args.dry_run)
+        except Exception as exc:
+            print(
+                f"error: failed to patch uniform_pipeline_status on {args.file_set!r}: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+        return 0
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
