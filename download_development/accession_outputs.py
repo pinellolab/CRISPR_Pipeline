@@ -10,13 +10,14 @@ Schemas follow igvfd (matrix_file, tabular_file). Content types match portal enu
   - *per_guide*.tsv.gz -> tabular_file, "differential guide quantifications"
   - *per_element*.tsv.gz -> tabular_file, "differential element quantifications"
 
-reference_files are derived from the portal ``ReferenceFile`` record for the pipeline
-transcriptome index. The script md5-hashes
-``downloadreference/transcriptome_index.idx`` (relative to the run prefix), requires
-**exactly one** portal ``ReferenceFile`` with that ``md5sum``, then uses that object's
-``derived_from`` references as the submitted ``reference_files`` values.
+reference_files are resolved from the pipeline params and portal metadata:
+  - if ``pipeline_info/params*.json`` says ``use_igvf_reference=true`` (default),
+    the script uses IGVF reference ``IGVFFI9561BASO`` and submits its
+    ``derived_from`` values as ``reference_files``
+  - if ``use_igvf_reference`` is false, pass ``--reference-files`` explicitly
+    (comma-separated accessions or aliases)
 
-ReferenceFile md5 searches use the same API host as submissions: ``-m prod`` →
+ReferenceFile lookups use the same API host as submissions: ``-m prod`` →
 ``api.data.igvf.org``, ``-m staging`` → ``api.staging.igvf.org`` (or ``IGVF_MODE``
 when ``-m`` is omitted). Override only if needed with ``--portal-api``.
 
@@ -213,6 +214,21 @@ def _md5_for_uri(uri: str, use_gsutil_hash: bool) -> str:
     return md5
 
 
+def _run_gsutil_cat(uri: str) -> str:
+    proc = subprocess.run(
+        ["gsutil", "cat", uri],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"gsutil cat failed for {uri!r} ({proc.returncode}): "
+            f"{proc.stderr.strip() or proc.stdout.strip()}"
+        )
+    return proc.stdout
+
+
 def _search_reference_files_by_md5(api_base: str, md5_hex: str) -> List[str]:
     """
     Query IGVF search for ReferenceFile items with the given md5sum.
@@ -259,47 +275,10 @@ def _get_reference_file_object(api_base: str, ref_accession: str) -> Dict[str, A
     return payload
 
 
-def _resolve_reference_files(
-    gs_prefix: str,
-    use_gsutil_hash: bool,
-    api_base: str,
-    idx_suffix: str,
-) -> Tuple[List[str], List[str]]:
-    """
-    Returns reference_files and log lines.
-    Resolves transcriptome index via md5, then uses that ReferenceFile's
-    ``derived_from`` values as ``reference_files``.
-    """
-    base = gs_prefix.rstrip("/")
-    idx_uri = f"{base}/{idx_suffix.lstrip('/')}"
-    log: List[str] = []
-    try:
-        md5 = _md5_for_uri(idx_uri, use_gsutil_hash)
-    except Exception as exc:
-        raise RuntimeError(
-            f"Could not md5 transcriptome index at {idx_uri!r}: {exc}"
-        ) from exc
-
-    hits = _search_reference_files_by_md5(api_base, md5)
-    log.append(
-        f"transcriptome index md5={md5} (from {idx_uri!r}) -> "
-        f"{hits if hits else 'no portal ReferenceFile match'}"
-    )
-
-    if len(hits) == 0:
-        raise RuntimeError(
-            f"No IGVF ReferenceFile with md5sum={md5} for transcriptome index {idx_uri!r}. "
-            f"Searched {api_base!r}. Register the index on the portal or fix --portal-api / paths."
-        )
-    if len(hits) > 1:
-        raise RuntimeError(
-            f"Multiple ReferenceFiles match transcriptome index md5sum={md5}: {hits!r}. "
-            "Expected exactly one; resolve on the portal before submitting."
-        )
-
-    transcriptome_index_acc = hits[0]
-    transcriptome_idx_obj = _get_reference_file_object(api_base, transcriptome_index_acc)
-    derived_from_raw = transcriptome_idx_obj.get("derived_from") or []
+def _derived_from_reference(api_base: str, ref_identifier: str) -> Tuple[str, List[str]]:
+    ref_obj = _get_reference_file_object(api_base, ref_identifier)
+    ref_acc = ref_obj.get("accession") or ref_identifier
+    derived_from_raw = ref_obj.get("derived_from") or []
     derived_from_accs: List[str] = []
     for item in derived_from_raw:
         acc = _normalize_link_identifier(item)
@@ -307,14 +286,89 @@ def _resolve_reference_files(
             derived_from_accs.append(acc)
     if len(derived_from_accs) < 2:
         raise RuntimeError(
-            f"ReferenceFile {transcriptome_index_acc!r} matched by transcriptome index md5 "
-            f"has insufficient derived_from entries for reference_files: {derived_from_raw!r}"
+            f"ReferenceFile {ref_acc!r} has insufficient derived_from entries "
+            f"for reference_files: {derived_from_raw!r}"
         )
-    log.append(
-        f"transcriptome index ReferenceFile {transcriptome_index_acc} derived_from -> "
-        f"{','.join(derived_from_accs)}"
-    )
-    return derived_from_accs, log
+    return ref_acc, derived_from_accs
+
+
+def _parse_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "y"}:
+            return True
+        if lowered in {"false", "0", "no", "n"}:
+            return False
+    raise RuntimeError(f"Expected boolean for use_igvf_reference, got {value!r}")
+
+
+def _detect_use_igvf_reference(gs_prefix: str) -> Tuple[bool, str]:
+    base = gs_prefix.rstrip("/")
+    params_prefix = f"{base}/pipeline_info/"
+    params_candidates = [
+        u
+        for u in _run_gsutil_ls(params_prefix)
+        if not u.endswith("/") and "/params" in u and u.endswith(".json")
+    ]
+    if not params_candidates:
+        raise RuntimeError(
+            f"Could not find pipeline params JSON under {params_prefix!r} "
+            "(expected pipeline_info/params*.json)."
+        )
+    params_uri = sorted(params_candidates)[-1]
+    try:
+        payload = json.loads(_run_gsutil_cat(params_uri))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid JSON in {params_uri!r}: {exc}") from exc
+    if "use_igvf_reference" not in payload:
+        raise RuntimeError(
+            f"'use_igvf_reference' missing in pipeline params file {params_uri!r}"
+        )
+    return _parse_bool(payload["use_igvf_reference"]), params_uri
+
+
+def _resolve_reference_files(
+    gs_prefix: str,
+    api_base: str,
+    reference_files_arg: str,
+) -> Tuple[List[str], List[str]]:
+    """
+    Returns reference_files and log lines.
+    Uses pipeline params to determine whether to use the IGVF default reference
+    or require explicit --reference-files.
+    """
+    log: List[str] = []
+    use_igvf_reference, params_uri = _detect_use_igvf_reference(gs_prefix)
+    log.append(f"pipeline params: {params_uri}")
+    log.append(f"use_igvf_reference={use_igvf_reference}")
+
+    if use_igvf_reference:
+        ref_seed = reference_files_arg.strip() if reference_files_arg.strip() else "IGVFFI9561BASO"
+        ref_acc, derived_from_accs = _derived_from_reference(api_base, ref_seed)
+        log.append(
+            f"use_igvf_reference=true -> ReferenceFile {ref_acc} derived_from -> "
+            f"{','.join(derived_from_accs)}"
+        )
+        return derived_from_accs, log
+
+    raw = [x.strip() for x in reference_files_arg.split(",") if x.strip()]
+    if not raw:
+        raise RuntimeError(
+            "Pipeline params set use_igvf_reference=false; --reference-files is required."
+        )
+    normalized = [_normalize_link_identifier(x) for x in raw]
+    out: List[str] = []
+    for item in normalized:
+        if item and item not in out:
+            out.append(item)
+    if not out:
+        raise RuntimeError(
+            "No valid values parsed from --reference-files; provide comma-separated accessions/aliases."
+        )
+    log.append(f"use_igvf_reference=false -> using --reference-files: {','.join(out)}")
+    return out, log
 
 
 # --- Re-upload (same analysis set, md5-matched File records) -----------------
@@ -732,6 +786,9 @@ def _main_generate(argv: Sequence[str]) -> int:
             "  python accession_outputs.py -m staging --analysis-set charles-gersbach:my_analysis_set "
             "--alias-prefix igvf:IGVFDS5057HJKP_uniform_perturb_seq_pipeline_ "
             "gs://my-bucket/pipeline_runs/run_01/\n\n"
+            "  python accession_outputs.py -m staging --analysis-set IGVFDS5057HJKP "
+            "--reference-files IGVFFI1234ABCD,IGVFFI5678EFGH "
+            "gs://my-bucket/pipeline_runs/run_01/\n\n"
             "Tip: add --reupload to push blobs onto existing File records only."
         ),
     )
@@ -740,7 +797,7 @@ def _main_generate(argv: Sequence[str]) -> int:
         "--igvf-mode",
         default=None,
         dest="igvf_mode",
-        help="Portal for ReferenceFile md5 search and for ``iu_register -m`` (prod or staging only). "
+        help="Portal for ReferenceFile lookup and for ``iu_register -m`` (prod or staging only). "
         "Default: IGVF_MODE env var, else staging.",
     )
     p.add_argument(
@@ -761,9 +818,11 @@ def _main_generate(argv: Sequence[str]) -> int:
         "same host as igvf_utils submissions).",
     )
     p.add_argument(
-        "--reference-index-suffix",
-        default="downloadreference/transcriptome_index.idx",
-        help="Path under the run prefix to the transcriptome index for md5 match (default: downloadreference/transcriptome_index.idx).",
+        "--reference-files",
+        default="",
+        help="Optional comma-separated reference file accessions/aliases. "
+        "If pipeline params set use_igvf_reference=true, defaults to IGVFFI9561BASO "
+        "(resolved to its derived_from values). If use_igvf_reference=false, this argument is required.",
     )
     p.add_argument(
         "--alias-prefix",
@@ -807,9 +866,8 @@ def _main_generate(argv: Sequence[str]) -> int:
     try:
         ref_files, ref_log = _resolve_reference_files(
             args.gs_prefix,
-            args.use_gsutil_hash,
             portal_api,
-            args.reference_index_suffix,
+            args.reference_files,
         )
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
