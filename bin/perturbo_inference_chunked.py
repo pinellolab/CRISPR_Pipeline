@@ -86,7 +86,13 @@ def build_perturbo_command(
 
 def run_command(cmd):
     print(f"Running: {' '.join(cmd)}")
-    subprocess.run(cmd, check=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.stdout:
+        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+    if result.returncode != 0:
+        if result.stderr:
+            print(result.stderr, end="" if result.stderr.endswith("\n") else "\n")
+        raise RuntimeError(f"Command failed with return code {result.returncode}")
 
 
 def combine_chunk_results(result_files, output_path):
@@ -130,16 +136,22 @@ def run_perturbo_chunked(
     Run PerTurbo inference on chunks of genes by calling perturbo_inference.py.
     """
 
-    perturbo_script = Path(__file__).with_name("perturbo_inference.py")
-    n_genes = get_gene_count(mdata_input_fp, gene_modality_name)
+    script_dir = Path(__file__).resolve().parent
+    perturbo_script = script_dir / "perturbo_inference.py"
 
+    n_genes = get_gene_count(mdata_input_fp, gene_modality_name)
     print(f"Starting chunked PerTurbo inference on {mdata_input_fp}...")
     print(f"Detected {n_genes} genes in modality '{gene_modality_name}'.")
 
     if not should_chunk(n_genes, chunk_size):
-        print(
-            "Gene count does not exceed chunk_size; running standard PerTurbo inference."
-        )
+        if chunk_size <= 0:
+            print(
+                f"Chunking disabled (chunk_size={chunk_size}); running standard PerTurbo inference."
+            )
+        else:
+            print(
+                f"Dataset has {n_genes} genes, which does not exceed chunk size {chunk_size}; running standard PerTurbo inference."
+            )
         run_command(
             build_perturbo_command(
                 perturbo_script=perturbo_script,

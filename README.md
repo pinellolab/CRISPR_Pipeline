@@ -1,9 +1,5 @@
-<h1>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/nf-core-crispr_logo_dark.png">
-    <img alt="nf-core/crispr" src="docs/images/nf-core-crispr_logo_light.png">
-  </picture>
-</h1>
+![Alt text](https://github.com/pinellolab/CRISPR_Pipeline/blob/main/images/crispr_pipeline.png)
+
 
 [![nf-test](https://img.shields.io/badge/unit_tests-nf--test-337ab7.svg)](https://www.nf-test.com)
 
@@ -106,8 +102,8 @@ Update the pipeline-specific parameters in the `params` section, for example:
     GUIDE_ASSIGNMENT_method = 'sceptre'
     GUIDE_ASSIGNMENT_capture_method = 'CROP-seq'
     GUIDE_ASSIGNMENT_cleanser_probability_threshold = 1
-    GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold = 'default'
-    GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep = 'default'
+    GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold = 0.8
+    GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep = 5
 
     INFERENCE_method = 'default' // sceptre or perturbo. Default will run sceptre and perturbo in cis and perturbo in trans (for elements and per guide)
     INFERENCE_target_guide_pairing_strategy = 'default'

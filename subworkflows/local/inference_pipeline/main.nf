@@ -66,7 +66,6 @@ workflow inference_pipeline {
     }
     else if (params.INFERENCE_method == "perturbo"){
         TestResults = inference_perturbo(mudata_input, params.INFERENCE_method)
-        TestResults = inference_perturbo(mudata_input, params.INFERENCE_method)
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {

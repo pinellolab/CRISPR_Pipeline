@@ -3,6 +3,7 @@
 import anndata as ad
 import argparse
 import os
+from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description='Process AnnData files and add batch information.')
@@ -40,9 +41,9 @@ def main():
     # Use concat_on_disk with the processed file paths
     print(f"Concatenating files: {processed_files}")
     combined_adata = ad.experimental.concat_on_disk(
-        processed_files, 
+        [Path(path) for path in processed_files],
         join='outer', 
-        out_file=args.output
+        out_file=Path(args.output)
     )
     
     if var_index_name:

@@ -61,7 +61,9 @@ def run_perturbo(
         raise ValueError("inference_type must be 'guide' or 'element'")
 
     guide_var = mdata["guide"].var
-    target_lookup = get_target_lookup(guide_var) if inference_type == "element" else None
+    target_lookup = (
+        get_target_lookup(guide_var) if inference_type == "element" else None
+    )
 
     control_guide_filter = pd.Series(False, index=guide_var.index)
     if "targeting" in guide_var.columns:
@@ -131,7 +133,9 @@ def run_perturbo(
             raise ValueError("pairs_to_test must be a DataFrame or dictionary")
 
         if element_key not in pairs_to_test_df.columns:
-            pairs_to_test_df = enrich_pairs_with_target_metadata(pairs_to_test_df, guide_var)
+            pairs_to_test_df = enrich_pairs_with_target_metadata(
+                pairs_to_test_df, guide_var
+            )
 
         aggregated_df = (
             pairs_to_test_df[["gene_id", element_key]].drop_duplicates().assign(value=1)

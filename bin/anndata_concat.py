@@ -7,6 +7,7 @@ import re
 import anndata as ad
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 
 def extract_batch_num(filename):
@@ -207,7 +208,10 @@ def main():
     print(f"Concatenating files: {processed_files}")
     index_unique = None if bc_replacement else "_"
     combined_adata = ad.experimental.concat_on_disk(
-        processed_files, join="outer", index_unique=index_unique, out_file=args.output
+        [Path(path) for path in processed_files],
+        join="outer",
+        index_unique=index_unique,
+        out_file=Path(args.output)
     )
 
     if var_index_name or bc_replacement:

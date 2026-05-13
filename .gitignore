@@ -19,8 +19,12 @@ GCP_user_notebook.ipynb
 GCP_user_notebook.ipynb
 *.pyc
 __pycache__/
-__pycache__/
 .DS_Store
+sample_metadata*
+.params_*.json
+.qc_sweep_tui_state*.json
+run_configs/
+run_logs/
 sample_metadata*
 run_configs/qc_sweep_jesse/barcode_filter_knee.config
 run_configs/qc_sweep_jesse/barcode_filter_knee2.config

@@ -109,7 +109,6 @@ def merge_guide_metadata(guide_var, guide_metadata):
 
     return merged_guide_var
 
-
 def _assert_unique_obs_names(adata, label):
     if adata.obs_names.is_unique:
         return
