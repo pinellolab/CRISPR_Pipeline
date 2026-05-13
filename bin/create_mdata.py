@@ -109,6 +109,25 @@ def merge_guide_metadata(guide_var, guide_metadata):
 
     return merged_guide_var
 
+
+def _assert_unique_obs_names(adata, label):
+    if adata.obs_names.is_unique:
+        return
+    duplicates = adata.obs_names[adata.obs_names.duplicated()].unique().tolist()
+    raise ValueError(
+        f"{label} AnnData contains duplicate cell barcodes. "
+        "Cannot safely align modalities by barcode. Duplicate examples: "
+        + ", ".join(map(str, duplicates[:10]))
+    )
+
+
+def _barcode_intersection(*indices):
+    common = set(map(str, indices[0]))
+    for idx in indices[1:]:
+        common &= set(map(str, idx))
+    return sorted(common)
+
+
 def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata_hashing=None, debug_var=False):
     # Load the data
     guide_metadata = pd.read_csv(guide_metadata, sep='\t')
@@ -153,6 +172,11 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
 
     if adata_hashing is not None:
         adata_hashing = ad.read_h5ad(adata_hashing)
+
+    _assert_unique_obs_names(adata_rna, "gene")
+    _assert_unique_obs_names(adata_guide, "guide")
+    if adata_hashing is not None:
+        _assert_unique_obs_names(adata_hashing, "hashing")
 
     ## change in adata_guide
     # adding var for guide
@@ -276,14 +300,20 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
     plt.savefig("figures/knee_plot_guide.png")
 
     # Find the intersection of barcodes between scRNA and guide data
-    intersecting_barcodes = list(
-        set(adata_rna.obs_names).intersection(adata_guide.obs_names)
+    intersecting_barcodes = _barcode_intersection(
+        adata_rna.obs_names, adata_guide.obs_names
     )
 
     # Include hashing barcodes if provided
     if adata_hashing is not None:
-        intersecting_barcodes = list(
-            set(intersecting_barcodes).intersection(adata_hashing.obs_names)
+        intersecting_barcodes = _barcode_intersection(
+            intersecting_barcodes, adata_hashing.obs_names
+        )
+
+    if len(intersecting_barcodes) == 0:
+        raise ValueError(
+            "No shared cell barcodes found between gene and guide modalities. "
+            "Check barcode replacement and sample-level barcode naming."
         )
 
     # Create MuData with conditional hashing modality
@@ -294,6 +324,17 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
 
     if adata_hashing is not None:
         mudata_dict["hashing"] = adata_hashing[intersecting_barcodes, :].copy()
+
+    if not mudata_dict["gene"].obs_names.equals(mudata_dict["guide"].obs_names):
+        raise ValueError(
+            "Gene and guide modalities are not aligned after barcode intersection."
+        )
+    if adata_hashing is not None and not mudata_dict["gene"].obs_names.equals(
+        mudata_dict["hashing"].obs_names
+    ):
+        raise ValueError(
+            "Gene and hashing modalities are not aligned after barcode intersection."
+        )
 
     mdata = MuData(mudata_dict)
 
