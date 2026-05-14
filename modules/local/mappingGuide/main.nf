@@ -38,21 +38,45 @@ process mappingGuide {
         RAW_CHEM=\$(extract_parsed_seqspec.py --file ${parsed_seqSpec_file})
         WORKFLOW="kite"
         
-        # 2. Apply Spacer Logic (Modify Chemistry) if needed
-        # Logic: If spacer exists, take the 3rd part of the string (transcript),
-        # and set its 2nd and 3rd values to 0.
-        # Ex: 0,0,16:0,16,26:1,20,30 -> 0,0,16:0,16,26:1,0,0
+        # 2. Apply Spacer Logic (Modify Chemistry) if needed.
+        # If spacer exists, take the feature/guide part of the parsed chemistry,
+        # preserve its read id, and set its start/end to 0.
+        # Ex: 0,0,16:0,16,26:0,37,58 -> 0,0,16:0,16,26:0,0,0
+        #     0,0,16:0,16,26:1,20,30 -> 0,0,16:0,16,26:1,0,0
         
         if [ "${has_spacer}" == "true" ]; then
-            echo "Spacer detected ('${spacer_tag}'). Modifying chemistry..."
+            echo "Spacer tag detected ('${spacer_tag}'). Enabling automatic guide whole-read search."
+            echo "The guide feature read is preserved from the parsed seqspec chemistry; only feature start/end are reset to 0,0."
+            echo "Parsed guide chemistry: \$RAW_CHEM"
             CHEM=\$(echo "\$RAW_CHEM" | awk -F: 'BEGIN{OFS=":"} {
-                split(\$3, t, ","); 
-                t[1]=t[1] || "1";
-                t[2]=0; 
-                t[3]=0; 
-                \$3=t[1]","t[2]","t[3]; 
-                print 
+                if (NF >= 3) {
+                    split(\$3, t, ",");
+                    guide_read=t[1];
+                    if (guide_read !~ /^[01]\$/) {
+                        print "Could not infer guide feature read from parsed chemistry: " \$0 > "/dev/stderr";
+                        exit 1;
+                    }
+                    \$3=guide_read",0,0";
+                    print;
+                    next;
+                }
+                if (NF == 2) {
+                    n=split(\$2, t, ",");
+                    if (n == 6) {
+                        guide_read=t[4];
+                        if (guide_read !~ /^[01]\$/) {
+                            print "Could not infer guide feature read from parsed chemistry: " \$0 > "/dev/stderr";
+                            exit 1;
+                        }
+                        \$2=t[1]","t[2]","t[3]":"guide_read",0,0";
+                        print;
+                        next;
+                    }
+                }
+                print "Expected parsed chemistry in cb:umi:feature form, got: " \$0 > "/dev/stderr";
+                exit 1;
             }')
+            echo "Spacer-adjusted guide chemistry: \$CHEM"
         else
             CHEM="\$RAW_CHEM"
         fi
