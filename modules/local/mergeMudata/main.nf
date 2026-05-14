@@ -1,7 +1,14 @@
 process mergeMudata {
     cache 'lenient'
     debug true
-    publishDir "${params.outdir}", mode: 'copy', overwrite: true
+    publishDir path: {
+        def out = params.outdir?.toString() ?: './pipeline_outputs'
+        out = out.replaceAll('/$','')
+        if (out == 'pipeline_outputs' || out.endsWith('/pipeline_outputs')) {
+            return out
+        }
+        return "${out}/pipeline_outputs"
+    }, mode: 'copy', overwrite: true
 
     input:
         path cis_per_guide
@@ -12,10 +19,10 @@ process mergeMudata {
 
     output:
         path "inference_mudata.h5mu", emit: inference_mudata
-        path "cis_per_guide_results.tsv.gz", emit: cis_per_guide_results
-        path "cis_per_element_results.tsv.gz", emit: cis_per_element_results
-        path "trans_per_guide_results.tsv.gz", emit: trans_per_guide_results
-        path "trans_per_element_results.tsv.gz", emit: trans_per_element_results
+        path "cis_per_guide_output.tsv.gz", emit: cis_per_guide_output
+        path "cis_per_element_output.tsv.gz", emit: cis_per_element_output
+        path "trans_per_guide_output.tsv.gz", emit: trans_per_guide_output
+        path "trans_per_element_output.tsv.gz", emit: trans_per_element_output
 
     script:
     """

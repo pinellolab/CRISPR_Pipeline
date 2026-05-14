@@ -53,13 +53,27 @@ workflow PIPELINE_INITIALISATION {
     )
 
     //
+    // Copy the original samplesheet resolved from params/profile configuration
+    //
+    if (outdir && input) {
+        copyOriginalSamplesheet(outdir, input)
+    }
+
+    //
     // Create channel from input file provided through params.input
     //
 
+    samplesheet_sep = detectSamplesheetSeparator(input)
+
     Channel
         .fromPath(params.input)
-        .splitCsv(header: true, strip: true)
+        .splitCsv(header: true, strip: true, sep: samplesheet_sep)
+        .filter { row ->
+            row.values().any { value -> value != null && value.toString().trim() }
+        }
         .map { row ->
+            validateSamplesheetRow(row)
+
             // Create a meta object with all required information
             def meta = [
                 id: "sample_${row.file_modality}_${row.measurement_sets}",
@@ -140,6 +154,7 @@ workflow PIPELINE_COMPLETION {
         }
 
         completionSummary(monochrome_logs)
+        copyNextflowLog(outdir)
         if (hook_url) {
             imNotification(summary_params, hook_url)
         }
@@ -148,6 +163,36 @@ workflow PIPELINE_COMPLETION {
     workflow.onError {
         log.error "Pipeline failed. Please refer to troubleshooting docs: https://nf-co.re/docs/usage/troubleshooting"
     }
+}
+
+//
+// Copy the run log to the pipeline output directory
+//
+def copyNextflowLog(outdir) {
+    def log_file = new File(workflow.launchDir.toString(), '.nextflow.log')
+    if (!log_file.exists()) {
+        log.warn("No .nextflow.log file found in ${workflow.launchDir}; skipping log export.")
+        return null
+    }
+
+    nextflow.extension.FilesEx.copyTo(log_file.toPath(), "${outdir}/pipeline_info/nextflow.log")
+}
+
+//
+// Copy the original samplesheet after profile/config resolution
+//
+def copyOriginalSamplesheet(outdir, input) {
+    def samplesheet = file(input)
+    if (!samplesheet.exists()) {
+        log.warn("Original samplesheet '${input}' was not found; skipping samplesheet export.")
+        return null
+    }
+
+    def samplesheet_path = samplesheet instanceof java.nio.file.Path ? samplesheet : samplesheet.toPath()
+    def name = samplesheet_path.getFileName().toString()
+    def dot_index = name.lastIndexOf('.')
+    def suffix = dot_index >= 0 ? name.substring(dot_index) : ''
+    nextflow.extension.FilesEx.copyTo(samplesheet_path, "${outdir}/pipeline_info/original_samplesheet${suffix}")
 }
 
 /*
@@ -169,6 +214,46 @@ def validateInputSamplesheet(input) {
     }
 
     return [ metas[0], fastqs ]
+}
+
+//
+// Detect whether the samplesheet is comma- or tab-separated.
+//
+def detectSamplesheetSeparator(input) {
+    def input_file = file(input)
+    def header = input_file.text.readLines().find { line -> line?.trim() }
+
+    if (header?.contains('\t')) {
+        return '\t'
+    }
+    return ','
+}
+
+//
+// Validate required samplesheet columns before constructing metadata.
+//
+def validateSamplesheetRow(row) {
+    def required_columns = [
+        'R1_path',
+        'file_modality',
+        'measurement_sets',
+        'sequencing_run',
+        'lane',
+        'seqspec',
+        'barcode_onlist',
+        'guide_design'
+    ]
+    def missing_columns = required_columns.findAll { column -> !row.containsKey(column) }
+    if (missing_columns) {
+        error("Input samplesheet is missing required column(s): ${missing_columns.join(', ')}. Check that the file is comma- or tab-delimited and has the expected header.")
+    }
+
+    def missing_values = required_columns.findAll { column -> !row[column]?.toString()?.trim() }
+    if (missing_values) {
+        error("Input samplesheet row is missing required value(s): ${missing_values.join(', ')}. Row: ${row}")
+    }
+
+    return true
 }
 //
 // Generate methods description for MultiQC

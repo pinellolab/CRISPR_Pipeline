@@ -15,10 +15,10 @@ process publishFiles {
         path trans_per_guide_results
 
     output:
-        path "cis_per_element_results.tsv.gz"
-        path "cis_per_guide_results.tsv.gz"
-        path "trans_per_element_results.tsv.gz"
-        path "trans_per_guide_results.tsv.gz"
+        path "cis_per_element_output.tsv.gz"
+        path "cis_per_guide_output.tsv.gz"
+        path "trans_per_element_output.tsv.gz"
+        path "trans_per_guide_output.tsv.gz"
 
     script:
     """
@@ -32,10 +32,10 @@ process publishFiles {
         done
 
         # Copy to create actual files from symlinks
-        cp "${cis_per_element_results}" cis_per_element_results.tsv.gz
-        cp "${cis_per_guide_results}" cis_per_guide_results.tsv.gz
-        cp "${trans_per_element_results}" trans_per_element_results.tsv.gz
-        cp "${trans_per_guide_results}" trans_per_guide_results.tsv.gz
+        cp "${cis_per_element_results}" cis_per_element_output.tsv.gz
+        cp "${cis_per_guide_results}" cis_per_guide_output.tsv.gz
+        cp "${trans_per_element_results}" trans_per_element_output.tsv.gz
+        cp "${trans_per_guide_results}" trans_per_guide_output.tsv.gz
 
         echo "All files copied and ready for publishing"
     """

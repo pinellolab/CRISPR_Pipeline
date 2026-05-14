@@ -231,38 +231,34 @@ containers {
 
 ## Output Description
 
-The output files will be generated in the `pipeline_outputs` and `pipeline_dashboard` directory.
+All paths below are relative to the directory supplied with `--outdir`.
 
-### Generated Files
+Final inference artifacts are written once, under `pipeline_outputs/`. The dashboard directory is visualization-only and does not contain duplicate copies of `inference_mudata.h5mu` or the cis/trans TSV outputs.
 
-Within the `pipeline_outputs` directory, you will find:
+### Final inference outputs
 
-- inference_mudata.h5mu - MuData format output
-- per_element_output.tsv - Per-element analysis
-- per_guide_output.tsv - Per-guide analysis
-
-**Structure:**
-
-
-# 📁 `pipeline_outputs/` — README
-
-This folder contains the tabular results produced by the CRISPR inference pipeline.  
-All result files are `tsv.gz` (tab-separated, gzip-compressed) unless noted otherwise.
-
----
-
-## 🧬 Cis analysis
-
-### Files
+Within `pipeline_outputs/`, you will find:
 
 | File | Description |
 |---|---|
-| `cis_per_guide_results.tsv.gz` | Inference results for **cis** guide--gene pairs with guides tested **independently**. |
-| `cis_per_element_results.tsv.gz` | Inference results for **cis** element--gene pairs with guides grouped by `(intended_target_name, intended_target_chr, intended_target_start, intended_target_end)`. |
+| `inference_mudata.h5mu` | Final MuData object containing processed modalities and inference results. |
+| `cis_per_element_output.tsv.gz` | Cis element-level inference results. |
+| `cis_per_guide_output.tsv.gz` | Cis guide-level inference results. |
+| `trans_per_element_output.tsv.gz` | Trans element-level inference results. |
+| `trans_per_guide_output.tsv.gz` | Trans guide-level inference results. |
 
-### Schema
+All result tables are tab-separated and gzip-compressed.
 
-#### `cis_per_guide_results.tsv.gz`
+### Cis analysis
+
+The cis outputs report guide-gene or target-element-gene tests restricted to the configured cis pairing strategy.
+
+| File | Description |
+|---|---|
+| `cis_per_guide_output.tsv.gz` | Inference results for cis guide-gene pairs with guides tested independently. |
+| `cis_per_element_output.tsv.gz` | Inference results for cis element-gene pairs with guides grouped by intended target fields. |
+
+#### `cis_per_guide_output.tsv.gz`
 
 | Column | Description |
 |---|---|
@@ -273,7 +269,7 @@ All result files are `tsv.gz` (tab-separated, gzip-compressed) unless noted othe
 | `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
 
-#### `cis_per_element_results.tsv.gz`
+#### `cis_per_element_output.tsv.gz`
 
 | Column | Description |
 |---|---|
@@ -290,20 +286,16 @@ All result files are `tsv.gz` (tab-separated, gzip-compressed) unless noted othe
 `intended_target_name` for non-targeting controls is bucketed as `non-targeting|N` (for example, `non-targeting|1`).
 SCEPTRE outputs contain discovery-analysis results only (calibration-check rows are not exported).
 
----
+### Trans analysis
 
-## 🌐 Trans analysis
-
-### Files
+The trans outputs report PerTurbo all-by-all trans tests.
 
 | File | Description |
 |---|---|
-| `trans_per_guide_results.tsv.gz` | PerTurbo inference results for **all guide--gene pairs**, guides tested **independently**. |
-| `trans_per_element_results.tsv.gz` | PerTurbo inference results for **all element--gene pairs**, grouped by `(intended_target_name, intended_target_chr, intended_target_start, intended_target_end)`. |
+| `trans_per_guide_output.tsv.gz` | PerTurbo inference results for all guide-gene pairs, with guides tested independently. |
+| `trans_per_element_output.tsv.gz` | PerTurbo inference results for all element-gene pairs, grouped by intended target fields. |
 
-### Schema
-
-#### `trans_per_guide_results.tsv.gz`
+#### `trans_per_guide_output.tsv.gz`
 
 | Column | Description |
 |---|---|
@@ -312,7 +304,7 @@ SCEPTRE outputs contain discovery-analysis results only (calibration-check rows 
 | `log2_fc` | PerTurbo effect size (log2 fold-change) |
 | `p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
 
-#### `trans_per_element_results.tsv.gz`
+#### `trans_per_element_output.tsv.gz`
 
 | Column | Description |
 |---|---|
@@ -324,30 +316,15 @@ SCEPTRE outputs contain discovery-analysis results only (calibration-check rows 
 | `log2_fc` | PerTurbo effect size (log2 fold-change) |
 | `p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
 
----
-
-
-## Other files
-
-```
-   ├── per_element_output.tsv.gz : 
-   ├── per_guide_output.tsv.gz :
-
-
-   ├── perturbo_per_element_output.tsv :
-   ├── perturbo_per_guide_output.tsv :
-
-   ├── inference_mudata.h5mu :
-```
-
-
 For details, see our [documentation](https://docs.google.com/document/d/1Z1SOlekIE5uGyXW41XxnszxaYdSw0wdAOUVzfy3fj3M/edit?tab=t.0#heading=h.ctbx1w9hj619).
 
-### Generated Figures
+### Pipeline dashboard
+
+Within `pipeline_dashboard/`, you will find the interactive dashboard and supporting visualization files. A compressed copy of this directory is also written to the top level of `--outdir` as `pipeline_dashboard.tar.gz`.
+
+The dashboard directory and archive intentionally do not include `inference_mudata.h5mu`, `cis_per_element_output.tsv.gz`, `cis_per_guide_output.tsv.gz`, `trans_per_element_output.tsv.gz`, or `trans_per_guide_output.tsv.gz`; use the copies in `pipeline_outputs/` as the single source of final analysis outputs.
 
 The pipeline produces several figures:
-
-Within the `pipeline_dashboard` directory, you will find:
 
 1. **Evaluation Output**:
    - `network_plot.png`: Gene interaction networks visualization.
@@ -373,33 +350,37 @@ Within the `pipeline_dashboard` directory, you will find:
 
 **Structure:**
 ```
-📁 pipeline_dashboard/
-  ├── 📄 dashboard.html                         
+pipeline_dashboard/
+  ├── dashboard.html                         
   │
-  ├── 📁 evaluation_output/                      
-  │   ├── 🖼️ network_plot.png                   
-  │   ├── 🖼️ volcano_plot.png                  
-  │   ├── 📄 igv.bedgraph                     
-  │   └── 📄 igv.bedpe                         
+  ├── evaluation_output/                      
+  │   ├── network_plot.png                   
+  │   ├── volcano_plot.png                  
+  │   ├── igv.bedgraph                     
+  │   └── igv.bedpe                         
   │
-  ├── 📁 figures/
-  │   ├── 🖼️ knee_plot_scRNA.png                
-  │   ├── 🖼️ scatterplot_scrna.png              
-  │   ├── 🖼️ violin_plot.png                    
-  │   ├── 🖼️ scRNA_barcodes_UMI_thresholds.png  
-  │   ├── 🖼️ guides_per_cell_histogram.png      
-  │   ├── 🖼️ cells_per_guide_histogram.png      
-  │   ├── 🖼️ guides_UMI_thresholds.png          
-  │   ├── 🖼️ cells_per_htp_barplot.png          
-  │   ├── 🖼️ umap_hto.png                       
-  │   └── 🖼️ umap_hto_singlets.png              
+  ├── figures/
+  │   ├── knee_plot_scRNA.png                
+  │   ├── scatterplot_scrna.png              
+  │   ├── violin_plot.png                    
+  │   ├── scRNA_barcodes_UMI_thresholds.png  
+  │   ├── guides_per_cell_histogram.png      
+  │   ├── cells_per_guide_histogram.png      
+  │   ├── guides_UMI_thresholds.png          
+  │   ├── cells_per_htp_barplot.png          
+  │   ├── umap_hto.png                       
+  │   └── umap_hto_singlets.png              
   │
-  ├── 📁 guide_seqSpec_plots/
-  │   └── 🖼️ seqSpec_check_plots.png            
+  ├── guide_seqSpec_plots/
+  │   └── seqSpec_check_plots.png            
   │
-  └── 📁 hashing_seqSpec_plots/
-      └── 🖼️ seqSpec_check_plots.png             
+  └── hashing_seqSpec_plots/
+      └── seqSpec_check_plots.png             
 ```
+
+### Pipeline metadata
+
+`pipeline_info/` contains run metadata for reproducibility, including the resolved `nextflow.config`, `nextflow.log`, timestamped `params_*.json`, software versions, and the original samplesheet copied as `original_samplesheet.csv` or `original_samplesheet.tsv`. If the samplesheet path comes from a profile or config file, the copied file is taken from that resolved `params.input` value.
 
 ## Pipeline Testing Guide
 
@@ -517,9 +498,10 @@ This dataset comes from a large-scale CRISPR screen study published in Cell ([Ga
       ```
 
 ### Expected Outputs
-The pipeline generates two directories upon completion:
-- `pipeline_outputs`: Contains all analysis results
-- `pipeline_dashboard`: Houses interactive visualization reports
+The pipeline generates these outputs upon completion:
+- `pipeline_outputs`: Contains the final MuData file and cis/trans result tables
+- `pipeline_dashboard`: Houses interactive visualization reports and supporting assets only
+- `pipeline_dashboard.tar.gz`: Compressed archive of `pipeline_dashboard`
 
 ### Troubleshooting
 If you encounter any issues during testing:

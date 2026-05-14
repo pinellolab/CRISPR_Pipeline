@@ -21,6 +21,7 @@ process mappingGuide {
     script:
     def batch = meta.measurement_sets
     def fastq_files = reads.join(' ')
+    def counts_dir = "counts_unfiltered${params.replace_barcodes ? '_modified' : ''}"
     // Check if spacer is valid (not null/empty and length > 1)
     def has_spacer  = (spacer_tag && spacer_tag.length() > 1) ? "true" : "false"
 
@@ -82,5 +83,13 @@ process mappingGuide {
         -w ${barcode_file} \\
         \${replacement_args} \\
         ${fastq_files}
+
+    expected_h5ad="${batch}_ks_guide_out/${counts_dir}/adata.h5ad"
+    if [ ! -s "\${expected_h5ad}" ]; then
+        echo "ERROR: mappingGuide did not produce expected output: \${expected_h5ad}" >&2
+        echo "Output tree for ${batch}_ks_guide_out:" >&2
+        find "${batch}_ks_guide_out" -maxdepth 4 -type f -print >&2 || true
+        exit 1
+    fi
     """
 }

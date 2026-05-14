@@ -14,6 +14,8 @@ process downloadReference {
     script:
     def igvf_url = "https://api.data.igvf.org/reference-files/IGVFFI9561BASO/@@download/IGVFFI9561BASO.tar.gz"
 
+    
+
     if (use_igvf_reference) {
         """
         aria2c -x16 -s16 -k1M -o igvf_reference.tar.gz "${igvf_url}"

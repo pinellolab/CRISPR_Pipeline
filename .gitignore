@@ -79,3 +79,4 @@ run_logs/replacement_bar_bug_fixes_fresh2/qc_sweep_events.jsonl
 run_logs/replacement_bar_bug_fixes_fresh2/runs_manifest.tsv
 .params_*.json
 .qc_sweep_tui_state_repla*.json
+WORKLOG_*.md

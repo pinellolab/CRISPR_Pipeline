@@ -4,15 +4,11 @@ process createDashboard {
         def out = params.outdir?.toString() ?: './pipeline_outputs'
         out = out.replaceAll('/$','')
         return "${out}/pipeline_dashboard"
-    }, mode: 'copy'
+    }, mode: 'copy', saveAs: { filename -> filename == 'pipeline_dashboard.tar.gz' ? null : filename }
     publishDir path: {
         def out = params.outdir?.toString() ?: './pipeline_outputs'
-        out = out.replaceAll('/$','')
-        if (out == 'pipeline_outputs' || out.endsWith('/pipeline_outputs')) {
-            return out
-        }
-        return "${out}/pipeline_outputs"
-    }, mode: 'copy', overwrite: true, pattern: 'inference_mudata.h5mu'
+        return out.replaceAll('/$','')
+    }, mode: 'copy', overwrite: true, pattern: 'pipeline_dashboard.tar.gz'
 
     input:
         path guide_seqSpecCheck_plots
@@ -34,7 +30,8 @@ process createDashboard {
         
 
     output:
-        tuple path("evaluation_output"), path("figures"), path("guide_seqSpec_plots"), path("additional_qc"), path("dashboard.html"), path("svg"), path("inference_mudata.h5mu"), path("benchmark_output")
+        tuple path("evaluation_output"), path("figures"), path("guide_seqSpec_plots"), path("additional_qc"), path("dashboard.html"), path("svg"), path("benchmark_output")
+        path "pipeline_dashboard.tar.gz", emit: dashboard_archive
 
     script:
         """
@@ -72,10 +69,6 @@ process createDashboard {
         if [[ -L input_benchmark_output ]]; then
             cp -rL input_benchmark_output/* benchmark_output/ 2>/dev/null || true
         fi
-        if [[ -f input_mudata.h5mu ]]; then
-            cp -L input_mudata.h5mu inference_mudata.h5mu
-        fi
-
         if [[ -L input_controls_evaluation_output_dir ]]; then
             cp -rL input_controls_evaluation_output_dir/* evaluation_output/ 2>/dev/null || true
         fi
@@ -89,7 +82,12 @@ process createDashboard {
         create_dashboard_df.py --json_dir json_dir --guide_fq_tbl ${guide_fq_tbl} --mudata input_mudata.h5mu --gene_ann ${gene_ann} --gene_ann_filtered ${gene_ann_filtered} --guide_ann ${guide_ann} --params_dir ${params.outdir}/pipeline_info --additional_qc_dir additional_qc --benchmark_dir benchmark_output
         create_dashboard.py --input all_df.pkl
 
+        mkdir -p pipeline_dashboard
+        cp -R evaluation_output figures guide_seqSpec_plots additional_qc dashboard.html svg benchmark_output pipeline_dashboard/
+        tar -czf pipeline_dashboard.tar.gz pipeline_dashboard
+        rm -rf pipeline_dashboard
+
         echo "=== FINAL OUTPUT SIZES ==="
-        du -sh guide_seqSpec_plots figures evaluation_output svg additional_qc benchmark_output *.html *.h5mu 2>/dev/null || true
+        du -sh guide_seqSpec_plots figures evaluation_output svg additional_qc benchmark_output *.html pipeline_dashboard.tar.gz 2>/dev/null || true
         """
 }

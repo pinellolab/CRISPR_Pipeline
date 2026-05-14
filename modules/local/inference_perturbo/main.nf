@@ -8,7 +8,7 @@ process inference_perturbo {
             return out
         }
         return "${out}/pipeline_outputs"
-    }
+    }, enabled: { params.INFERENCE_method == 'perturbo' }
 
     input:
     path mudata

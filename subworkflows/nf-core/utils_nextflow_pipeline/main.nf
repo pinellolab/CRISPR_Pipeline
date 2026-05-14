@@ -26,10 +26,11 @@ workflow UTILS_NEXTFLOW_PIPELINE {
     }
 
     //
-    // Dump pipeline parameters to a JSON file
+    // Dump pipeline parameters and config to output files
     //
     if (dump_parameters && outdir) {
         dumpParametersToJSON(outdir)
+        copyRunConfig(outdir)
     }
 
     //
@@ -79,6 +80,20 @@ def dumpParametersToJSON(outdir) {
 
     nextflow.extension.FilesEx.copyTo(temp_pf.toPath(), "${outdir}/pipeline_info/params_${timestamp}.json")
     temp_pf.delete()
+}
+
+//
+// Copy the last config file loaded by Nextflow to the pipeline output directory
+//
+def copyRunConfig(outdir) {
+    if (!workflow.configFiles) {
+        log.warn("No Nextflow config files were reported for this run; skipping config export.")
+        return null
+    }
+
+    def config_file = workflow.configFiles[-1]
+    def config_path = config_file instanceof java.nio.file.Path ? config_file : file(config_file).toPath()
+    nextflow.extension.FilesEx.copyTo(config_path, "${outdir}/pipeline_info/nextflow.config")
 }
 
 //
