@@ -4,11 +4,15 @@ process createDashboard {
         def out = params.outdir?.toString() ?: './pipeline_outputs'
         out = out.replaceAll('/$','')
         return "${out}/pipeline_dashboard"
-    }, mode: 'copy', saveAs: { filename -> filename == 'pipeline_dashboard.tar.gz' ? null : filename }
+    }, mode: 'copy', saveAs: { filename -> filename in ['pipeline_dashboard.tar.gz', 'pipeline_qc_metrics.json'] ? null : filename }
     publishDir path: {
         def out = params.outdir?.toString() ?: './pipeline_outputs'
         return out.replaceAll('/$','')
     }, mode: 'copy', overwrite: true, pattern: 'pipeline_dashboard.tar.gz'
+    publishDir path: {
+        def out = params.outdir?.toString() ?: './pipeline_outputs'
+        return out.replaceAll('/$','')
+    }, mode: 'copy', overwrite: true, pattern: 'pipeline_qc_metrics.json'
 
     input:
         path guide_seqSpecCheck_plots
@@ -32,9 +36,15 @@ process createDashboard {
     output:
         tuple path("evaluation_output"), path("figures"), path("guide_seqSpec_plots"), path("additional_qc"), path("dashboard.html"), path("svg"), path("benchmark_output")
         path "pipeline_dashboard.tar.gz", emit: dashboard_archive
+        path "pipeline_qc_metrics.json", emit: qc_metrics_json
 
     script:
+        def dashboard_params_json = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(params))
         """
+        cat > dashboard_params.json <<'EOF_DASHBOARD_PARAMS'
+${dashboard_params_json}
+EOF_DASHBOARD_PARAMS
+
         echo "=== RENAMING INPUT DIRECTORIES ==="
         [[ -e guide_seqSpec_plots ]] && mv guide_seqSpec_plots input_guide_seqSpec_plots
         [[ -e figures ]] && mv figures input_figures
@@ -79,7 +89,7 @@ process createDashboard {
         # Run scripts using the renamed input files
         process_json.py --output_dir json_dir
         create_dashboard_plots.py --mudata input_mudata.h5mu --output_dir figures
-        create_dashboard_df.py --json_dir json_dir --guide_fq_tbl ${guide_fq_tbl} --mudata input_mudata.h5mu --gene_ann ${gene_ann} --gene_ann_filtered ${gene_ann_filtered} --guide_ann ${guide_ann} --params_dir ${params.outdir}/pipeline_info --additional_qc_dir additional_qc --benchmark_dir benchmark_output
+        create_dashboard_df.py --json_dir json_dir --guide_fq_tbl ${guide_fq_tbl} --mudata input_mudata.h5mu --gene_ann ${gene_ann} --gene_ann_filtered ${gene_ann_filtered} --guide_ann ${guide_ann} --params_json dashboard_params.json --additional_qc_dir additional_qc --benchmark_dir benchmark_output --qc_metrics_json pipeline_qc_metrics.json
         create_dashboard.py --input all_df.pkl
 
         mkdir -p pipeline_dashboard
@@ -88,6 +98,6 @@ process createDashboard {
         rm -rf pipeline_dashboard
 
         echo "=== FINAL OUTPUT SIZES ==="
-        du -sh guide_seqSpec_plots figures evaluation_output svg additional_qc benchmark_output *.html pipeline_dashboard.tar.gz 2>/dev/null || true
+        du -sh guide_seqSpec_plots figures evaluation_output svg additional_qc benchmark_output *.html pipeline_dashboard.tar.gz pipeline_qc_metrics.json 2>/dev/null || true
         """
 }

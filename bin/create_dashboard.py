@@ -112,6 +112,7 @@ def generate_html_content(df, svg_mapping):
                 </div>
                 '''
             # Highlight values in value_display if highlighted is True
+            is_qc_report = 'qc-report' in str(row['value_display'])
             if row['highlighted']:
                 # Highlight numeric values and percentages
                 value_display_lines = re.sub(r'(\d+\.?\d*\w?%)', r'<span class="highlighted-value">\1</span>', row['value_display'])
@@ -119,7 +120,8 @@ def generate_html_content(df, svg_mapping):
             else:
                 value_display_lines = row['value_display']
 
-            value_display_lines = value_display_lines.replace(', ', '<br>')
+            if not is_qc_report:
+                value_display_lines = value_display_lines.replace(', ', '<br>')
 
             table_button_html = ''
             search_bar_html = ''
@@ -166,11 +168,14 @@ def generate_html_content(df, svg_mapping):
                     # Append the reset button HTML to the table HTML
                     table_html += reset_button_html
 
+            card_class = 'card qc-report-card' if is_qc_report else 'card'
+            value_tag = 'div' if is_qc_report else 'p'
+
             html += f'''
-                <div class="card" role="article" aria-labelledby="card-title-{j}">
+                <div class="{card_class}" role="article" aria-labelledby="card-title-{j}">
                     <h3 id="card-title-{j}">{row['subject']}</h3>
                     <p>{row['description']}</p>
-                    <p class="value-display {highlight_class}" aria-live="polite">{value_display_lines}</p>
+                    <{value_tag} class="value-display {highlight_class}" aria-live="polite">{value_display_lines}</{value_tag}>
                     {table_button_html}
                     {search_bar_html}
                     <div class="table-container" style="display: none;">

@@ -3,6 +3,7 @@
 import os
 import json
 import glob
+import html
 import pandas as pd
 import argparse
 import muon as mu
@@ -10,6 +11,7 @@ import anndata as ad
 import numpy as np
 import pickle
 from scipy import sparse
+from qc_metrics_json import write_pipeline_qc_metrics_json
 
 
 def human_format(num):
@@ -257,6 +259,7 @@ def _build_flow_html(
     sample_counts,
     concat_count,
     filter_count,
+    filter_info,
     filtered_count,
     guide_intersection_count,
     final_count,
@@ -285,6 +288,21 @@ def _build_flow_html(
         if qc_params.get(source_key) == "default":
             return f"{note}. Default assumed"
         return note
+
+    def barcode_filter_note():
+        threshold = (filter_info or {}).get("threshold")
+        knee_rank = (filter_info or {}).get("knee_rank")
+        if threshold is None:
+            return with_default(
+                "Knee based UMI threshold could not be determined",
+                "barcode_filter_source",
+            )
+
+        threshold_text = _format_count(round(float(threshold)))
+        note = f"Knee based UMI threshold: total_gene_umis >= {threshold_text}"
+        if knee_rank is not None:
+            note += f" at barcode rank {_format_count(knee_rank)}"
+        return with_default(note, "barcode_filter_source")
 
     steps = []
 
@@ -318,7 +336,7 @@ def _build_flow_html(
             f"Barcode filter ({barcode_filter})",
             count=filter_count,
             removed=removed(concat_count, filter_count),
-            note=with_default("Knee based UMI threshold", "barcode_filter_source"),
+            note=barcode_filter_note(),
         ))
     else:
         steps.append(step_html(
@@ -408,6 +426,462 @@ def _collect_images(base_dir, image_specs):
             images.append(fpath)
             descs.append(desc)
     return images, descs
+
+
+def _display(value, digits=1, suffix=""):
+    if value is None:
+        return "N/A"
+    try:
+        if pd.isna(value):
+            return "N/A"
+    except Exception:
+        pass
+    try:
+        numeric = float(value)
+    except Exception:
+        return html.escape(str(value))
+    if abs(numeric) >= 1000:
+        text = f"{numeric:,.0f}"
+    elif numeric.is_integer():
+        text = f"{numeric:.0f}"
+    else:
+        text = f"{numeric:.{digits}f}"
+    return f"{text}{suffix}"
+
+
+def _count_matrix_rows(matrix, threshold=0):
+    if hasattr(matrix, "getnnz") and threshold == 0:
+        values = matrix.getnnz(axis=1)
+    else:
+        values = (matrix > threshold).sum(axis=1)
+    return np.asarray(values).ravel()
+
+
+def _obs_less_than(adata, column, threshold):
+    if column not in adata.obs.columns:
+        return None
+    values = pd.to_numeric(adata.obs[column], errors="coerce")
+    return int((values < threshold).sum())
+
+
+def _tip(label, tip, code=False):
+    safe_tip = html.escape(str(tip), quote=True)
+    safe_label = html.escape(str(label))
+    content = f"<code>{safe_label}</code>" if code else safe_label
+    return (
+        f'<span class="qc-tip" tabindex="0" title="{safe_tip}" '
+        f'data-tip="{safe_tip}">{content}</span>'
+    )
+
+
+def _qc_kpi(label, value, note, state="info"):
+    return (
+        f'<div class="qc-kpi {state}">'
+        f"<span>{html.escape(str(label))}</span>"
+        f"<strong>{value}</strong>"
+        f"<small>{note}</small>"
+        "</div>"
+    )
+
+
+def _qc_metric(label, value, note):
+    return (
+        '<div class="qc-metric">'
+        f"<span>{html.escape(str(label))}</span>"
+        f"<strong>{value}</strong>"
+        f"<small>{note}</small>"
+        "</div>"
+    )
+
+
+def _qc_detail(label, value):
+    return (
+        '<div class="qc-detail">'
+        f"<span>{html.escape(str(label))}</span>"
+        f"<strong>{value}</strong>"
+        "</div>"
+    )
+
+
+def _qc_step(number, title, status, note, details, state=""):
+    details_html = "".join(_qc_detail(label, value) for label, value in details)
+    state_class = f" {state}" if state else ""
+    return (
+        f'<article class="qc-step{state_class}">'
+        f'<div class="qc-marker">{number}</div>'
+        '<div class="qc-step-body">'
+        '<div class="qc-step-title">'
+        f"<h5>{html.escape(str(title))}</h5>"
+        f'<span class="qc-status">{html.escape(str(status))}</span>'
+        "</div>"
+        f'<p class="qc-note">{note}</p>'
+        f'<div class="qc-step-details">{details_html}</div>'
+        "</div>"
+        "</article>"
+    )
+
+
+def _read_qc_metric_row(additional_qc_dir, subdir, filename):
+    if not additional_qc_dir:
+        return None, pd.DataFrame()
+    metrics = _safe_read_tsv(os.path.join(additional_qc_dir, subdir, filename))
+    return _get_all_row(metrics), metrics
+
+
+def _build_comprehensive_qc_report(
+    mudata,
+    gene_ann,
+    gene_filtered_ann,
+    guide_ann,
+    sample_counts,
+    filter_count,
+    filter_info,
+    qc_params,
+    additional_qc_dir=None,
+    params=None,
+    hashing_counts=None,
+):
+    params = params or {}
+    gene_mod = mudata.mod["gene"]
+    guide_mod = mudata.mod["guide"]
+    gene_row, _gene_metrics = _read_qc_metric_row(additional_qc_dir, "gene", "gene_metrics.tsv")
+    guide_row, _guide_metrics = _read_qc_metric_row(additional_qc_dir, "guide", "guide_metrics.tsv")
+    intended_row, _intended_metrics = _read_qc_metric_row(
+        additional_qc_dir, "intended_target", "intended_target_metrics.tsv"
+    )
+    trans_row, _trans_metrics = _read_qc_metric_row(additional_qc_dir, "trans", "trans_metrics.tsv")
+
+    threshold = (filter_info or {}).get("threshold")
+    knee_rank = (filter_info or {}).get("knee_rank")
+    threshold_display = _display(threshold, digits=0)
+    threshold_rule = (
+        _tip(f"total_gene_umis >= {threshold_display}", "Minimum total RNA UMI count selected from the barcode-rank curve.", code=True)
+        if threshold is not None
+        else "Not determined"
+    )
+
+    low_umi_100 = _obs_less_than(gene_mod, "total_gene_umis", 100)
+    low_umi_500 = _obs_less_than(gene_mod, "total_gene_umis", 500)
+    detected_genes = _count_matrix_rows(gene_mod.X, threshold=0)
+    no_signal = int((_count_matrix_rows(gene_mod.X, threshold=1) < 1).sum())
+    median_detected_genes = float(np.median(detected_genes)) if detected_genes.size else None
+
+    sample_total = sum(count for _, count in sample_counts) if sample_counts else None
+    concat_count = gene_ann.n_obs
+    filtered_count = gene_filtered_ann.n_obs
+    guide_intersection_count = len(set(gene_filtered_ann.obs_names).intersection(guide_ann.obs_names))
+    final_count = mudata.n_obs
+
+    def removed(prev, curr):
+        if prev is None or curr is None:
+            return "N/A"
+        return _format_count(max(int(prev) - int(curr), 0))
+
+    params_status = "Resolved params loaded" if qc_params.get("params_found") else "Using dashboard defaults"
+    params_state = "good" if qc_params.get("params_found") else "warn"
+    barcode_filter = qc_params.get("barcode_filter")
+    min_genes_note = (
+        "Skipped because barcode filtering is enabled"
+        if barcode_filter in {"knee", "knee2"}
+        else "Applied as the primary cell complexity filter"
+    )
+
+    guide_cells_with_guide = None
+    if guide_row is not None and "n_cells_with_guide" in guide_row:
+        guide_cells_with_guide = guide_row["n_cells_with_guide"]
+    frac_cells_with_guide = None
+    if guide_row is not None and "frac_cells_with_guide" in guide_row:
+        frac_cells_with_guide = guide_row["frac_cells_with_guide"] * 100
+
+    significant_trans = None
+    if trans_row is not None and "total_significant_tests" in trans_row:
+        significant_trans = trans_row["total_significant_tests"]
+
+    kpis = [
+        _qc_kpi("Final cells", _format_count(final_count), "Final MuData observations after all active filters.", "good"),
+        _qc_kpi(
+            "RNA barcode cutoff",
+            threshold_display,
+            f"{threshold_rule}, selected by {_tip(barcode_filter, 'Cell filtering mode from QC_barcode_filter.', code=True)}.",
+            "info",
+        ),
+        _qc_kpi(
+            "Median RNA UMIs",
+            _display(gene_row.get("umi_median") if gene_row is not None else None, digits=0),
+            "From additional_qc/gene/gene_metrics.tsv.",
+            "info",
+        ),
+        _qc_kpi(
+            "Cells with guide",
+            f"{_display(frac_cells_with_guide, digits=1, suffix='%')}",
+            f"{_display(guide_cells_with_guide, digits=0)} cells with at least one assigned guide.",
+            "good",
+        ),
+        _qc_kpi(
+            "Min genes rule",
+            "Skipped" if barcode_filter in {"knee", "knee2"} else _display(qc_params.get("min_genes"), digits=0),
+            f"{_tip('QC_min_genes_per_cell', 'Minimum detected genes per cell; only active when QC_barcode_filter is none.', code=True)}: {min_genes_note}.",
+            "warn" if barcode_filter in {"knee", "knee2"} else "good",
+        ),
+        _qc_kpi(
+            "Significant trans tests",
+            _display(significant_trans, digits=0),
+            "From additional_qc/trans/trans_metrics.tsv when inference results exist.",
+            "info",
+        ),
+    ]
+
+    sample_label = "Per-sample counts not found"
+    if sample_counts:
+        sample_label = "; ".join(
+            f"{html.escape(str(name))}: {_format_count(count)}" for name, count in sample_counts[:4]
+        )
+        if len(sample_counts) > 4:
+            sample_label += f"; +{len(sample_counts) - 4} more"
+
+    waterfall_steps = [
+        _qc_step(
+            1,
+            "Raw scRNA barcodes per measurement set",
+            "Input pool",
+            "Counts from Kallisto bustools JSON outputs. Multiple measurement sets are shown separately before summing.",
+            [
+                ("Samples", sample_label),
+                ("Total", _format_count(sample_total) if sample_total is not None else "N/A"),
+                ("Source", _tip("json_dir", "Dashboard directory containing parsed kb count JSON summaries.", code=True)),
+                ("Removed", "N/A"),
+            ],
+        ),
+        _qc_step(
+            2,
+            "Concatenated scRNA AnnData",
+            "Before QC",
+            f"Dashboard object {_tip('gene_ann', 'Concatenated unfiltered scRNA AnnData passed into create_dashboard_df.py.', code=True)} used for the RNA barcode-rank calculation.",
+            [
+                ("Cells", _format_count(concat_count)),
+                ("Removed from raw", removed(sample_total, concat_count)),
+                ("Object", _tip("rna_concatenated_adata.h5ad", "Published unfiltered concatenated scRNA AnnData.", code=True)),
+                ("Batches", _format_count(gene_ann.obs['batch'].nunique()) if 'batch' in gene_ann.obs else "N/A"),
+            ],
+        ),
+        _qc_step(
+            3,
+            "RNA barcode filter",
+            "Cell QC",
+            f"Selected {_tip(str(barcode_filter), 'QC_barcode_filter mode used during preprocessing.', code=True)} cutoff {threshold_rule}. Cells tied at the threshold are retained.",
+            [
+                ("Cells kept", _format_count(filter_count)),
+                ("Removed", removed(concat_count, filter_count)),
+                ("Knee rank", _format_count(knee_rank) if knee_rank is not None else "N/A"),
+                ("Min genes", min_genes_note),
+            ],
+            state="active",
+        ),
+        _qc_step(
+            4,
+            "Mitochondrial percentage filter",
+            "Cell QC",
+            f"Rule: {_tip('pct_counts_mt', 'Cell-level mitochondrial percentage from Scanpy QC metrics.', code=True)} < {_tip('QC_pct_mito', 'Resolved maximum mitochondrial percentage parameter.', code=True)}.",
+            [
+                ("Cells kept", _format_count(filtered_count)),
+                ("Removed", removed(filter_count, filtered_count)),
+                ("Cutoff", _format_pct(qc_params.get("pct_mito"))),
+                ("Median mito", _display(gene_row.get("mito_median") if gene_row is not None else None, digits=2, suffix="%")),
+            ],
+        ),
+    ]
+
+    if hashing_counts:
+        waterfall_steps.append(
+            _qc_step(
+                5,
+                "RNA + hashing barcode intersection",
+                "Hashing QC",
+                "Only shown when data hashing is enabled. Counts filtered RNA cells that also have hashing barcodes.",
+                [
+                    ("Cells kept", _format_count(hashing_counts.get("rna_hashing"))),
+                    ("Removed", removed(filtered_count, hashing_counts.get("rna_hashing"))),
+                    ("Demux singlets", _format_count(hashing_counts.get("hashing_demux"))),
+                    ("RNA + guide", _format_count(hashing_counts.get("rna_guide"))),
+                ],
+            )
+        )
+        final_prev = hashing_counts.get("hashing_demux")
+        step_num = 6
+    else:
+        final_prev = filtered_count
+        step_num = 5
+
+    waterfall_steps.append(
+        _qc_step(
+            step_num,
+            "RNA + guide barcode intersection",
+            "Modality QC",
+            "Cells retained in both filtered scRNA and guide AnnData. This is the final cell set when Scrublet and hashing are disabled.",
+            [
+                ("Cells kept", _format_count(guide_intersection_count)),
+                ("Removed", removed(final_prev, guide_intersection_count)),
+                ("Guide cells", _format_count(guide_ann.n_obs)),
+                ("Guide features", _format_count(guide_ann.n_vars)),
+            ],
+        )
+    )
+    waterfall_steps.append(
+        _qc_step(
+            step_num + 1,
+            "Final MuData diagnostics",
+            "Derived checks",
+            "Diagnostic values computed from final MuData. These explain quality but are not extra filters unless explicitly configured.",
+            [
+                ("Final cells", _format_count(final_count)),
+                ("RNA UMIs < 100", _format_count(low_umi_100) if low_umi_100 is not None else "N/A"),
+                ("RNA UMIs < 500", _format_count(low_umi_500) if low_umi_500 is not None else "N/A"),
+                ("No genes > 1 count", _format_count(no_signal)),
+            ],
+            state="warn" if (low_umi_100 or no_signal) else "",
+        )
+    )
+
+    parameter_rows = [
+        ("Params source", params_status, "params_*.json / fallback defaults"),
+        ("Cell barcode filter", _tip(f"QC_barcode_filter = {barcode_filter}", "Cell filtering mode used during RNA preprocessing.", code=True), "Resolved params"),
+        ("Min genes per cell", _tip(f"QC_min_genes_per_cell = {qc_params.get('min_genes')}", "Minimum detected genes per cell; skipped for knee/knee2.", code=True), "Resolved params"),
+        ("Mito cutoff", _tip(f"QC_pct_mito = {qc_params.get('pct_mito')}", "Maximum mitochondrial percentage allowed.", code=True), "Resolved params"),
+        ("Min cells per gene", _tip(f"QC_min_cells_per_gene = {params.get('QC_min_cells_per_gene', 'N/A')}", "Minimum fraction of cells where a gene must be detected before inference.", code=True), "Resolved params"),
+        ("Scrublet", _tip(f"ENABLE_SCRUBLET = {params.get('ENABLE_SCRUBLET', False)}", "Whether Scrublet doublet removal was enabled.", code=True), "Resolved params"),
+        ("Hashing", _tip(f"ENABLE_DATA_HASHING = {params.get('ENABLE_DATA_HASHING', False)}", "Whether hashing demultiplexing was enabled.", code=True), "Resolved params"),
+        ("Inference mode", _tip(f"INFERENCE_method = {params.get('INFERENCE_method', 'N/A')}", "Configured inference method for cis/trans analysis.", code=True), "Resolved params"),
+    ]
+    parameter_html = "".join(
+        f"<tr><td>{html.escape(name)}</td><td>{value}</td><td>{html.escape(source)}</td></tr>"
+        for name, value, source in parameter_rows
+    )
+
+    expression_metrics = [
+        _qc_metric(
+            "RNA cells",
+            _format_count(gene_mod.n_obs),
+            f"Median RNA UMIs: {_display(gene_row.get('umi_median') if gene_row is not None else None, digits=0)}. Median detected genes: {_display(median_detected_genes, digits=0)}.",
+        ),
+        _qc_metric(
+            "Mitochondrial content",
+            _display(gene_row.get("mito_median") if gene_row is not None else None, digits=2, suffix="%"),
+            f"Max after filtering: {_display(gene_row.get('mito_max') if gene_row is not None else None, digits=2, suffix='%')}.",
+        ),
+        _qc_metric(
+            "Guide capture",
+            _display(frac_cells_with_guide, digits=1, suffix="%"),
+            f"{_display(guide_cells_with_guide, digits=0)} cells with guide; {_display(guide_row.get('n_cells_exactly_1_guide') if guide_row is not None else None, digits=0)} cells with exactly one guide.",
+        ),
+        _qc_metric(
+            "Guide UMI depth",
+            _display(guide_row.get("guide_umi_median") if guide_row is not None else None, digits=0),
+            f"Mean guide UMIs: {_display(guide_row.get('guide_umi_mean') if guide_row is not None else None, digits=1)}.",
+        ),
+        _qc_metric(
+            "Guide library",
+            _format_count(guide_mod.n_vars),
+            f"Median cells per guide: {_display(guide_row.get('cells_per_guide_median') if guide_row is not None else None, digits=0)}.",
+        ),
+        _qc_metric(
+            "Gene features",
+            _format_count(gene_mod.n_vars),
+            f"Median detected genes per final cell: {_display(median_detected_genes, digits=0)}.",
+        ),
+    ]
+
+    inference_rows = [
+        (
+            "Intended target QC",
+            (
+                f"{_display(intended_row.get('n_guides_tested'), digits=0)} guides tested; "
+                f"{_display(intended_row.get('n_significant'), digits=0)} significant; "
+                f"AUROC {_display(intended_row.get('auroc'), digits=3)}."
+                if intended_row is not None
+                else "No intended-target QC metrics found."
+            ),
+            "additional_qc/intended_target/intended_target_metrics.tsv",
+        ),
+        (
+            "Trans QC",
+            (
+                f"{_display(trans_row.get('n_guides_tested'), digits=0)} guides tested; "
+                f"{_display(trans_row.get('total_significant_tests'), digits=0)} significant trans tests."
+                if trans_row is not None
+                else "No trans QC metrics found."
+            ),
+            "additional_qc/trans/trans_metrics.tsv",
+        ),
+        (
+            "Benchmark",
+            "Enabled" if _as_bool(params.get("ENABLE_BENCHMARK", False)) else "Disabled for this run.",
+            "ENABLE_BENCHMARK",
+        ),
+    ]
+    inference_html = "".join(
+        f"<tr><td>{html.escape(name)}</td><td>{summary}</td><td><code>{html.escape(source)}</code></td></tr>"
+        for name, summary, source in inference_rows
+    )
+
+    asset_cards = [
+        ("RNA preprocessing", "knee_plot_scRNA.png, scatterplot_scrna.png, violinplot_scrna.png, RNA threshold barplots."),
+        ("Guide QC", "guide_knee_plot.png, guide histograms, guides per cell, cells per guide, guide UMI threshold plots."),
+        ("Hashing QC", "Hashing SeqSpec plots, hashing demux UMAPs, HTO cell counts, and hashing barcode intersections when enabled."),
+        ("Inference QC", "Intended-target plots, trans distribution, volcano, PR/ROC, and direct-vs-control outputs when available."),
+    ]
+    asset_html = "".join(
+        '<div class="qc-asset">'
+        f"<span>{html.escape(title)}</span>"
+        f"<small>{html.escape(desc)}</small>"
+        "</div>"
+        for title, desc in asset_cards
+    )
+
+    report_note = (
+        "Resolved params were loaded for this report."
+        if qc_params.get("params_found")
+        else "Dashboard could not find a local params JSON, so some values may be fallback defaults."
+    )
+
+    return (
+        '<div class="qc-report">'
+        '<div class="qc-report-header">'
+        '<div>'
+        '<h4 class="qc-report-title">Comprehensive QC Report</h4>'
+        '<p>End-to-end QC summary built from pipeline inputs, filtering decisions, final MuData, and additional QC artifacts. '
+        'Hover or tab to dotted fields for definitions.</p>'
+        '</div>'
+        f'<span class="qc-status {params_state}">{report_note}</span>'
+        '</div>'
+        f'<div class="qc-kpi-grid">{"".join(kpis)}</div>'
+        '<div class="qc-section">'
+        '<h4>Run Inputs And Resolved Parameters</h4>'
+        '<div class="qc-two-col">'
+        '<div class="qc-table-wrap"><table class="qc-table"><thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead>'
+        f'<tbody>{parameter_html}</tbody></table></div>'
+        '<div class="qc-callout"><h4>Parameter Provenance</h4>'
+        '<p>Resolved Nextflow parameters are staged into the dashboard task and used directly in this report. If the params JSON is unavailable, the report marks fallback defaults clearly.</p>'
+        '<ul><li>Barcode, mitochondrial, Scrublet, hashing, and inference settings are shown from the resolved run configuration.</li><li>Fallback values are flagged at the top of the report.</li></ul>'
+        '</div></div></div>'
+        '<div class="qc-section">'
+        '<h4>Cell Filtering Waterfall</h4>'
+        f'<div class="qc-waterfall">{"".join(waterfall_steps)}</div>'
+        '</div>'
+        '<div class="qc-section">'
+        '<h4>Expression And Guide QC</h4>'
+        f'<div class="qc-metric-grid">{"".join(expression_metrics)}</div>'
+        '</div>'
+        '<div class="qc-section">'
+        '<h4>Inference And Biological QC</h4>'
+        '<div class="qc-table-wrap"><table class="qc-table"><thead><tr><th>QC Block</th><th>Summary</th><th>Artifact</th></tr></thead>'
+        f'<tbody>{inference_html}</tbody></table></div>'
+        '</div>'
+        '<div class="qc-section">'
+        '<h4>QC Assets Included</h4>'
+        f'<div class="qc-asset-grid">{asset_html}</div>'
+        '</div>'
+        '</div>'
+    )
 
 
 def collect_additional_qc_blocks(additional_qc_dir):
@@ -806,7 +1280,7 @@ def collect_benchmark_block(benchmark_dir):
     )
 
 
-def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path, filtered_ann_path, guide_ann_path, hashing_ann_path, hashing_demux_path, hashing_unfiltered_demux_path, json_dir=None, params_json=None, params_dir=None, additional_qc_dir=None, benchmark_dir=None, use_default=False):
+def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path, filtered_ann_path, guide_ann_path, hashing_ann_path, hashing_demux_path, hashing_unfiltered_demux_path, json_dir=None, params_json=None, params_dir=None, additional_qc_dir=None, benchmark_dir=None, use_default=False, qc_metrics_json=None):
     ### Create df for cell statistics
     guide_fq_table = pd.read_csv(guide_fq_tbl)
     hashing_fq_table = pd.read_csv(hashing_fq_tbl)
@@ -835,21 +1309,39 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
     # Barcode filtering flow diagram (hashing)
     sample_counts = _collect_unfiltered_counts(json_dir, prefix="trans-")
     concat_count = gene_ann.n_obs
-    filter_count, _ = _compute_barcode_filter_count(
+    filter_count, filter_info = _compute_barcode_filter_count(
         gene_ann, qc_params.get("barcode_filter"), qc_params.get("min_genes")
     )
     filtered_count = gene_filtered_ann.n_obs
     guide_intersection_count = len(set(gene_filtered_ann.obs_names).intersection(guide_ann.obs_names))
     final_count = mudata.n_obs
+    hashing_negative_count = (
+        int((hashing_unfiltered_demux.obs['hto_type_split'] == 'negative').sum())
+        if 'hto_type_split' in hashing_unfiltered_demux.obs
+        else None
+    )
     hashing_counts = {
         "rna_hashing": hashing_unfiltered_demux.n_obs,
         "hashing_demux": hashing_demux.n_obs,
         "rna_guide": guide_intersection_count,
+        "hashing_unfiltered_cells": hashing_unfiltered_demux.n_obs,
+        "hashing_negative_cells": hashing_negative_count,
+        "hashing_negative_fraction": (
+            hashing_negative_count / hashing_unfiltered_demux.n_obs
+            if hashing_negative_count is not None and hashing_unfiltered_demux.n_obs > 0
+            else None
+        ),
+        "hashing_singlet_fraction": (
+            hashing_demux.n_obs / hashing_unfiltered_demux.n_obs
+            if hashing_unfiltered_demux.n_obs > 0
+            else None
+        ),
     }
     flow_html = _build_flow_html(
         sample_counts=sample_counts,
         concat_count=concat_count,
         filter_count=filter_count,
+        filter_info=filter_info,
         filtered_count=filtered_count,
         guide_intersection_count=guide_intersection_count,
         final_count=final_count,
@@ -861,6 +1353,25 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
         'Barcode filtering flow',
         'Barcode Filtering Flow',
         flow_html,
+        False
+    )
+    qc_report_block = new_block(
+        'Filtering Summary',
+        'Comprehensive run-level QC report',
+        'Comprehensive QC Report',
+        _build_comprehensive_qc_report(
+            mudata=mudata,
+            gene_ann=gene_ann,
+            gene_filtered_ann=gene_filtered_ann,
+            guide_ann=guide_ann,
+            sample_counts=sample_counts,
+            filter_count=filter_count,
+            filter_info=filter_info,
+            qc_params=qc_params,
+            additional_qc_dir=additional_qc_dir,
+            params=params,
+            hashing_counts=hashing_counts,
+        ),
         False
     )
 
@@ -959,7 +1470,29 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
 
     benchmark_block = collect_benchmark_block(benchmark_dir)
 
-    return guide_check_df, hashing_check_df, cell_stats, gene_stats, flow_block, rna_img_df, guide_img_df, inference_blocks, gs_img_df, inf_img_df, hs_demux_df, qc_blocks, benchmark_block
+    if qc_metrics_json:
+        write_pipeline_qc_metrics_json(
+            qc_metrics_json,
+            params=params,
+            qc_params=qc_params,
+            sample_counts=sample_counts,
+            concat_count=concat_count,
+            filter_count=filter_count,
+            filter_info=filter_info,
+            filtered_count=filtered_count,
+            guide_intersection_count=guide_intersection_count,
+            final_count=final_count,
+            mudata=mudata,
+            gene_ann=gene_ann,
+            gene_filtered_ann=gene_filtered_ann,
+            guide_ann=guide_ann,
+            json_dir=json_dir,
+            additional_qc_dir=additional_qc_dir,
+            hashing_counts=hashing_counts,
+            use_default=use_default,
+        )
+
+    return guide_check_df, hashing_check_df, qc_report_block, cell_stats, gene_stats, flow_block, rna_img_df, guide_img_df, inference_blocks, gs_img_df, inf_img_df, hs_demux_df, qc_blocks, benchmark_block
 
 def main():
     parser = argparse.ArgumentParser(description="Process JSON files and generate dashboard dataframes.")
@@ -979,13 +1512,14 @@ def main():
     parser.add_argument('--benchmark_dir', default=None, help='Path to benchmark output directory (optional)')
     parser.add_argument('--default', action="store_true",
                       help="Process mudata with cis_per_guide_results and trans_per_guide_results instead of single test_results")
+    parser.add_argument('--qc_metrics_json', default=None, help='Write run-level QC metric descriptions and observed values to JSON')
     parser.add_argument('--output', type=str, default='all_df.pkl', help='Path to output pickle file')
 
     args = parser.parse_args()
 
     json_df = create_json_df(args.json_dir)
     ## adding plots
-    guide_check_df, hashing_check_df, cell_stats, gene_stats, flow_block, rna_img_df, guide_img_df, inference_blocks, gs_img_df, inf_img_df, hs_demux_df, qc_blocks, benchmark_block = create_dashboard_df(
+    guide_check_df, hashing_check_df, qc_report_block, cell_stats, gene_stats, flow_block, rna_img_df, guide_img_df, inference_blocks, gs_img_df, inf_img_df, hs_demux_df, qc_blocks, benchmark_block = create_dashboard_df(
         args.guide_fq_tbl,
         args.hashing_fq_tbl,
         args.mudata,
@@ -1000,14 +1534,15 @@ def main():
         args.params_dir,
         args.additional_qc_dir,
         args.benchmark_dir,
-        args.default
+        args.default,
+        args.qc_metrics_json
     )
 
     ## consider the order of modules
     json_df_sorted = json_df.sort_values(by='description', ascending=True)
 
     # Combine all dataframes, with inference_blocks being a list now
-    df_list = [guide_check_df, hashing_check_df, cell_stats, gene_stats, flow_block, json_df_sorted, hs_demux_df, rna_img_df, guide_img_df, inf_img_df, gs_img_df]
+    df_list = [qc_report_block, guide_check_df, hashing_check_df, cell_stats, gene_stats, flow_block, json_df_sorted, hs_demux_df, rna_img_df, guide_img_df, inf_img_df, gs_img_df]
 
     # Add QC blocks (if any)
     df_list.extend(qc_blocks)
