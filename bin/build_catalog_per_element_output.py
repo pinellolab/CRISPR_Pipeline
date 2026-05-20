@@ -6,6 +6,7 @@ from typing import Dict, Iterable, List
 import mudata as mu
 import numpy as np
 import pandas as pd
+from scipy.stats import false_discovery_control
 from scipy import sparse
 
 ELEMENT_COLUMNS = [
@@ -20,6 +21,7 @@ OUTPUT_COLUMNS = [
     "sceptre_log10_p_value",
     "perturbo_log2_fc",
     "perturbo_log10_p_value",
+    "perturbo_fdr_log10_p_value",
     "element_id",
     "element_type",
     "element_chr",
@@ -80,6 +82,22 @@ def _neg_log10(series: pd.Series, pvalue_floor: float) -> pd.Series:
     finite = values.where(values.notna())
     clamped = finite.clip(lower=pvalue_floor)
     return -np.log10(clamped)
+
+
+def _bh_adjust(pvalues: pd.Series) -> pd.Series:
+    """
+    Benjamini-Hochberg FDR correction.
+    NaN inputs remain NaN.
+    """
+    p = pd.to_numeric(pvalues, errors="coerce")
+    out = pd.Series(np.nan, index=p.index, dtype=float)
+    valid = p.notna()
+    if not valid.any():
+        return out
+
+    q = false_discovery_control(p.loc[valid].to_numpy(dtype=float), method="bh")
+    out.loc[p.loc[valid].index] = q
+    return out
 
 
 def _assert_unique_keys(df: pd.DataFrame, keys: List[str], label: str) -> None:
@@ -260,6 +278,10 @@ def create_catalog_per_element(
     )
     merged["perturbo_log10_p_value"] = _neg_log10(
         merged["_perturbo_p_value"], pvalue_floor
+    )
+    merged["_perturbo_fdr"] = _bh_adjust(merged["_perturbo_p_value"])
+    merged["perturbo_fdr_log10_p_value"] = _neg_log10(
+        merged["_perturbo_fdr"], pvalue_floor
     )
 
     merged["element_name"] = merged["intended_target_name"]

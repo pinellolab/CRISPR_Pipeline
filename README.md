@@ -325,6 +325,7 @@ The trans outputs report PerTurbo all-by-all trans tests.
 | `sceptre_log10_p_value` | `-log10(max(sceptre_p_value, 1e-300))` from cis per-element results. |
 | `perturbo_log2_fc` | PerTurbo effect size estimate from trans per-element results. |
 | `perturbo_log10_p_value` | `-log10(max(perturbo_p_value, 1e-300))` from trans per-element results. |
+| `perturbo_fdr_log10_p_value` | `-log10(max(BH-adjusted perturbo_p_value, 1e-300))` across catalog rows. |
 | `element_id` | Element identifier (equal to `element_name` in this pipeline). |
 | `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
 | `element_chr` | Element chromosome. |
