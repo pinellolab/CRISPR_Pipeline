@@ -27,10 +27,16 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
   - `cis_per_guide_output.tsv.gz`: Cis guide-level inference results.
   - `trans_per_element_output.tsv.gz`: Trans element-level inference results.
   - `trans_per_guide_output.tsv.gz`: Trans guide-level inference results.
+  - `catalog_per_element_output.tsv.gz`: Catalog-formatted per-element table that merges cis SCEPTRE and trans PerTurbo metrics.
 
 </details>
 
 The cis tables contain guide-gene or target-element-gene tests restricted to the configured cis pairing strategy. The trans tables contain all-by-all PerTurbo trans tests. Element-level tables aggregate guides by intended target fields: `intended_target_name`, `intended_target_chr`, `intended_target_start`, and `intended_target_end`.
+
+`catalog_per_element_output.tsv.gz` is an additive, per-element catalog view with one row per `(element, gene)` pair and the following columns:
+`sceptre_log2_fc`, `sceptre_log10_p_value`, `perturbo_log2_fc`, `perturbo_log10_p_value`,
+`element_id`, `element_type`, `element_chr`, `element_start`, `element_end`, `element_name`,
+`guide_ids`, `gene_name`, `gene_id`, and `nPerturbedCells`.
 
 ### Pipeline dashboard
 
@@ -49,7 +55,7 @@ The cis tables contain guide-gene or target-element-gene tests restricted to the
 
 </details>
 
-`pipeline_dashboard/` intentionally does not contain `inference_mudata.h5mu`, `cis_per_element_output.tsv.gz`, `cis_per_guide_output.tsv.gz`, `trans_per_element_output.tsv.gz`, or `trans_per_guide_output.tsv.gz`. Use the copies in `pipeline_outputs/` as the single source of final analysis outputs.
+`pipeline_dashboard/` intentionally does not contain `inference_mudata.h5mu`, `cis_per_element_output.tsv.gz`, `cis_per_guide_output.tsv.gz`, `trans_per_element_output.tsv.gz`, `trans_per_guide_output.tsv.gz`, or `catalog_per_element_output.tsv.gz`. Use the copies in `pipeline_outputs/` as the single source of final analysis outputs.
 
 ### Pipeline information
 

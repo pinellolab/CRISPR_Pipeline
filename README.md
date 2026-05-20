@@ -246,6 +246,7 @@ Within `pipeline_outputs/`, you will find:
 | `cis_per_guide_output.tsv.gz` | Cis guide-level inference results. |
 | `trans_per_element_output.tsv.gz` | Trans element-level inference results. |
 | `trans_per_guide_output.tsv.gz` | Trans guide-level inference results. |
+| `catalog_per_element_output.tsv.gz` | Catalog-formatted per-element table merging cis SCEPTRE and trans PerTurbo results. |
 
 All result tables are tab-separated and gzip-compressed.
 
@@ -316,13 +317,32 @@ The trans outputs report PerTurbo all-by-all trans tests.
 | `log2_fc` | PerTurbo effect size (log2 fold-change) |
 | `p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
 
+#### `catalog_per_element_output.tsv.gz`
+
+| Column | Description |
+|---|---|
+| `sceptre_log2_fc` | SCEPTRE effect size estimate from cis per-element results. |
+| `sceptre_log10_p_value` | `-log10(max(sceptre_p_value, 1e-300))` from cis per-element results. |
+| `perturbo_log2_fc` | PerTurbo effect size estimate from trans per-element results. |
+| `perturbo_log10_p_value` | `-log10(max(perturbo_p_value, 1e-300))` from trans per-element results. |
+| `element_id` | Element identifier (equal to `element_name` in this pipeline). |
+| `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
+| `element_chr` | Element chromosome. |
+| `element_start` | Element start coordinate. |
+| `element_end` | Element end coordinate. |
+| `element_name` | Element name mapped from `intended_target_name`. |
+| `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
+| `gene_name` | Gene symbol from local gene metadata when available. |
+| `gene_id` | ENSEMBL gene ID. |
+| `nPerturbedCells` | Number of unique cells assigned at least one guide for the element. |
+
 For details, see our [documentation](https://docs.google.com/document/d/1Z1SOlekIE5uGyXW41XxnszxaYdSw0wdAOUVzfy3fj3M/edit?tab=t.0#heading=h.ctbx1w9hj619).
 
 ### Pipeline dashboard
 
 Within `pipeline_dashboard/`, you will find the interactive dashboard and supporting visualization files. A compressed copy of this directory is also written to the top level of `--outdir` as `pipeline_dashboard.tar.gz`.
 
-The dashboard directory and archive intentionally do not include `inference_mudata.h5mu`, `cis_per_element_output.tsv.gz`, `cis_per_guide_output.tsv.gz`, `trans_per_element_output.tsv.gz`, or `trans_per_guide_output.tsv.gz`; use the copies in `pipeline_outputs/` as the single source of final analysis outputs.
+The dashboard directory and archive intentionally do not include `inference_mudata.h5mu`, `cis_per_element_output.tsv.gz`, `cis_per_guide_output.tsv.gz`, `trans_per_element_output.tsv.gz`, `trans_per_guide_output.tsv.gz`, or `catalog_per_element_output.tsv.gz`; use the copies in `pipeline_outputs/` as the single source of final analysis outputs.
 
 The pipeline produces several figures:
 
