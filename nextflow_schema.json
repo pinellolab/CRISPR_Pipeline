@@ -212,6 +212,15 @@
                     "description": "Inference method to run.",
                     "help_text": "The default mode runs cis SCEPTRE, cis Perturbo, and trans Perturbo using the default guide-target pairing strategy."
                 },
+                "INFERENCE_input_mudata": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "format": "file-path",
+                    "description": "Path to an input MuData file for `-entry INFERENCE_FROM_MUDATA` runs.",
+                    "help_text": "Use this when rerunning default inference from a pre-existing, post-guide-assignment MuData file. GTF annotation is still required in default mode to construct cis pairs."
+                },
                 "INFERENCE_target_guide_pairing_strategy": {
                     "type": "string",
                     "default": "default",

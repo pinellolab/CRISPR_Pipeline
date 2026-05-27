@@ -106,6 +106,7 @@ Update the pipeline-specific parameters in the `params` section, for example:
     GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep = 5
 
     INFERENCE_method = 'default' // sceptre or perturbo. Default will run sceptre and perturbo in cis and perturbo in trans (for elements and per guide)
+    INFERENCE_input_mudata = null // required only for -entry INFERENCE_FROM_MUDATA
     INFERENCE_target_guide_pairing_strategy = 'default'
     INFERENCE_PERTURBO_BATCH_SIZE = 4096 // Batch size passed to PerTurbo training in both cis and trans runs
     INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK = 8000 // For trans PerTurbo only; values <= 0 disable chunking and values > 0 cap each balanced gene chunk
@@ -127,6 +128,26 @@ Update the pipeline-specific parameters in the `params` section, for example:
     NETWORK_custom_central_nodes = 'undefined'
     NETWORK_central_nodes_num = 1
 ```
+
+### Run default inference from an existing MuData
+
+Use this mode when you already have a post-guide-assignment MuData file (for example, after custom cell/guide filtering) and only need to rerun the default inference workflow.
+
+```bash
+nextflow run main.nf \
+  -entry INFERENCE_FROM_MUDATA \
+  -profile local \
+  --INFERENCE_input_mudata /path/to/filtered_input.h5mu \
+  --INFERENCE_method default \
+  --INFERENCE_target_guide_pairing_strategy default \
+  --REFERENCE_gtf_local_path /path/to/gencode_gtf.gtf.gz \
+  --outdir ./outputs_mudata_inference
+```
+
+Notes:
+- This entrypoint runs inference only (no mapping, guide assignment, dashboard, or additional QC workflows).
+- GTF is still required in default mode because the pipeline constructs cis pairs before running inference.
+- If `REFERENCE_gtf_local_path` does not exist, the pipeline uses `REFERENCE_gtf_download_path`.
 
 #### 2. Compute Environment Configuration
 
