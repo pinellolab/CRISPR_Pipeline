@@ -15,6 +15,7 @@ if (getRversion() >= "2.15.1") {
       "response_id",
       "grna_target",
       "p_value",
+      "q_value",
       "fold_change",
       "se_fold_change",
       "log_2_fold_change",
@@ -27,6 +28,19 @@ if (getRversion() >= "2.15.1") {
       "log2_fc"
     )
   )
+}
+
+prepare_sceptre_result_columns <- function(results) {
+  if (!"fold_change" %in% colnames(results)) {
+    results$fold_change <- NA_real_
+  }
+  if (!"se_fold_change" %in% colnames(results)) {
+    results$se_fold_change <- NA_real_
+  }
+  if (!"q_value" %in% colnames(results)) {
+    results$q_value <- stats::p.adjust(results$p_value, method = "BH")
+  }
+  results
 }
 
 normalize_covariate_column <- function(column) {
@@ -310,9 +324,11 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
     )
 
   # get union (per-element) results
-  union_results <- sceptre_object |>
+  union_discovery_results <- sceptre_object |>
     sceptre::get_result(analysis = "run_discovery_analysis") |>
-    dplyr::select(response_id, grna_target, p_value, fold_change, se_fold_change, log_2_fold_change) |>
+    prepare_sceptre_result_columns()
+  union_results <- union_discovery_results |>
+    dplyr::select(response_id, grna_target, p_value, q_value, fold_change, se_fold_change, log_2_fold_change) |>
     dplyr::rename(
       gene_id = response_id,
       intended_target_key = grna_target,
@@ -328,7 +344,8 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
       fold_change,
       se_fold_change,
       log2_fc,
-      p_value
+      p_value,
+      q_value
     )
   if (any(is.na(union_results$intended_target_name))) {
     stop("Unable to decode intended_target_key values back to intended target metadata in SCEPTRE union output.")
@@ -375,9 +392,11 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
     )
 
   # extract singleton (per-guide) results, preserve grna_id and rename to guide_id
-  singleton_results <- sceptre_object |>
+  singleton_discovery_results <- sceptre_object |>
     sceptre::get_result(analysis = "run_discovery_analysis") |>
-    dplyr::select(response_id, grna_id, p_value, fold_change, se_fold_change, log_2_fold_change) |>
+    prepare_sceptre_result_columns()
+  singleton_results <- singleton_discovery_results |>
+    dplyr::select(response_id, grna_id, p_value, q_value, fold_change, se_fold_change, log_2_fold_change) |>
     dplyr::rename(
       gene_id = response_id,
       guide_id = grna_id,

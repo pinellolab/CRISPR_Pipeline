@@ -6,7 +6,9 @@ import os
 from pathlib import Path
 
 import mudata as mu
+import numpy as np
 import pandas as pd
+from scipy.stats import false_discovery_control
 
 
 def _expand_tsv_inputs(files):
@@ -103,6 +105,25 @@ def _assert_unique(df, keys, label, mode="warn"):
             )
 
 
+def _bh_adjust(pvalues):
+    p = pd.to_numeric(pvalues, errors="coerce")
+    out = pd.Series(np.nan, index=p.index, dtype=float)
+    valid = p.notna()
+    if not valid.any():
+        return out
+
+    out.loc[p.loc[valid].index] = false_discovery_control(
+        p.loc[valid].to_numpy(dtype=float), method="bh"
+    )
+    return out
+
+
+def _add_sceptre_q_value(df):
+    out = df.copy()
+    out["q_value"] = _bh_adjust(out["p_value"])
+    return out
+
+
 def merge_sceptre_chunk_results(
     per_guide_files,
     per_element_files,
@@ -125,6 +146,9 @@ def merge_sceptre_chunk_results(
         raise ValueError(f"Missing required per-guide columns: {sorted(missing_guide)}")
     if missing_element:
         raise ValueError(f"Missing required per-element columns: {sorted(missing_element)}")
+
+    merged_guide = _add_sceptre_q_value(merged_guide)
+    merged_element = _add_sceptre_q_value(merged_element)
 
     _assert_unique(merged_guide, ["gene_id", "guide_id"], "per-guide")
     _assert_unique(merged_element, ["gene_id", "intended_target_name"], "per-element")

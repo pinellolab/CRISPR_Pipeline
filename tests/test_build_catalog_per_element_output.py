@@ -68,6 +68,8 @@ def _make_input_tables():
             'intended_target_end': [200],
             'sceptre_log2_fc': [1.2],
             'sceptre_p_value': [0.01],
+            'sceptre_q_value': [0.02],
+            'sceptre_fc_se': [0.3],
         }
     )
 
@@ -96,6 +98,9 @@ def test_create_catalog_per_element_merge_and_metrics():
 
     row_a = catalog[(catalog['element_name'] == 'elemA') & (catalog['gene_id'] == 'GENE1')].iloc[0]
     assert row_a['sceptre_log2_fc'] == 1.2
+    assert row_a['sceptre_p_value'] == 0.01
+    assert row_a['sceptre_q_value'] == 0.02
+    assert row_a['sceptre_fc_se'] == 0.3
     assert np.isclose(row_a['sceptre_log10_p_value'], 2.0)
     assert row_a['perturbo_log2_fc'] == 0.5
     assert np.isclose(row_a['perturbo_log10_p_value'], -np.log10(0.2))
@@ -107,6 +112,9 @@ def test_create_catalog_per_element_merge_and_metrics():
 
     row_b = catalog[(catalog['element_name'] == 'elemB') & (catalog['gene_id'] == 'GENE2')].iloc[0]
     assert pd.isna(row_b['sceptre_log2_fc'])
+    assert pd.isna(row_b['sceptre_p_value'])
+    assert pd.isna(row_b['sceptre_q_value'])
+    assert pd.isna(row_b['sceptre_fc_se'])
     assert pd.isna(row_b['sceptre_log10_p_value'])
     assert row_b['perturbo_log2_fc'] == -1.0
     assert row_b['perturbo_log10_p_value'] == 300.0

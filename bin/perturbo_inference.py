@@ -5,11 +5,37 @@ import mudata as md
 import numpy as np
 import pandas as pd
 import scvi
+from scipy.stats import false_discovery_control
 from intended_target_key_utils import (
     annotate_intended_target_groups,
     enrich_pairs_with_target_metadata,
     get_target_lookup,
 )
+
+
+P_VALUE_FLOOR = 1e-300
+
+
+def _bh_adjust(pvalues: pd.Series) -> pd.Series:
+    p = pd.to_numeric(pvalues, errors="coerce")
+    out = pd.Series(np.nan, index=p.index, dtype=float)
+    valid = p.notna()
+    if not valid.any():
+        return out
+
+    out.loc[p.loc[valid].index] = false_discovery_control(
+        p.loc[valid].to_numpy(dtype=float), method="bh"
+    )
+    return out
+
+
+def _add_perturbo_fdr_log10(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    perturbo_fdr = _bh_adjust(out["p_value"])
+    out["perturbo_fdr_log10_p_value"] = -np.log10(
+        perturbo_fdr.clip(lower=P_VALUE_FLOOR)
+    )
+    return out
 
 
 def resolve_num_workers(num_workers=None):
@@ -250,6 +276,8 @@ def run_perturbo(
                 "p_value",
             ]
         ]
+
+    test_results = _add_perturbo_fdr_log10(test_results)
 
     mdata.uns[f"per_{inference_type}_results"] = test_results
 

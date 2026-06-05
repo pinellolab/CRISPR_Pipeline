@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional
 
 import mudata as mu
 import numpy as np
@@ -18,6 +18,9 @@ ELEMENT_COLUMNS = [
 JOIN_COLUMNS = ["gene_id"] + ELEMENT_COLUMNS
 OUTPUT_COLUMNS = [
     "sceptre_log2_fc",
+    "sceptre_p_value",
+    "sceptre_q_value",
+    "sceptre_fc_se",
     "sceptre_log10_p_value",
     "perturbo_log2_fc",
     "perturbo_log10_p_value",
@@ -75,6 +78,15 @@ def _first_existing_column(
         if col in df.columns:
             return col
     raise KeyError(f"Missing {label} column. Tried: {list(candidates)}")
+
+
+def _first_existing_column_optional(
+    df: pd.DataFrame, candidates: Iterable[str]
+) -> Optional[str]:
+    for col in candidates:
+        if col in df.columns:
+            return col
+    return None
 
 
 def _neg_log10(series: pd.Series, pvalue_floor: float) -> pd.Series:
@@ -238,6 +250,12 @@ def create_catalog_per_element(
     cis_p_col = _first_existing_column(
         cis, ["sceptre_p_value", "p_value"], "cis SCEPTRE p_value"
     )
+    cis_q_col = _first_existing_column_optional(
+        cis, ["sceptre_q_value", "q_value"]
+    )
+    cis_fc_se_col = _first_existing_column_optional(
+        cis, ["sceptre_fc_se", "se_fold_change"]
+    )
     trans_fc_col = _first_existing_column(
         trans, ["perturbo_log2_fc", "log2_fc"], "trans PerTurbo log2_fc"
     )
@@ -245,17 +263,36 @@ def create_catalog_per_element(
         trans, ["perturbo_p_value", "p_value"], "trans PerTurbo p_value"
     )
 
-    cis_subset = cis[JOIN_COLUMNS + [cis_fc_col, cis_p_col]].copy()
+    cis_metric_cols = [cis_fc_col, cis_p_col]
+    if cis_q_col is not None:
+        cis_metric_cols.append(cis_q_col)
+    if cis_fc_se_col is not None:
+        cis_metric_cols.append(cis_fc_se_col)
+
+    cis_subset = cis[JOIN_COLUMNS + cis_metric_cols].copy()
     trans_subset = trans[JOIN_COLUMNS + [trans_fc_col, trans_p_col]].copy()
     _assert_unique_keys(cis_subset, JOIN_COLUMNS, "cis_per_element")
     _assert_unique_keys(trans_subset, JOIN_COLUMNS, "trans_per_element")
 
-    cis_subset = cis_subset.rename(
-        columns={
-            cis_fc_col: "sceptre_log2_fc",
-            cis_p_col: "_sceptre_p_value",
-        }
-    )
+    cis_rename_cols = {
+        cis_fc_col: "sceptre_log2_fc",
+        cis_p_col: "_sceptre_p_value",
+    }
+    if cis_q_col is not None:
+        cis_rename_cols[cis_q_col] = "sceptre_q_value"
+    if cis_fc_se_col is not None:
+        cis_rename_cols[cis_fc_se_col] = "sceptre_fc_se"
+    cis_subset = cis_subset.rename(columns=cis_rename_cols)
+    computed_sceptre_q = _bh_adjust(cis_subset["_sceptre_p_value"])
+    if "sceptre_q_value" not in cis_subset.columns:
+        cis_subset["sceptre_q_value"] = computed_sceptre_q
+    else:
+        cis_subset["sceptre_q_value"] = cis_subset["sceptre_q_value"].fillna(
+            computed_sceptre_q
+        )
+    if "sceptre_fc_se" not in cis_subset.columns:
+        cis_subset["sceptre_fc_se"] = np.nan
+
     trans_subset = trans_subset.rename(
         columns={
             trans_fc_col: "perturbo_log2_fc",
@@ -276,6 +313,7 @@ def create_catalog_per_element(
     merged["sceptre_log10_p_value"] = _neg_log10(
         merged["_sceptre_p_value"], pvalue_floor
     )
+    merged["sceptre_p_value"] = merged["_sceptre_p_value"]
     merged["perturbo_log10_p_value"] = _neg_log10(
         merged["_perturbo_p_value"], pvalue_floor
     )

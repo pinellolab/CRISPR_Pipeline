@@ -4,7 +4,40 @@ import argparse
 import pandas as pd
 import mudata as mu
 import numpy as np
-from pathlib import Path
+from scipy.stats import false_discovery_control
+
+
+P_VALUE_FLOOR = 1e-300
+
+
+def _bh_adjust(pvalues: pd.Series) -> pd.Series:
+    p = pd.to_numeric(pvalues, errors="coerce")
+    out = pd.Series(np.nan, index=p.index, dtype=float)
+    valid = p.notna()
+    if not valid.any():
+        return out
+
+    out.loc[p.loc[valid].index] = false_discovery_control(
+        p.loc[valid].to_numpy(dtype=float), method="bh"
+    )
+    return out
+
+
+def _add_perturbo_fdr_log10(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if "perturbo_p_value" in out.columns:
+        pvalue_col = "perturbo_p_value"
+    elif "p_value" in out.columns:
+        pvalue_col = "p_value"
+    else:
+        return out
+
+    perturbo_fdr = _bh_adjust(out[pvalue_col])
+    out["perturbo_fdr_log10_p_value"] = -np.log10(
+        perturbo_fdr.clip(lower=P_VALUE_FLOOR)
+    )
+    return out
+
 
 def merge_cis_trans_results(cis_per_guide_path, cis_per_element_path, trans_per_guide_path, trans_per_element_path, base_mudata_path, output_path):
     """
@@ -25,6 +58,11 @@ def merge_cis_trans_results(cis_per_guide_path, cis_per_element_path, trans_per_
     cis_per_element = pd.read_csv(cis_per_element_path, sep='\t')
     trans_per_guide = pd.read_csv(trans_per_guide_path, sep='\t')
     trans_per_element = pd.read_csv(trans_per_element_path, sep='\t')
+
+    cis_per_guide = _add_perturbo_fdr_log10(cis_per_guide)
+    cis_per_element = _add_perturbo_fdr_log10(cis_per_element)
+    trans_per_guide = _add_perturbo_fdr_log10(trans_per_guide)
+    trans_per_element = _add_perturbo_fdr_log10(trans_per_element)
     
     # Load base mudata for structure
     base_mdata = mu.read_h5mu(base_mudata_path)

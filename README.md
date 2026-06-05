@@ -267,8 +267,11 @@ The cis outputs report guide-gene or target-element-gene tests restricted to the
 | `guide_id` | Guide identifier (guide name) |
 | `sceptre_log2_fc` | SCEPTRE effect size estimate (log2 fold-change) |
 | `sceptre_p_value` | SCEPTRE (uncorrected) p_value  of differential expression |
+| `sceptre_q_value` | BH-adjusted SCEPTRE p-value. |
+| `sceptre_fc_se` | SCEPTRE fold-change standard error. |
 | `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
+| `perturbo_fdr_log10_p_value` | `-log10(max(BH-adjusted perturbo_p_value, 1e-300))`. |
 
 #### `cis_per_element_output.tsv.gz`
 
@@ -281,8 +284,11 @@ The cis outputs report guide-gene or target-element-gene tests restricted to the
 | `intended_target_end` | Intended target end coordinate |
 | `sceptre_log2_fc` | SCEPTRE effect size estimate (log2 fold-change) |
 | `sceptre_p_value` | SCEPTRE (uncorrected) p_value |
+| `sceptre_q_value` | BH-adjusted SCEPTRE p-value. |
+| `sceptre_fc_se` | SCEPTRE fold-change standard error. |
 | `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
+| `perturbo_fdr_log10_p_value` | `-log10(max(BH-adjusted perturbo_p_value, 1e-300))`. |
 
 `intended_target_name` for non-targeting controls is bucketed as `non-targeting|N` (for example, `non-targeting|1`).
 SCEPTRE outputs contain discovery-analysis results only (calibration-check rows are not exported).
@@ -304,6 +310,7 @@ The trans outputs report PerTurbo all-by-all trans tests.
 | `guide_id` | Guide identifier (guide name). |
 | `log2_fc` | PerTurbo effect size (log2 fold-change) |
 | `p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
+| `perturbo_fdr_log10_p_value` | `-log10(max(BH-adjusted p_value, 1e-300))`. |
 
 #### `trans_per_element_output.tsv.gz`
 
@@ -316,12 +323,16 @@ The trans outputs report PerTurbo all-by-all trans tests.
 | `intended_target_end` | Intended target end coordinate. |
 | `log2_fc` | PerTurbo effect size (log2 fold-change) |
 | `p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
+| `perturbo_fdr_log10_p_value` | `-log10(max(BH-adjusted p_value, 1e-300))`. |
 
 #### `catalog_per_element_output.tsv.gz`
 
 | Column | Description |
 |---|---|
 | `sceptre_log2_fc` | SCEPTRE effect size estimate from cis per-element results. |
+| `sceptre_p_value` | SCEPTRE p-value from cis per-element results. |
+| `sceptre_q_value` | BH-adjusted SCEPTRE p-value from cis per-element results. |
+| `sceptre_fc_se` | SCEPTRE fold-change standard error from cis per-element results. |
 | `sceptre_log10_p_value` | `-log10(max(sceptre_p_value, 1e-300))` from cis per-element results. |
 | `perturbo_log2_fc` | PerTurbo effect size estimate from trans per-element results. |
 | `perturbo_log10_p_value` | `-log10(max(perturbo_p_value, 1e-300))` from trans per-element results. |
