@@ -15,7 +15,7 @@ import pandas as pd
 
 from chunk_mudata import chunk_mudata
 from perturbo_inference import (
-    _add_perturbo_fdr_log10,
+    _add_perturbo_q_value,
     resolve_efficiency_mode,
     resolve_num_workers,
 )
@@ -103,7 +103,7 @@ def combine_chunk_results(result_files, output_path):
     dataframes = [pd.read_csv(result_file, sep="\t") for result_file in result_files]
     combined = pd.concat(dataframes, ignore_index=True) if dataframes else pd.DataFrame()
     if "p_value" in combined.columns:
-        combined = _add_perturbo_fdr_log10(combined)
+        combined = _add_perturbo_q_value(combined)
 
     if output_path.endswith(".gz"):
         combined.to_csv(output_path, index=False, sep="\t", compression="gzip")

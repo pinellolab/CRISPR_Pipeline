@@ -23,8 +23,10 @@ OUTPUT_COLUMNS = [
     "sceptre_fc_se",
     "sceptre_log10_p_value",
     "perturbo_log2_fc",
+    "perturbo_p_value",
+    "perturbo_q_value",
+    "perturbo_fc_se",
     "perturbo_log10_p_value",
-    "perturbo_fdr_log10_p_value",
     "element_id",
     "element_type",
     "element_chr",
@@ -262,6 +264,12 @@ def create_catalog_per_element(
     trans_p_col = _first_existing_column(
         trans, ["perturbo_p_value", "p_value"], "trans PerTurbo p_value"
     )
+    trans_q_col = _first_existing_column_optional(
+        trans, ["perturbo_q_value", "q_value"]
+    )
+    trans_fc_se_col = _first_existing_column_optional(
+        trans, ["perturbo_fc_se", "log2_fc_std"]
+    )
 
     cis_metric_cols = [cis_fc_col, cis_p_col]
     if cis_q_col is not None:
@@ -270,7 +278,13 @@ def create_catalog_per_element(
         cis_metric_cols.append(cis_fc_se_col)
 
     cis_subset = cis[JOIN_COLUMNS + cis_metric_cols].copy()
-    trans_subset = trans[JOIN_COLUMNS + [trans_fc_col, trans_p_col]].copy()
+    trans_metric_cols = [trans_fc_col, trans_p_col]
+    if trans_q_col is not None:
+        trans_metric_cols.append(trans_q_col)
+    if trans_fc_se_col is not None:
+        trans_metric_cols.append(trans_fc_se_col)
+
+    trans_subset = trans[JOIN_COLUMNS + trans_metric_cols].copy()
     _assert_unique_keys(cis_subset, JOIN_COLUMNS, "cis_per_element")
     _assert_unique_keys(trans_subset, JOIN_COLUMNS, "trans_per_element")
 
@@ -293,12 +307,24 @@ def create_catalog_per_element(
     if "sceptre_fc_se" not in cis_subset.columns:
         cis_subset["sceptre_fc_se"] = np.nan
 
-    trans_subset = trans_subset.rename(
-        columns={
-            trans_fc_col: "perturbo_log2_fc",
-            trans_p_col: "_perturbo_p_value",
-        }
-    )
+    trans_rename_cols = {
+        trans_fc_col: "perturbo_log2_fc",
+        trans_p_col: "_perturbo_p_value",
+    }
+    if trans_q_col is not None:
+        trans_rename_cols[trans_q_col] = "perturbo_q_value"
+    if trans_fc_se_col is not None:
+        trans_rename_cols[trans_fc_se_col] = "perturbo_fc_se"
+    trans_subset = trans_subset.rename(columns=trans_rename_cols)
+    computed_perturbo_q = _bh_adjust(trans_subset["_perturbo_p_value"])
+    if "perturbo_q_value" not in trans_subset.columns:
+        trans_subset["perturbo_q_value"] = computed_perturbo_q
+    else:
+        trans_subset["perturbo_q_value"] = trans_subset["perturbo_q_value"].fillna(
+            computed_perturbo_q
+        )
+    if "perturbo_fc_se" not in trans_subset.columns:
+        trans_subset["perturbo_fc_se"] = np.nan
 
     merged = cis_subset.merge(trans_subset, on=JOIN_COLUMNS, how="outer")
 
@@ -317,10 +343,7 @@ def create_catalog_per_element(
     merged["perturbo_log10_p_value"] = _neg_log10(
         merged["_perturbo_p_value"], pvalue_floor
     )
-    merged["_perturbo_fdr"] = _bh_adjust(merged["_perturbo_p_value"])
-    merged["perturbo_fdr_log10_p_value"] = _neg_log10(
-        merged["_perturbo_fdr"], pvalue_floor
-    )
+    merged["perturbo_p_value"] = merged["_perturbo_p_value"]
 
     merged["element_name"] = merged["intended_target_name"]
     merged["element_id"] = merged["element_name"]

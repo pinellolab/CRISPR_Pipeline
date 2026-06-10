@@ -7,9 +7,6 @@ import numpy as np
 from scipy.stats import false_discovery_control
 
 
-P_VALUE_FLOOR = 1e-300
-
-
 def _bh_adjust(pvalues: pd.Series) -> pd.Series:
     p = pd.to_numeric(pvalues, errors="coerce")
     out = pd.Series(np.nan, index=p.index, dtype=float)
@@ -23,19 +20,28 @@ def _bh_adjust(pvalues: pd.Series) -> pd.Series:
     return out
 
 
-def _add_perturbo_fdr_log10(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    if "perturbo_p_value" in out.columns:
-        pvalue_col = "perturbo_p_value"
-    elif "p_value" in out.columns:
-        pvalue_col = "p_value"
-    else:
+def _add_perturbo_columns(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.rename(
+        columns={
+            "log2_fc": "perturbo_log2_fc",
+            "p_value": "perturbo_p_value",
+            "log2_fc_std": "perturbo_fc_se",
+            "q_value": "perturbo_q_value",
+        }
+    )
+    out = out.drop(columns=["perturbo_fdr_log10_p_value"], errors="ignore")
+
+    if "perturbo_p_value" not in out.columns:
         return out
 
-    perturbo_fdr = _bh_adjust(out[pvalue_col])
-    out["perturbo_fdr_log10_p_value"] = -np.log10(
-        perturbo_fdr.clip(lower=P_VALUE_FLOOR)
-    )
+    out["perturbo_q_value"] = _bh_adjust(out["perturbo_p_value"])
+    return out
+
+
+def _finalize_perturbo_columns(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if "perturbo_fc_se" not in out.columns and "perturbo_p_value" in out.columns:
+        out["perturbo_fc_se"] = pd.NA
     return out
 
 
@@ -59,10 +65,12 @@ def merge_cis_trans_results(cis_per_guide_path, cis_per_element_path, trans_per_
     trans_per_guide = pd.read_csv(trans_per_guide_path, sep='\t')
     trans_per_element = pd.read_csv(trans_per_element_path, sep='\t')
 
-    cis_per_guide = _add_perturbo_fdr_log10(cis_per_guide)
-    cis_per_element = _add_perturbo_fdr_log10(cis_per_element)
-    trans_per_guide = _add_perturbo_fdr_log10(trans_per_guide)
-    trans_per_element = _add_perturbo_fdr_log10(trans_per_element)
+    cis_per_guide = _finalize_perturbo_columns(_add_perturbo_columns(cis_per_guide))
+    cis_per_element = _finalize_perturbo_columns(_add_perturbo_columns(cis_per_element))
+    trans_per_guide = _finalize_perturbo_columns(_add_perturbo_columns(trans_per_guide))
+    trans_per_element = _finalize_perturbo_columns(
+        _add_perturbo_columns(trans_per_element)
+    )
     
     # Load base mudata for structure
     base_mdata = mu.read_h5mu(base_mudata_path)

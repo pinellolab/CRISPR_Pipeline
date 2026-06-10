@@ -13,9 +13,6 @@ from intended_target_key_utils import (
 )
 
 
-P_VALUE_FLOOR = 1e-300
-
-
 def _bh_adjust(pvalues: pd.Series) -> pd.Series:
     p = pd.to_numeric(pvalues, errors="coerce")
     out = pd.Series(np.nan, index=p.index, dtype=float)
@@ -29,12 +26,9 @@ def _bh_adjust(pvalues: pd.Series) -> pd.Series:
     return out
 
 
-def _add_perturbo_fdr_log10(df: pd.DataFrame) -> pd.DataFrame:
+def _add_perturbo_q_value(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
-    perturbo_fdr = _bh_adjust(out["p_value"])
-    out["perturbo_fdr_log10_p_value"] = -np.log10(
-        perturbo_fdr.clip(lower=P_VALUE_FLOOR)
-    )
+    out["perturbo_q_value"] = _bh_adjust(out["p_value"])
     return out
 
 
@@ -229,7 +223,7 @@ def run_perturbo(
         model.get_element_effects()
         .rename(columns=igvf_name_map)
         .assign(log2_fc=lambda x: x["loc"] / np.log(2))
-        .assign(log2_fc_std=lambda x: x["scale"] / np.log(2))
+        .assign(perturbo_fc_se=lambda x: x["scale"] / np.log(2))
     )
 
     # element_effects[element_key] = element_effects[element_key].astype("category")
@@ -240,7 +234,7 @@ def run_perturbo(
             "gene_id",
             element_key,
             "log2_fc",
-            "log2_fc_std",
+            "perturbo_fc_se",
             "p_value",
         ]
     ]
@@ -272,12 +266,12 @@ def run_perturbo(
                 "intended_target_start",
                 "intended_target_end",
                 "log2_fc",
-                "log2_fc_std",
+                "perturbo_fc_se",
                 "p_value",
             ]
         ]
 
-    test_results = _add_perturbo_fdr_log10(test_results)
+    test_results = _add_perturbo_q_value(test_results)
 
     mdata.uns[f"per_{inference_type}_results"] = test_results
 

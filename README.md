@@ -271,7 +271,8 @@ The cis outputs report guide-gene or target-element-gene tests restricted to the
 | `sceptre_fc_se` | SCEPTRE fold-change standard error. |
 | `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
-| `perturbo_fdr_log10_p_value` | `-log10(max(BH-adjusted perturbo_p_value, 1e-300))`. |
+| `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this cis output table. |
+| `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 
 #### `cis_per_element_output.tsv.gz`
 
@@ -288,7 +289,8 @@ The cis outputs report guide-gene or target-element-gene tests restricted to the
 | `sceptre_fc_se` | SCEPTRE fold-change standard error. |
 | `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
-| `perturbo_fdr_log10_p_value` | `-log10(max(BH-adjusted perturbo_p_value, 1e-300))`. |
+| `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this cis output table. |
+| `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 
 `intended_target_name` for non-targeting controls is bucketed as `non-targeting|N` (for example, `non-targeting|1`).
 SCEPTRE outputs contain discovery-analysis results only (calibration-check rows are not exported).
@@ -308,9 +310,10 @@ The trans outputs report PerTurbo all-by-all trans tests.
 |---|---|
 | `gene_id` | ENSEMBL gene ID |
 | `guide_id` | Guide identifier (guide name). |
-| `log2_fc` | PerTurbo effect size (log2 fold-change) |
-| `p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
-| `perturbo_fdr_log10_p_value` | `-log10(max(BH-adjusted p_value, 1e-300))`. |
+| `perturbo_log2_fc` | PerTurbo effect size (log2 fold-change) |
+| `perturbo_p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
+| `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this trans output table. |
+| `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 
 #### `trans_per_element_output.tsv.gz`
 
@@ -321,9 +324,10 @@ The trans outputs report PerTurbo all-by-all trans tests.
 | `intended_target_chr` | Intended target chromosome. |
 | `intended_target_start` | Intended target start coordinate. |
 | `intended_target_end` | Intended target end coordinate. |
-| `log2_fc` | PerTurbo effect size (log2 fold-change) |
-| `p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
-| `perturbo_fdr_log10_p_value` | `-log10(max(BH-adjusted p_value, 1e-300))`. |
+| `perturbo_log2_fc` | PerTurbo effect size (log2 fold-change) |
+| `perturbo_p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
+| `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this trans output table. |
+| `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 
 #### `catalog_per_element_output.tsv.gz`
 
@@ -335,8 +339,10 @@ The trans outputs report PerTurbo all-by-all trans tests.
 | `sceptre_fc_se` | SCEPTRE fold-change standard error from cis per-element results. |
 | `sceptre_log10_p_value` | `-log10(max(sceptre_p_value, 1e-300))` from cis per-element results. |
 | `perturbo_log2_fc` | PerTurbo effect size estimate from trans per-element results. |
+| `perturbo_p_value` | PerTurbo p-value from trans per-element results. |
+| `perturbo_q_value` | BH-adjusted PerTurbo p-value from trans per-element results. |
+| `perturbo_fc_se` | PerTurbo posterior standard error from trans per-element results. |
 | `perturbo_log10_p_value` | `-log10(max(perturbo_p_value, 1e-300))` from trans per-element results. |
-| `perturbo_fdr_log10_p_value` | `-log10(max(BH-adjusted perturbo_p_value, 1e-300))` across catalog rows. |
 | `element_id` | Element identifier (equal to `element_name` in this pipeline). |
 | `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
 | `element_chr` | Element chromosome. |

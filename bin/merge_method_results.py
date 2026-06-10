@@ -7,9 +7,6 @@ import numpy as np
 from scipy.stats import false_discovery_control
 
 
-P_VALUE_FLOOR = 1e-300
-
-
 ELEMENT_BASE_KEYS = ["gene_id", "intended_target_name"]
 ELEMENT_LOCATION_KEYS = [
     "intended_target_chr",
@@ -50,15 +47,31 @@ def _bh_adjust(pvalues: pd.Series) -> pd.Series:
     return out
 
 
-def _add_perturbo_fdr_log10(df: pd.DataFrame) -> pd.DataFrame:
+def _add_perturbo_q_value(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     if "perturbo_p_value" not in out.columns:
         return out
 
-    perturbo_fdr = _bh_adjust(out["perturbo_p_value"])
-    out["perturbo_fdr_log10_p_value"] = -np.log10(
-        perturbo_fdr.clip(lower=P_VALUE_FLOOR)
+    out["perturbo_q_value"] = _bh_adjust(out["perturbo_p_value"])
+    return out
+
+
+def _add_perturbo_columns(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.rename(
+        columns={
+            "log2_fc": "perturbo_log2_fc",
+            "p_value": "perturbo_p_value",
+            "log2_fc_std": "perturbo_fc_se",
+            "q_value": "perturbo_q_value",
+        }
     )
+    out = out.drop(columns=["perturbo_fdr_log10_p_value"], errors="ignore")
+
+    if "perturbo_p_value" in out.columns:
+        out["perturbo_q_value"] = _bh_adjust(out["perturbo_p_value"])
+    if "perturbo_fc_se" not in out.columns:
+        out["perturbo_fc_se"] = np.nan
+
     return out
 
 
@@ -117,14 +130,8 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     perturbo_element_df = pd.read_csv(perturbo_per_element, sep='\t')
     
     # Rename PerTurbo columns to indicate method
-    perturbo_guide_df = perturbo_guide_df.rename(columns={
-        'log2_fc': 'perturbo_log2_fc',
-        'p_value': 'perturbo_p_value'
-    })
-    perturbo_element_df = perturbo_element_df.rename(columns={
-        'log2_fc': 'perturbo_log2_fc',
-        'p_value': 'perturbo_p_value'
-    })
+    perturbo_guide_df = _add_perturbo_columns(perturbo_guide_df)
+    perturbo_element_df = _add_perturbo_columns(perturbo_element_df)
     
     print("Merging per-guide results...")
     # Merge per-guide results
@@ -141,7 +148,14 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     )
     perturbo_guide_cols = _existing_columns(
         perturbo_guide_df,
-        ["gene_id", "guide_id", "perturbo_log2_fc", "perturbo_p_value"],
+        [
+            "gene_id",
+            "guide_id",
+            "perturbo_log2_fc",
+            "perturbo_p_value",
+            "perturbo_q_value",
+            "perturbo_fc_se",
+        ],
     )
     merged_guide_df = pd.merge(
         sceptre_guide_df[sceptre_guide_cols],
@@ -149,7 +163,7 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
         on=['gene_id', 'guide_id'],
         how='outer'
     )
-    merged_guide_df = _add_perturbo_fdr_log10(merged_guide_df)
+    merged_guide_df = _add_perturbo_q_value(merged_guide_df)
     
     print("Merging per-element results...")
     merge_keys, using_full_coordinate_keys = _build_merge_keys(
@@ -173,7 +187,12 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
             "sceptre_fc_se",
         ],
     )
-    perturbo_element_cols = merge_keys + ['perturbo_log2_fc', 'perturbo_p_value']
+    perturbo_element_cols = merge_keys + [
+        "perturbo_log2_fc",
+        "perturbo_p_value",
+        "perturbo_q_value",
+        "perturbo_fc_se",
+    ]
     sceptre_element_merge_df = sceptre_element_df[sceptre_element_cols].copy()
     perturbo_element_merge_df = perturbo_element_df[perturbo_element_cols].copy()
 
@@ -205,7 +224,7 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
 
     merged_element_df.drop(columns=left_merge_cols + right_merge_cols, inplace=True, errors='ignore')
 
-    merged_element_df = _add_perturbo_fdr_log10(merged_element_df)
+    merged_element_df = _add_perturbo_q_value(merged_element_df)
 
     preferred_order = _existing_columns(
         merged_element_df,
@@ -217,7 +236,8 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
             "sceptre_fc_se",
             "perturbo_log2_fc",
             "perturbo_p_value",
-            "perturbo_fdr_log10_p_value",
+            "perturbo_q_value",
+            "perturbo_fc_se",
         ],
     )
     merged_element_df = merged_element_df[preferred_order]
