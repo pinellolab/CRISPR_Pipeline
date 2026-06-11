@@ -8,6 +8,7 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from barcode_keys import qualify_barcodes
 
 
 def extract_batch_num(filename):
@@ -21,42 +22,49 @@ def assert_unique_obs_names(adata, label):
     duplicates = adata.obs_names[adata.obs_names.duplicated()].unique().tolist()
     raise ValueError(
         f"{label} contains duplicate cell barcodes after concatenation. "
-        "In barcode replacement mode the pipeline suffixes corrected barcodes "
-        "with a shared concat_batch key to avoid modality-specific positional "
-        "suffixes. Duplicate examples: "
+        "The pipeline suffixes barcodes with a shared batch key to keep "
+        "measurement sets distinct across modalities. Duplicate examples: "
         + ", ".join(map(str, duplicates[:10]))
     )
 
 
-def get_concat_batch(covariates, batch_col, batch_num):
-    if "concat_batch" not in covariates.columns:
+def get_barcode_key(covariates, batch_col, batch_num):
+    key_col = "barcode_key" if "barcode_key" in covariates.columns else "concat_batch"
+    if key_col not in covariates.columns:
         raise ValueError(
-            "parse_covariate.csv is missing 'concat_batch'. "
-            "Barcode replacement mode requires a shared cross-modality concat key."
+            "parse_covariate.csv is missing both 'barcode_key' and "
+            "'concat_batch'. Cannot align cell barcodes across modalities."
         )
 
     matches = covariates.loc[
-        covariates[batch_col].astype(str) == str(batch_num), "concat_batch"
+        covariates[batch_col].astype(str) == str(batch_num), key_col
     ].dropna().astype(str).unique()
     if len(matches) != 1:
         raise ValueError(
-            f"Expected exactly one concat_batch for batch '{batch_num}', "
+            f"Expected exactly one {key_col} for batch '{batch_num}', "
             f"found {len(matches)}."
         )
     return matches[0]
 
 
-def apply_replacement_suffix(adata, batch_num, concat_batch, seen_barcodes):
+def apply_batch_suffix(
+    adata,
+    batch_num,
+    barcode_suffix,
+    seen_barcodes,
+    record_corrected_barcode=False,
+):
     obs_names = pd.Index(adata.obs_names.astype(str))
     duplicates = obs_names[obs_names.duplicated()].unique().tolist()
     if duplicates:
         raise ValueError(
-            f"Batch {batch_num} contains duplicate corrected cell barcodes. "
+            f"Batch {batch_num} contains duplicate cell barcodes. "
             "Duplicate examples: " + ", ".join(map(str, duplicates[:10]))
         )
 
-    suffixed_names = pd.Index([f"{barcode}_{concat_batch}" for barcode in obs_names])
-    adata.obs["corrected_barcode"] = obs_names
+    suffixed_names = pd.Index(qualify_barcodes(obs_names, barcode_suffix))
+    if record_corrected_barcode:
+        adata.obs["corrected_barcode"] = obs_names
     adata.obs_names = suffixed_names
 
     repeated = []
@@ -73,8 +81,8 @@ def apply_replacement_suffix(adata, batch_num, concat_batch, seen_barcodes):
             for barcode, previous_batch in repeated[:10]
         ]
         raise ValueError(
-            "Barcode replacement produced corrected cell barcodes that are "
-            "duplicated within the same concat batch. Duplicate examples: "
+            "Batch-qualified cell barcodes are duplicated across mapping outputs. "
+            "Duplicate examples: "
             + "; ".join(examples)
         )
 
@@ -181,11 +189,14 @@ def main():
         batch_num = extract_batch_num(os.path.basename(file_path))
         batch_label = batch_num if batch_num else os.path.basename(file_path)
 
-        if bc_replacement:
-            concat_batch = get_concat_batch(temp, cov_name[0], batch_num)
-            apply_replacement_suffix(
-                adata, batch_label, concat_batch, seen_barcodes
-            )
+        barcode_suffix = get_barcode_key(temp, cov_name[0], batch_num)
+        apply_batch_suffix(
+            adata,
+            batch_label,
+            barcode_suffix,
+            seen_barcodes,
+            record_corrected_barcode=bc_replacement,
+        )
 
         if batch_num:
             cov1 = cov_name[0]
@@ -194,7 +205,8 @@ def main():
             adata.obs[cov1] = adata.obs[cov1].astype(str)
             temp[cov1] = temp[cov1].astype(str)
 
-            adata.obs = adata.obs.join(temp.set_index(cov1), on=cov1)
+            covariates_for_obs = temp.drop(columns=["barcode_key"], errors="ignore")
+            adata.obs = adata.obs.join(covariates_for_obs.set_index(cov1), on=cov1)
 
         # Save to a permanent file in the temp directory
         processed_file_path = os.path.join(
@@ -206,22 +218,19 @@ def main():
 
     # Use concat_on_disk with the processed file paths
     print(f"Concatenating files: {processed_files}")
-    index_unique = None if bc_replacement else "_"
     combined_adata = ad.experimental.concat_on_disk(
         [Path(path) for path in processed_files],
         join="outer",
-        index_unique=index_unique,
+        index_unique=None,
         out_file=Path(args.output)
     )
 
-    if var_index_name or bc_replacement:
-        final_adata = ad.read_h5ad(args.output)
-        if var_index_name:
-            print(f"Restoring var index name: {var_index_name}")
-            final_adata.var_names.name = var_index_name
-        if bc_replacement:
-            assert_unique_obs_names(final_adata, args.output)
-        final_adata.write_h5ad(args.output)
+    final_adata = ad.read_h5ad(args.output)
+    if var_index_name:
+        print(f"Restoring var index name: {var_index_name}")
+        final_adata.var_names.name = var_index_name
+    assert_unique_obs_names(final_adata, args.output)
+    final_adata.write_h5ad(args.output)
 
     print(f"Combined AnnData saved to {args.output}")
 

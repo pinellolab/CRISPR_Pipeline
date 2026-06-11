@@ -1,0 +1,1115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CRISPR Pipeline Filtering and MuData Assembly</title>
+  <style>
+    :root {
+      --bg: #f4f7f4;
+      --surface: #ffffff;
+      --surface-soft: #edf5ef;
+      --ink: #14231b;
+      --muted: #5b6b62;
+      --line: #d5e1d8;
+      --green: #166534;
+      --green-dark: #0d4524;
+      --blue: #1d4ed8;
+      --amber: #b45309;
+      --purple: #6d28d9;
+      --code-bg: #101914;
+      --code-ink: #e4f3e8;
+      --shadow: 0 16px 45px rgba(20, 35, 27, 0.09);
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 92% 0%, rgba(22, 101, 52, 0.12), transparent 30rem),
+        linear-gradient(180deg, #f8faf8 0%, var(--bg) 100%);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+      line-height: 1.58;
+    }
+
+    a {
+      color: var(--green);
+    }
+
+    code,
+    pre {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 30px 22px;
+      color: #eef8f1;
+      background: linear-gradient(165deg, #0d4524, #12351f);
+      overflow-y: auto;
+    }
+
+    .brand {
+      margin-bottom: 32px;
+    }
+
+    .brand-kicker {
+      display: block;
+      margin-bottom: 8px;
+      color: #a7d7b7;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 1.25rem;
+      line-height: 1.25;
+    }
+
+    nav a {
+      display: block;
+      margin: 4px 0;
+      padding: 9px 11px;
+      border-radius: 10px;
+      color: #d6eadc;
+      font-size: 0.91rem;
+      text-decoration: none;
+    }
+
+    nav a:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.09);
+    }
+
+    .side-note {
+      margin-top: 32px;
+      padding: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 12px;
+      color: #c8dfcf;
+      font-size: 0.8rem;
+    }
+
+    main {
+      width: min(1280px, 100%);
+      padding: 54px clamp(24px, 5vw, 72px) 90px;
+    }
+
+    .hero {
+      padding: clamp(28px, 5vw, 58px);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--green);
+      font-size: 0.77rem;
+      font-weight: 850;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3 {
+      line-height: 1.15;
+    }
+
+    h1 {
+      max-width: 900px;
+      margin: 0;
+      font-size: clamp(2.1rem, 5vw, 4.8rem);
+      letter-spacing: -0.045em;
+    }
+
+    .lede {
+      max-width: 850px;
+      margin: 24px 0 0;
+      color: var(--muted);
+      font-size: clamp(1rem, 1.6vw, 1.23rem);
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .badge {
+      padding: 7px 11px;
+      border: 1px solid #c8dfce;
+      border-radius: 999px;
+      color: var(--green-dark);
+      background: var(--surface-soft);
+      font-size: 0.82rem;
+      font-weight: 750;
+    }
+
+    section {
+      margin-top: 54px;
+      scroll-margin-top: 24px;
+    }
+
+    .section-heading {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 18px;
+    }
+
+    .section-heading h2 {
+      margin: 0;
+      font-size: clamp(1.65rem, 3vw, 2.35rem);
+      letter-spacing: -0.025em;
+    }
+
+    .section-heading p {
+      max-width: 610px;
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 0 9px 28px rgba(20, 35, 27, 0.06);
+    }
+
+    .diagram-panel {
+      padding: 22px;
+      overflow-x: auto;
+    }
+
+    .diagram-panel .mermaid {
+      min-width: 880px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .diagram-panel pre.mermaid {
+      margin: 0;
+      padding: 10px;
+      color: var(--ink);
+      background: transparent;
+      font-family: inherit;
+    }
+
+    .diagram-panel .mermaid svg {
+      max-width: none !important;
+      height: auto;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .summary-card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+
+    .summary-card b {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--green-dark);
+      font-size: 0.88rem;
+    }
+
+    .summary-card span {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .callout {
+      margin-top: 18px;
+      padding: 18px 20px;
+      border-left: 5px solid var(--amber);
+      border-radius: 8px 14px 14px 8px;
+      background: #fff8eb;
+    }
+
+    .callout strong {
+      color: #7c3b08;
+    }
+
+    .code-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .code-card {
+      overflow: hidden;
+      border: 1px solid #cbd8ce;
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 0 9px 28px rgba(20, 35, 27, 0.06);
+    }
+
+    .code-card header {
+      padding: 17px 19px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .code-card h3 {
+      margin: 0 0 6px;
+      font-size: 1.08rem;
+    }
+
+    .code-card header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .source {
+      display: inline-block;
+      margin-top: 9px;
+      color: var(--green);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.74rem;
+      font-weight: 700;
+    }
+
+    pre {
+      margin: 0;
+      padding: 20px;
+      color: var(--code-ink);
+      background: var(--code-bg);
+      font-size: 0.79rem;
+      line-height: 1.55;
+      overflow: auto;
+      tab-size: 4;
+    }
+
+    .keyword { color: #ffca80; }
+    .string { color: #b4e59f; }
+    .comment { color: #829889; }
+    .function { color: #8bc7ff; }
+
+    .config-table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 0 9px 28px rgba(20, 35, 27, 0.06);
+    }
+
+    .config-table th,
+    .config-table td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .config-table th {
+      color: var(--green-dark);
+      background: var(--surface-soft);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .config-table td {
+      font-size: 0.9rem;
+    }
+
+    .config-table td code {
+      color: var(--purple);
+      font-weight: 750;
+    }
+
+    footer {
+      margin-top: 58px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    @media (max-width: 980px) {
+      .layout {
+        display: block;
+      }
+
+      aside {
+        position: static;
+        width: auto;
+        height: auto;
+        padding: 18px 22px;
+      }
+
+      aside nav,
+      .side-note {
+        display: none;
+      }
+
+      .brand {
+        margin: 0;
+      }
+
+      main {
+        padding-top: 28px;
+      }
+
+      .summary-grid,
+      .code-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .section-heading {
+        display: block;
+      }
+
+      .section-heading p {
+        margin-top: 9px;
+      }
+
+      .summary-grid,
+      .code-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        border-radius: 18px;
+      }
+    }
+
+    @media print {
+      .layout {
+        display: block;
+      }
+
+      aside {
+        display: none;
+      }
+
+      main {
+        width: 100%;
+        padding: 20px;
+      }
+
+      .panel,
+      .code-card,
+      .config-table,
+      .hero {
+        box-shadow: none;
+      }
+
+      section,
+      .code-card {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="brand">
+        <span class="brand-kicker">CRISPR Pipeline</span>
+        <strong>Filtering and MuData assembly</strong>
+      </div>
+      <nav aria-label="Page sections">
+        <a href="#overview">Overview</a>
+        <a href="#workflow">End-to-end workflow</a>
+        <a href="#channel-lineage">Verified channel lineage</a>
+        <a href="#filter-order">Focused filter order</a>
+        <a href="#source-code">Implementation snippets</a>
+        <a href="#configuration">Current CC configuration</a>
+      </nav>
+      <div class="side-note">
+        Gary Hon example: three measurement-set batches. The samplesheet
+        <code>lane</code> column is empty, so <code>measurement_sets</code> is
+        the RNA/guide/hash pairing key.
+      </div>
+    </aside>
+
+    <main>
+      <header class="hero" id="overview">
+        <p class="eyebrow">Pipeline implementation guide</p>
+        <h1>How the Gary Hon batches are filtered without cross-mixing</h1>
+        <p class="lede">
+          This page follows <code>IGVFDS6244NAXC</code>,
+          <code>IGVFDS8721BKRO</code>, and <code>IGVFDS9613DDRB</code> through
+          modality mapping, physical concatenation, batch-qualified barcode
+          intersection, hashing demultiplexing, and guide assignment.
+        </p>
+        <div class="badge-row">
+          <span class="badge">3 measurement-set batches</span>
+          <span class="badge">lane column empty</span>
+          <span class="badge">RNA + guide</span>
+          <span class="badge">Hashing enabled</span>
+          <span class="badge">Two MuData assembly stages</span>
+        </div>
+      </header>
+
+      <section id="workflow">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Diagram 1</p>
+            <h2>End-to-end workflow</h2>
+          </div>
+          <p>
+            The matrices are concatenated, but their cell keys include the
+            measurement-set identity. Therefore the later global set
+            intersection is logically restricted to the same batch.
+          </p>
+        </div>
+
+        <div class="panel diagram-panel">
+          <pre class="mermaid">
+flowchart TD
+    I["Gary Hon samplesheet"]
+    I --> GR["Group by modality + measurement_sets"]
+
+    subgraph B["Matched batch bundles"]
+      B1["6244<br/>RNA 1 pair<br/>guide 2 pairs pooled<br/>hash 1 pair"]
+      B2["8721<br/>RNA 1 pair<br/>guide 2 pairs pooled<br/>hash 1 pair"]
+      B3["9613<br/>RNA 1 pair<br/>guide 2 pairs pooled<br/>hash 1 pair"]
+    end
+
+    GR --> B1
+    GR --> B2
+    GR --> B3
+
+    subgraph RNA["RNA branch"]
+      R1["Map RNA 6244"] --> RC["Concatenate RNA<br/>measurement-set-qualified keys"]
+      R2["Map RNA 8721"] --> RC
+      R3["Map RNA 9613"] --> RC
+      RC --> RK{"QC_barcode_filter"}
+      RK -- "knee / knee2" --> RU["Total RNA UMI knee filter"]
+      RK -- "none" --> RG["Minimum genes per cell"]
+      RU --> RB["Genes detected in at least 10 cells"]
+      RG --> RB
+      RB --> RM["Mitochondrial percentage filter"]
+      RM --> RF["Filtered RNA AnnData"]
+    end
+
+    subgraph GUIDE["Guide branch"]
+      G1["Map pooled guide pairs 6244"] --> GC["Concatenate guide<br/>measurement-set-qualified keys"]
+      G2["Map pooled guide pairs 8721"] --> GC
+      G3["Map pooled guide pairs 9613"] --> GC
+    end
+
+    subgraph HASH["Hashing branch: optional"]
+      H1["Map hash 6244"] --> HC["Concatenate hashing<br/>measurement-set-qualified keys"]
+      H2["Map hash 8721"] --> HC
+      H3["Map hash 9613"] --> HC
+      HC --> HI["Intersect exact qualified keys with RNA-QC"]
+      HI --> HS["Split by batch"]
+      HS --> HD["GMM-demux each batch"]
+      HD --> HCAT["Concatenate demultiplexed hashing"]
+    end
+
+    B1 --> R1
+    B1 --> G1
+    B1 --> H1
+    B2 --> R2
+    B2 --> G2
+    B2 --> H2
+    B3 --> R3
+    B3 --> G3
+    B3 --> H3
+    RF -. "surviving barcodes" .-> HI
+
+    RF --> C["CreateMuData: intersect gene + guide + optional hashing"]
+    GC --> C
+    HCAT --> C
+    C --> M["mudata.h5mu: all three batches"]
+    M --> BS["Split MuData by batch"]
+    BS --> A1["CLEANSER 6244"]
+    BS --> A2["CLEANSER 8721"]
+    BS --> A3["CLEANSER 9613"]
+    A1 --> MC["Concatenate assigned MuData"]
+    A2 --> MC
+    A3 --> MC
+    MC --> GF["Global QC_min_cells_per_gene filter"]
+    GF --> D{"DUAL_GUIDE?"}
+    D -- "false" --> F["concat_mudata.h5mu"]
+    D -- "true" --> E["Collapse guides to elements"]
+    E --> F
+    F --> INF["Inference"]
+
+    classDef rna fill:#e8f4ff,stroke:#1d4ed8,color:#102a56;
+    classDef guide fill:#f3e8ff,stroke:#6d28d9,color:#351260;
+    classDef hash fill:#fff4dc,stroke:#b45309,color:#623006;
+    classDef mudata fill:#e8f7ec,stroke:#166534,color:#0d4524,stroke-width:2px;
+    class R1,R2,RC,RK,RU,RG,RB,RM,RF rna;
+    class G1,G2,G3,GC,A1,A2,A3 guide;
+    class H1,H2,H3,HC,HI,HS,HD,HCAT hash;
+    class C,M,MC,GF,D,E,F,INF mudata;
+          </pre>
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-card">
+            <b>Physical concatenation</b>
+            <span>All three batch matrices are combined independently for each modality.</span>
+          </div>
+          <div class="summary-card">
+            <b>First MuData</b>
+            <span><code>mudata.h5mu</code> aligns the concatenated modalities by shared cell barcode.</span>
+          </div>
+          <div class="summary-card">
+            <b>Guide assignment</b>
+            <span>Runs separately after the MuData is split back into batches.</span>
+          </div>
+          <div class="summary-card">
+            <b>Final MuData</b>
+            <span><code>concat_mudata.h5mu</code> is the inference input.</span>
+          </div>
+        </div>
+
+        <div class="callout">
+          <strong>Batch grouping rule:</strong> the pipeline key is
+          <code>sample_${file_modality}_${measurement_sets}</code>, not the FASTQ
+          filename or the empty <code>lane</code> field. The two guide rows for
+          each Gary Hon measurement set therefore enter the same mapping job.
+          After mapping, every cell barcode is qualified with its measurement
+          set before modality concatenation.
+        </div>
+
+        <div class="callout">
+          <strong>Audit of the completed May 14, 2026 run:</strong> that checkout used
+          positional suffixes <code>_0</code>, <code>_1</code>, and
+          <code>_2</code>. Its RNA, guide, and hashing concatenation logs all
+          used the identical order 6244, 8721, 9613, so its intersections were
+          same-batch. The updated implementation uses the explicit
+          measurement-set ID instead, removing the ordering dependency.
+        </div>
+      </section>
+
+      <section id="channel-lineage">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Diagram 2</p>
+            <h2>Verified Nextflow channel lineage</h2>
+          </div>
+          <p>
+            Channel names come from the checkout at commit
+            <code>47a36ce</code>. Task commands and outputs were checked in the
+            GCP work directory recorded by <code>.nextflow.log</code>.
+          </p>
+        </div>
+
+        <div class="panel diagram-panel">
+          <pre class="mermaid">
+flowchart TD
+    CSV["samplesheet CSV<br/>11 data rows"]
+    CS["ch_samplesheet<br/>groupTuple by meta.id"]
+    C["ch_samples"]
+    CR["ch_rna: 3 tuples"]
+    CG["ch_guide: 3 tuples"]
+    CH["ch_hash: 3 tuples"]
+
+    CSV -->|"meta.id = sample_modality_measurement_sets"| CS
+    CS --> C
+    C -->|"filter scrna"| CR
+    C -->|"filter grna"| CG
+    C -->|"filter hash"| CH
+
+    CR --> MR["mappingscRNA x3"]
+    CG --> MG["mappingGuide x3<br/>4 FASTQs per task"]
+    CH --> MH["mappingHashing x3"]
+
+    MR --> RDIR["MappingOut.ks_transcripts_out_dir"]
+    MG --> GDIR["MappingOut.ks_guide_out_dir"]
+    MH --> HDIR["MappingOut.ks_hashing_out_dir"]
+
+    RDIR -->|"collect + sort directory name"| RCAT["anndata_concat<br/>concat_anndata_rna"]
+    GDIR -->|"collect + sort directory name"| GCAT["anndata_concat<br/>concat_anndata_guide"]
+    HDIR -->|"collect + sort directory name"| HCAT0["anndata_concat<br/>concat_anndata_hashing"]
+
+    RCAT --> PRE["PreprocessAnnData<br/>filtered_anndata_rna"]
+    PRE --> FH["filter_hashing"]
+    HCAT0 --> FH
+    FH -->|"three *_hashing_filtered.h5ad"| DEMUX["demultiplex x3"]
+    DEMUX -->|"collect + sort"| HCAT["hashing_concat<br/>concatenated_hashing_demux"]
+
+    PRE --> CMD["CreateMuData"]
+    GCAT --> CMD
+    HCAT --> CMD
+    CMD --> M1["mudata.h5mu<br/>all matched cells"]
+    M1 --> PA["prepare_assignment"]
+    PA -->|"flatten three files"| CL["guide_assignment_cleanser x3"]
+    CL -->|"collect + sort"| MC["mudata_concat"]
+    MC --> M2["concat_mudata.h5mu<br/>69,123 cells"]
+    M2 --> INF["inference_pipeline"]
+
+    classDef channel fill:#e8f4ff,stroke:#1d4ed8,color:#102a56;
+    classDef process fill:#fff4dc,stroke:#b45309,color:#623006;
+    classDef artifact fill:#e8f7ec,stroke:#166534,color:#0d4524,stroke-width:2px;
+    class CS,C,CR,CG,CH,RDIR,GDIR,HDIR channel;
+    class MR,MG,MH,RCAT,GCAT,HCAT0,PRE,FH,DEMUX,HCAT,CMD,PA,CL,MC,INF process;
+    class CSV,M1,M2 artifact;
+          </pre>
+        </div>
+
+        <div class="callout">
+          <strong>Lane behavior:</strong> the samplesheet has a <code>lane</code>
+          column, but all Gary Hon values are empty. More importantly, the
+          grouping ID does not include <code>lane</code>; it is
+          <code>sample_${file_modality}_${measurement_sets}</code>. Therefore
+          this run has three measurement-set batches, not one pipeline batch
+          per sequencing lane. If lanes are intended to remain independent,
+          the samplesheet and grouping key must explicitly encode them.
+        </div>
+
+        <table class="config-table">
+          <thead>
+            <tr>
+              <th>Observed stage</th>
+              <th>Channel or artifact</th>
+              <th>May 14, 2026 run evidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Guide mapping</td>
+              <td><code>ch_guide -&gt; mappingGuide</code></td>
+              <td>The 6244 task passed four FASTQs to one <code>kb count</code>, confirming that its two guide pairs were pooled.</td>
+            </tr>
+            <tr>
+              <td>Modality concatenation</td>
+              <td><code>concat_anndata_rna</code>, <code>concat_anndata_guide</code>, <code>concat_anndata_hashing</code></td>
+              <td>All three concatenation logs sorted batches as 6244, 8721, 9613. Work prefixes: <code>0c/a5984d</code>, <code>28/a72f32</code>, and <code>df/78508d</code>.</td>
+            </tr>
+            <tr>
+              <td>RNA QC</td>
+              <td><code>Preprocessing.filtered_anndata_rna</code></td>
+              <td><code>PreprocessAnnData</code> started from 2,131,101 cells and wrote <code>filtered_anndata.h5ad</code>. Work prefix: <code>88/a8a838</code>.</td>
+            </tr>
+            <tr>
+              <td>RNA/hash intersection</td>
+              <td><code>Hashing_Filtered.hashing_filtered_anndata</code></td>
+              <td>128,814 shared cell keys; output was split into one hashing file for each of 6244, 8721, and 9613. Work prefix: <code>38/d4c52e</code>.</td>
+            </tr>
+            <tr>
+              <td>Hash demultiplexing</td>
+              <td><code>Demultiplex.hashing_demux_anndata</code></td>
+              <td>Three independent GMM-demux tasks ran after the split, then <code>hashing_concat</code> sorted and recombined their outputs. Work prefix: <code>c9/06dfe7</code>.</td>
+            </tr>
+            <tr>
+              <td>First MuData</td>
+              <td><code>MergeMuData.mudata</code></td>
+              <td><code>CreateMuData</code> received filtered RNA, concatenated guide, and concatenated demultiplexed hash files. Work prefix: <code>2e/096225</code>.</td>
+            </tr>
+            <tr>
+              <td>Assignment split</td>
+              <td><code>Prepare_assignment.prepare_assignment_mudata</code></td>
+              <td>GCP contains exactly three outputs: <code>IGVFDS6244NAXC_mudata.h5mu</code>, <code>IGVFDS8721BKRO_mudata.h5mu</code>, and <code>IGVFDS9613DDRB_mudata.h5mu</code>.</td>
+            </tr>
+            <tr>
+              <td>Final concatenation</td>
+              <td><code>GuideAssignment.concat_mudata</code></td>
+              <td><code>mudata_concat</code> found three assigned files and wrote <code>concat_mudata.h5mu</code> with 69,123 cells. Work prefix: <code>ca/0b0bee</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="filter-order">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Diagram 3</p>
+            <h2>Focused filter and intersection order</h2>
+          </div>
+          <p>
+            This view separates cell filters, feature filters, modality
+            intersections, and guide assignment.
+          </p>
+        </div>
+
+        <div class="panel diagram-panel">
+          <pre class="mermaid">
+flowchart TD
+    RAW["Concatenated RNA cells"] --> MODE{"Barcode mode"}
+    MODE -- "knee / knee2" --> UMI["Cell filter: total RNA UMI"]
+    MODE -- "none" --> MIN["Cell filter: minimum genes"]
+    UMI --> G10["Feature filter: gene in at least 10 cells"]
+    MIN --> G10
+    G10 --> MITO["Cell filter: pct_counts_mt below threshold"]
+    MITO --> RNAOK["RNA-QC cells"]
+
+    HRAW["Concatenated hashing"] --> HINT["Keep RNA-QC cell barcodes"]
+    RNAOK --> HINT
+    HINT --> DEMUX["GMM-demux: retain classified cells"]
+
+    GUIDE["Concatenated guide counts"] --> XMOD["Final exact qualified-key intersection"]
+    RNAOK --> XMOD
+    DEMUX -. "when enabled" .-> XMOD
+    XMOD --> M1["mudata.h5mu"]
+    M1 --> ASSIGN["SCEPTRE probability or CLEANSER threshold"]
+    ASSIGN --> M2["Concatenate batches"]
+    M2 --> PREV["Feature filter: gene prevalence fraction"]
+    PREV --> FINAL["concat_mudata.h5mu"]
+
+    classDef cell fill:#e8f4ff,stroke:#1d4ed8,color:#102a56;
+    classDef feature fill:#f3e8ff,stroke:#6d28d9,color:#351260;
+    classDef intersect fill:#fff4dc,stroke:#b45309,color:#623006;
+    classDef output fill:#e8f7ec,stroke:#166534,color:#0d4524,stroke-width:2px;
+    class MODE,UMI,MIN,MITO,DEMUX,ASSIGN cell;
+    class G10,PREV feature;
+    class HINT,XMOD intersect;
+    class M1,M2,FINAL output;
+          </pre>
+        </div>
+
+        <div class="callout">
+          <strong>Same-batch matching example:</strong>
+          <code>AAAC..._IGVFDS6244NAXC</code> in RNA can only match the same
+          qualified key in hashing and guide data. A raw <code>AAAC...</code>
+          barcode from <code>IGVFDS8721BKRO</code> has a different key.
+        </div>
+
+        <div class="callout">
+          <strong>No fixed guide-UMI cutoff is applied before MuData creation.</strong>
+          The raw per-cell guide count matrix is aligned with RNA cells first.
+          SCEPTRE or CLEANSER then converts guide counts into the binary
+          <code>guide_assignment</code> layer.
+        </div>
+      </section>
+
+      <section id="source-code">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Implementation</p>
+            <h2>Main filter points in code</h2>
+          </div>
+          <p>
+            Snippets are shortened for readability but preserve the operative
+            conditions and expressions from the repository.
+          </p>
+        </div>
+
+        <div class="code-grid">
+          <article class="code-card">
+            <header>
+              <h3>0. Group FASTQs into batch mapping jobs</h3>
+              <p>The grouping key is modality plus <code>measurement_sets</code>.</p>
+              <span class="source">subworkflows/local/utils_nfcore_crispr_pipeline/main.nf</span>
+            </header>
+            <pre><span class="keyword">def</span> meta = [
+    id: <span class="string">"sample_${row.file_modality}_${row.measurement_sets}"</span>,
+    modality: row.file_modality,
+    measurement_sets: row.measurement_sets,
+    lane: row.lane
+]
+
+[meta.id, meta, [r1_path, r2_path]]
+    .<span class="function">groupTuple</span>()
+    .map { meta, fastqs -&gt;
+        [meta, fastqs.flatten()]
+    }
+
+<span class="comment">// Gary Hon: two guide rows share each measurement_sets value.</span>
+<span class="comment">// Their two R1/R2 pairs are pooled into one guide mapping job.</span></pre>
+          </article>
+
+          <article class="code-card">
+            <header>
+              <h3>1. Qualify barcodes before concatenation</h3>
+              <p>The actual measurement-set ID is embedded in every cell key.</p>
+              <span class="source">bin/anndata_concat.py</span>
+            </header>
+            <pre>batch_num = <span class="function">extract_batch_num</span>(
+    os.path.basename(file_path)
+)
+
+barcode_suffix = <span class="function">get_barcode_key</span>(
+    covariates,
+    batch_col,
+    batch_num
+)
+
+adata.obs_names = pd.Index([
+    f<span class="string">"{barcode}_{barcode_suffix}"</span>
+    <span class="keyword">for</span> barcode <span class="keyword">in</span> adata.obs_names
+])
+
+<span class="comment"># Example: AAAC..._IGVFDS6244NAXC</span></pre>
+          </article>
+
+          <article class="code-card">
+            <header>
+              <h3>2. RNA UMI knee filter</h3>
+              <p>Used only when <code>QC_barcode_filter</code> is not <code>none</code>.</p>
+              <span class="source">bin/preprocess_adata.py</span>
+            </header>
+            <pre><span class="comment"># Total RNA UMIs per cell</span>
+cell_counts = np.asarray(adata_rna.X.sum(axis=1)).ravel()
+point_1, point_2 = get_elbow_knee_points(rank, log_counts)
+
+<span class="keyword">if</span> barcode_filter != <span class="string">"none"</span>:
+    selected_point = (
+        point_1 <span class="keyword">if</span> barcode_filter == <span class="string">"knee"</span>
+        <span class="keyword">else</span> point_2
+    )
+    count_threshold = knee_df.loc[knee_rank - 1, <span class="string">"sum"</span>]
+    keep_mask = cell_counts &gt;= count_threshold
+    adata_rna = adata_rna[keep_mask, :].copy()</pre>
+          </article>
+
+          <article class="code-card">
+            <header>
+              <h3>3. RNA gene and mitochondrial filters</h3>
+              <p>The minimum-gene cell filter is mutually exclusive with knee filtering.</p>
+              <span class="source">bin/preprocess_adata.py</span>
+            </header>
+            <pre><span class="keyword">if</span> barcode_filter == <span class="string">"none"</span>:
+    sc.pp.<span class="function">filter_cells</span>(
+        adata_rna,
+        min_genes=min_genes
+    )
+
+<span class="comment"># Basic feature cleanup before MuData concatenation</span>
+sc.pp.<span class="function">filter_genes</span>(adata_rna, min_cells=10)
+
+<span class="comment"># Keep cells below the configured mitochondrial percentage</span>
+adata_rna = adata_rna[
+    adata_rna.obs[<span class="string">"pct_counts_mt"</span>] &lt; pct_mito, :
+]</pre>
+          </article>
+
+          <article class="code-card">
+            <header>
+              <h3>4. Hashing follows RNA QC</h3>
+              <p>Hashing barcodes are restricted to cells surviving RNA filters.</p>
+              <span class="source">bin/filter_hashing.py</span>
+            </header>
+            <pre>hashing = ad.read_h5ad(hash_file)
+filtered_rna = ad.read_h5ad(filtered_rna_file)
+
+intersecting_barcodes = list(
+    set(hashing.obs_names).intersection(
+        filtered_rna.obs_names
+    )
+)
+
+hashing_filtered = hashing[intersecting_barcodes, :]
+
+<span class="keyword">for</span> batch <span class="keyword">in</span> hashing_filtered.obs[<span class="string">"batch"</span>].unique():
+    adata_subset = hashing_filtered[
+        hashing_filtered.obs[<span class="string">"batch"</span>] == batch
+    ].copy()</pre>
+          </article>
+
+          <article class="code-card">
+            <header>
+              <h3>5. Cross-modality barcode intersection</h3>
+              <p>This creates the first combined <code>mudata.h5mu</code>.</p>
+              <span class="source">bin/create_mdata.py</span>
+            </header>
+            <pre>intersecting_barcodes = <span class="function">_barcode_intersection</span>(
+    adata_rna.obs_names,
+    adata_guide.obs_names
+)
+
+<span class="keyword">if</span> adata_hashing is not <span class="keyword">None</span>:
+    intersecting_barcodes = <span class="function">_barcode_intersection</span>(
+        intersecting_barcodes,
+        adata_hashing.obs_names
+    )
+
+mudata_dict = {
+    <span class="string">"gene"</span>: adata_rna[intersecting_barcodes, :].copy(),
+    <span class="string">"guide"</span>: adata_guide[intersecting_barcodes, :].copy(),
+}
+mdata = MuData(mudata_dict)</pre>
+          </article>
+
+          <article class="code-card">
+            <header>
+              <h3>6. Gary Hon guide assignment</h3>
+              <p>This run uses CLEANSER independently on each measurement-set batch.</p>
+              <span class="source">modules/local/guide_assignment_cleanser/main.nf</span>
+            </header>
+            <pre><span class="comment"># prepare_assignment.py first splits mudata.h5mu by batch</span>
+
+cleanser \
+  -i ${mudata_input} \
+  --posteriors-output ${mudata_input.simpleName}_output.h5mu \
+  --modality guide \
+  --crop-seq \
+  --output-layer guide_assignment \
+  -t 1
+
+<span class="comment"># One task each for 6244, 8721, and 9613.</span></pre>
+          </article>
+
+          <article class="code-card">
+            <header>
+              <h3>7. Recombine batches and filter genes</h3>
+              <p>Applied after per-batch guide assignment.</p>
+              <span class="source">bin/mudata_concat.py</span>
+            </header>
+            <pre>combined_mdata = md.<span class="function">concat</span>(
+    [md.read(path) <span class="keyword">for</span> path <span class="keyword">in</span> files],
+    merge=<span class="string">"first"</span>,
+    uns_merge=<span class="string">"first"</span>,
+    join=<span class="string">"outer"</span>
+)
+
+index_filter = (
+    (combined_mdata[<span class="string">"gene"</span>].X &gt; 0).sum(0).A1
+    &gt; int(
+        combined_mdata[<span class="string">"gene"</span>].n_obs
+        * min_cells_fraction
+    )
+)
+combined_mdata.mod[<span class="string">"gene"</span>] = (
+    combined_mdata.mod[<span class="string">"gene"</span>][:, index_filter]
+)</pre>
+          </article>
+        </div>
+      </section>
+
+      <section id="configuration">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Active profile</p>
+            <h2>Gary Hon run configuration</h2>
+          </div>
+          <p>
+            Values from
+            <code>pipeline_run_Benchmark_basic_run_threshold_cleanser/GaryHonDataset/nextflow.config</code>.
+          </p>
+        </div>
+
+        <table class="config-table">
+          <thead>
+            <tr>
+              <th>Parameter</th>
+              <th>Current value</th>
+              <th>Effect</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>ENABLE_DATA_HASHING</code></td>
+              <td><code>true</code></td>
+              <td>Hash mapping, RNA-QC intersection, per-batch GMM demultiplexing, and hashing inclusion are active.</td>
+            </tr>
+            <tr>
+              <td><code>replace_barcodes</code></td>
+              <td><code>false</code></td>
+              <td>The updated workspace qualifies raw barcodes with the measurement-set ID. The historical May 14, 2026 checkout instead used positional suffixes, with matching protected by identical modality sort order.</td>
+            </tr>
+            <tr>
+              <td><code>QC_barcode_filter</code></td>
+              <td><code>'none'</code></td>
+              <td>The RNA knee/UMI filter is skipped and <code>QC_min_genes_per_cell</code> is used.</td>
+            </tr>
+            <tr>
+              <td><code>QC_min_genes_per_cell</code></td>
+              <td><code>500</code></td>
+              <td>Cells must express at least 500 genes before mitochondrial filtering.</td>
+            </tr>
+            <tr>
+              <td><code>QC_pct_mito</code></td>
+              <td><code>15</code></td>
+              <td>Cells are retained only when mitochondrial percentage is strictly below 15.</td>
+            </tr>
+            <tr>
+              <td><code>GUIDE_ASSIGNMENT_method</code></td>
+              <td><code>'cleanser'</code></td>
+              <td>CLEANSER assignment runs separately for each measurement-set batch.</td>
+            </tr>
+            <tr>
+              <td><code>GUIDE_ASSIGNMENT_cleanser_probability_threshold</code></td>
+              <td><code>1</code></td>
+              <td>The configured CLEANSER assignment threshold is passed as <code>-t 1</code>.</td>
+            </tr>
+            <tr>
+              <td><code>QC_min_cells_per_gene</code></td>
+              <td><code>0.05</code></td>
+              <td>After batches are recombined, genes must be detected in more than 5% of cells.</td>
+            </tr>
+            <tr>
+              <td><code>DUAL_GUIDE</code></td>
+              <td><code>false</code></td>
+              <td>Assigned guides are not collapsed into intended-target elements.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <footer>
+        Generated from the implementation in
+        <code>subworkflows/local/utils_nfcore_crispr_pipeline/main.nf</code>,
+        <code>bin/anndata_concat.py</code>,
+        <code>bin/preprocess_adata.py</code>,
+        <code>bin/filter_hashing.py</code>,
+        <code>bin/create_mdata.py</code>,
+        <code>bin/assign_grnas_sceptre.R</code>, and
+        <code>bin/mudata_concat.py</code>. Run evidence comes from the Gary Hon
+        <code>.nextflow.log</code> and its
+        <code>gs://igvf-pertub-seq-pipeline-data/work</code> task directories.
+      </footer>
+    </main>
+  </div>
+
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: "loose",
+      theme: "base",
+      flowchart: {
+        curve: "basis",
+        htmlLabels: true,
+        nodeSpacing: 34,
+        rankSpacing: 44
+      },
+      themeVariables: {
+        fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+        primaryColor: "#e8f7ec",
+        primaryTextColor: "#14231b",
+        primaryBorderColor: "#166534",
+        lineColor: "#60756a",
+        clusterBkg: "#f8faf8",
+        clusterBorder: "#b9cbbd"
+      }
+    });
+  </script>
+</body>
+</html>

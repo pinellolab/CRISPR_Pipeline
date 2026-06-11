@@ -39,9 +39,19 @@ workflow prepare_mapping_pipeline {
             def sorted_batches = batch_to_concat_batch.keySet().toList().sort { a, b ->
                 a.toString() <=> b.toString()
             }
+            def required_modalities = params.ENABLE_DATA_HASHING
+                ? ['scrna', 'grna', 'hash']
+                : ['scrna', 'grna']
+            def barcode_keys = sorted_batches.collect { batch ->
+                def shared_by_all_modalities = required_modalities.every { modality ->
+                    batches_by_modality[modality].contains(batch)
+                }
+                shared_by_all_modalities ? batch : batch_to_concat_batch[batch]
+            }
             def json = groovy.json.JsonOutput.toJson([
                 batch: sorted_batches,
-                concat_batch: sorted_batches.collect { batch_to_concat_batch[it] }
+                concat_batch: sorted_batches.collect { batch_to_concat_batch[it] },
+                barcode_key: barcode_keys
             ])
             return json
         }
