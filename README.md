@@ -94,41 +94,41 @@ Runtime/debug/internal keys such as `DEBUG_VAR`, dashboard asset paths (`css`, `
 |---|---:|---|---|
 | `ENABLE_DATA_HASHING` | `false` | `true`, `false` | Enables the hashing workflow: hash seqspec checks, hash mapping, hashtag filtering, demultiplexing, hash-aware MuData creation, and hash dashboard sections. |
 | `ENABLE_SCRUBLET` | `false` | `true`, `false` | Runs Scrublet doublet detection before guide assignment in the non-hashing workflow. |
-| `is_10x3v3` | `true` | `true`, `false` | Forces guide mapping through the 10x Genomics 3' v3 feature-barcode chemistry path. Set `false` when guide chemistry should be derived from the guide seqspec. |
+| `is_10x3v3` | `true` | `true`, `false` | Uses the 10x Genomics 3' v3 feature-barcode chemistry path (`10XV3`, `kite:10xFB`) for guide mapping and, after PR #78, hashing/HTO mapping as well. Set `false` when chemistry should come entirely from the seqspec. |
 | `reverse_complement_guides` | `false` | `true`, `false` | Reverse-complements guide spacer sequences while building the guide reference, preserving the metadata fields. |
-| `spacer_tag` | `GAGTACATGGGG` | DNA sequence, empty string, or `null` | Sequence immediately upstream of the guide spacer. When provided, guide mapping searches the guide read around this spacer instead of relying only on fixed seqspec feature coordinates. |
-| `scrna_workflow` | `standard` | `standard`, `nac` | Selects the kb count RNA workflow. `standard` performs regular transcript counting; `nac` uses nascent-aware counting with cDNA and nascent references. |
+| `spacer_tag` | `GAGTACATGGGG` | DNA sequence, empty string, or `null` | Recommended 12 bp sequence immediately upstream of the guide spacer. When provided, guide mapping searches the whole guide read around this tag instead of relying only on fixed seqspec feature coordinates. |
+| `scrna_workflow` | `standard` | `standard`, `nac` | Selects the kb count RNA workflow. `standard` performs mature transcript counting; `nac` performs nascent-aware counting with cDNA and nascent references for unspliced/nascent signal. |
 | `use_multimapping` | `false` | `true`, `false` | Passes kb count multimapping mode for scRNA mapping and keeps that setting during AnnData concatenation. |
-| `replace_barcodes` | `false` | `true`, `false` | Enables barcode replacement during RNA and guide mapping. Downstream concatenation expects the modified barcode output directories when enabled. |
+| `replace_barcodes` | `false` | `true`, `false` | Enables the CC-Perturb-seq barcode replacement strategy during RNA and guide mapping. When enabled, kb receives the replacement table and downstream concatenation reads `counts_unfiltered_modified`. |
 | `bc_replacement_file` | `''` | File path | Replacement table used by kb count when `replace_barcodes = true`. |
 | `DUAL_GUIDE` | `false` | `true`, `false` | Enables dual-guide-aware aggregation when concatenating guide-assigned MuData, for dual-guide perturbation designs. |
-| `Multiplicity_of_infection` | `high` | `high`, `low` | Records the expected screen MOI in MuData and informs guide-assignment/inference context. |
+| `Multiplicity_of_infection` | `high` | `high`, `low` | Records screen MOI in MuData. `high` allows multi-guide cell contexts; `low` records a mostly zero-or-one-guide design and changes how guide assignments and perturbation tests should be interpreted. |
 
 ##### Reference options
 
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
 | `use_igvf_reference` | `true` | `true`, `false` | Uses the prebuilt IGVF transcriptome reference for RNA mapping. When enabled, `REFERENCE_transcriptome` is ignored for RNA reference selection. |
-| `REFERENCE_transcriptome` | `human` | kb-python transcriptome name | Transcriptome reference name used by kb-python when `use_igvf_reference = false`. |
-| `REFERENCE_gtf_download_path` | GENCODE v43 URL | URL | GTF annotation downloaded when `REFERENCE_gtf_local_path` does not exist. The GTF is used for preprocessing annotation and cis pair construction. |
-| `REFERENCE_gtf_local_path` | `/path/to/gencode_gtf.gtf.gz` | File path | Local GTF annotation. If present, it is used instead of downloading `REFERENCE_gtf_download_path`. |
+| `REFERENCE_transcriptome` | `human` | kb-python transcriptome name | Transcriptome reference name used by kb-python only when `use_igvf_reference = false`; ignored for RNA mapping when the IGVF reference is enabled. |
+| `REFERENCE_gtf_download_path` | GENCODE v43 URL | URL | GTF annotation URL used only when no local GTF exists. Reference-selection settings are ignored when `use_igvf_reference = true`, but the GTF is still needed for gene annotation and cis pair construction. |
+| `REFERENCE_gtf_local_path` | `/path/to/gencode_gtf.gtf.gz` | File path | Local GTF annotation. If present, preprocessing/inference use it instead of downloading `REFERENCE_gtf_download_path`; RNA reference selection still follows `use_igvf_reference`. |
 
 ##### Quality control options
 
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
-| `QC_min_genes_per_cell` | `800` | Integer | Minimum detected genes required to keep a cell when `QC_barcode_filter = 'none'`. |
+| `QC_min_genes_per_cell` | `800` | Integer | Minimum detected genes required to keep a cell when `QC_barcode_filter = 'none'`. A gene is counted as present in a cell when its RNA count is greater than zero. |
 | `QC_min_cells_per_gene` | `0.05` | Number or fraction | Minimum cell support required to keep a gene. Also passed to guide-assignment aggregation. |
 | `QC_pct_mito` | `15` | `0` to `100` | Maximum mitochondrial read percentage allowed per cell during preprocessing. |
 | `QC_batch_col` | `batch` | Observation column name | Batch column used in additional QC plots. |
-| `QC_barcode_filter` | `knee2` | `none`, `knee`, `knee2` | RNA barcode filtering strategy. `none` skips UMI-knee filtering and uses `QC_min_genes_per_cell`; `knee` uses the first barcode-rank knee; `knee2` uses the second, stricter knee point. |
+| `QC_barcode_filter` | `knee2` | `none`, `knee`, `knee2` | RNA barcode filtering strategy based on total cell RNA UMIs. `knee` uses the first barcode-rank knee and is more permissive; `knee2` searches the high-UMI segment before knee1 for a second, stricter knee; `none` skips UMI-knee filtering and applies `QC_min_genes_per_cell`. If the requested knee cannot be found, barcode filtering is skipped and the min-gene filter is not applied. |
 
 ##### Guide assignment options
 
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
 | `GUIDE_ASSIGNMENT_method` | `sceptre` | `sceptre`, `cleanser` | Selects the guide-to-cell assignment method before inference. |
-| `GUIDE_ASSIGNMENT_capture_method` | `CROP-seq` | Capture method string, commonly `CROP-seq` or `crop-seq` | Recorded in MuData and passed to Cleanser when `GUIDE_ASSIGNMENT_method = 'cleanser'`. |
+| `GUIDE_ASSIGNMENT_capture_method` | `crop-seq` | `crop-seq`, `direct-capture` | Recorded in MuData and passed directly to CLEANSER as `--crop-seq` or `--direct-capture` when `GUIDE_ASSIGNMENT_method = 'cleanser'`. |
 | `GUIDE_ASSIGNMENT_cleanser_probability_threshold` | `1` | `0` to `1` | Probability threshold used by Cleanser guide assignment. |
 | `GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold` | `0.8` | `0` to `1` | Posterior probability threshold for SCEPTRE mixture-based guide assignment. |
 | `GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep` | `5` | Integer `>= 1` | Number of EM initializations used by SCEPTRE guide assignment. |

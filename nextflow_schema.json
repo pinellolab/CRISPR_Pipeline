@@ -1,11 +1,11 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://raw.githubusercontent.com/pinellolab/CRISPR_Pipeline/main/nextflow_schema.json",
     "title": "CRISPR Pipeline parameters",
     "description": "Pipeline parameters for single-cell Perturb-seq CRISPR screen processing, guide assignment, inference, and optional evaluation outputs.",
     "type": "object",
     "additionalProperties": true,
-    "definitions": {
+    "$defs": {
         "input_output_options": {
             "title": "Input/output options",
             "type": "object",
@@ -54,8 +54,8 @@
                 "is_10x3v3": {
                     "type": "boolean",
                     "default": true,
-                    "description": "Use fixed 10x Genomics 3' v3 guide chemistry handling.",
-                    "help_text": "When true, guide mapping uses the 10XV3/kite:10xFB chemistry path instead of deriving guide chemistry entirely from the guide seqspec."
+                    "description": "Use the 10x Genomics 3' v3 feature-barcode chemistry path for guide and hashing libraries.",
+                    "help_text": "When true, guide mapping uses CHEM=10XV3 with kb --workflow kite:10xFB instead of deriving the guide chemistry entirely from the guide seqspec. The same 3' v3 special case is now applied to mappingHashing as in PR #78 (akexbarrera / fit-hto-3pv3), so HTO/hash libraries use the same 10XV3 + kite:10xFB behavior rather than the generic parsed seqspec chemistry."
                 },
                 "reverse_complement_guides": {
                     "type": "boolean",
@@ -68,8 +68,8 @@
                         "null"
                     ],
                     "default": "GAGTACATGGGG",
-                    "description": "Fixed sequence immediately upstream of the guide spacer.",
-                    "help_text": "When provided, guide mapping keeps the guide read from the seqspec but resets the guide feature coordinates so the mapper can search the whole guide read around this spacer tag. Use null or an empty value to rely on the seqspec feature coordinates."
+                    "description": "Recommended 12 bp sequence immediately upstream of the guide spacer.",
+                    "help_text": "Use this when the guide spacer is preceded by a constant adapter/tag sequence. A 12 bp tag is recommended because it is usually specific enough to anchor the guide read while still tolerating normal read quality. When provided, mappingGuide preserves the guide read ID from the seqspec but resets the guide feature start/end to 0,0 so kb can search the whole guide read for the tagged spacer. Set null or an empty string to rely strictly on the feature coordinates encoded in the guide seqspec."
                 },
                 "scrna_workflow": {
                     "type": "string",
@@ -79,7 +79,7 @@
                         "nac"
                     ],
                     "description": "kb count workflow used for scRNA mapping.",
-                    "help_text": "standard runs regular transcriptome counting. nac runs the nascent-aware workflow with cDNA and nascent references."
+                    "help_text": "standard runs regular mature transcript counting against the selected transcriptome index. nac runs nascent-aware counting by passing kb --workflow nac with both the cDNA reference and nascent reference, allowing the RNA modality to capture nascent/unspliced signal in addition to mature transcript signal. Use nac only when the selected reference bundle includes the nascent index expected by the pipeline."
                 },
                 "use_multimapping": {
                     "type": "boolean",
@@ -90,7 +90,7 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Enable barcode replacement during RNA and guide mapping.",
-                    "help_text": "When true, the mapping modules pass bc_replacement_file to kb count and downstream concatenation expects the modified barcode outputs."
+                    "help_text": "This is the CC-Perturb-seq barcode correction strategy. When true, RNA and guide mapping pass bc_replacement_file to kb count with -r so barcodes can be translated to a shared/corrected barcode namespace before modality overlap. Downstream concatenation then reads counts_unfiltered_modified outputs. Leave false for standard 10x-style data where RNA and guide barcodes already match."
                 },
                 "bc_replacement_file": {
                     "type": "string",
@@ -111,7 +111,7 @@
                         "low"
                     ],
                     "description": "Expected CRISPR screen multiplicity of infection.",
-                    "help_text": "Stored in the MuData object and used by downstream guide-assignment/inference context."
+                    "help_text": "Stored in guide.uns['moi'] during MuData creation. If set to high, downstream guide assignment and perturbation inference are allowed to represent cells with multiple guide assignments, which is appropriate for high-MOI screens. If set to low, the pipeline records a low-MOI design where most cells are expected to carry zero or one perturbation; this affects how guide assignment and interpretation of perturbation-level tests should be handled. If a non high/low value is provided, create_mdata.py estimates high versus low from the average number of detected guides per cell."
                 }
             }
         },
@@ -130,20 +130,22 @@
                 "REFERENCE_transcriptome": {
                     "type": "string",
                     "default": "human",
-                    "description": "Transcriptome name passed to kb-python reference download when not using the prebuilt IGVF reference."
+                    "description": "Transcriptome name passed to kb-python reference download when not using the prebuilt IGVF reference.",
+                    "help_text": "Ignored for RNA mapping when use_igvf_reference = true because the pipeline uses the prebuilt IGVF reference bundle. Set use_igvf_reference = false when you want this transcriptome setting to control reference download."
                 },
                 "REFERENCE_gtf_download_path": {
                     "type": "string",
                     "format": "uri",
                     "default": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_43/gencode.v43.annotation.gtf.gz",
-                    "description": "URL for the GTF annotation downloaded when REFERENCE_gtf_local_path does not exist."
+                    "description": "URL for the GTF annotation downloaded when REFERENCE_gtf_local_path does not exist.",
+                    "help_text": "Ignored for reference selection when use_igvf_reference = true. The GTF is still used by preprocessing and cis-pair construction; if REFERENCE_gtf_local_path exists it takes priority over this URL."
                 },
                 "REFERENCE_gtf_local_path": {
                     "type": "string",
                     "format": "file-path",
                     "default": "/path/to/gencode_gtf.gtf.gz",
                     "description": "Local GTF annotation path.",
-                    "help_text": "If this file exists at runtime, preprocessing and inference use it instead of downloading REFERENCE_gtf_download_path."
+                    "help_text": "Ignored for RNA reference selection when use_igvf_reference = true, but still checked by preprocessing/inference for gene annotation and cis-pair construction. If this file exists at runtime, it is used instead of downloading REFERENCE_gtf_download_path."
                 }
             }
         },
@@ -157,7 +159,8 @@
                     "type": "integer",
                     "default": 800,
                     "minimum": 0,
-                    "description": "Minimum detected genes required to keep a cell when QC_barcode_filter is none."
+                    "description": "Minimum detected genes required to keep a cell when QC_barcode_filter is none.",
+                    "help_text": "A gene is considered present in a cell when its count is greater than zero in the RNA AnnData matrix. This parameter is passed to scanpy.pp.filter_cells(min_genes=...) and is only active when QC_barcode_filter = 'none'. When knee or knee2 filtering is enabled, total RNA UMI depth selects cells first and the min-genes cell filter is skipped."
                 },
                 "QC_min_cells_per_gene": {
                     "type": "number",
@@ -186,8 +189,8 @@
                         "knee",
                         "knee2"
                     ],
-                    "description": "RNA barcode filtering strategy.",
-                    "help_text": "none skips the RNA UMI knee filter and uses QC_min_genes_per_cell. knee uses the first knee point from the barcode rank curve. knee2 uses the second, stricter knee point."
+                    "description": "RNA barcode filtering strategy based on total cell RNA UMI depth.",
+                    "help_text": "The preprocessing script sums RNA UMIs per cell, sorts barcodes from highest to lowest total_gene_umis, plots log1p(total_gene_umis) versus barcode rank, and estimates up to two knees. 'knee' uses the first/basic knee: the barcode-rank point with maximum distance from the line joining the highest-UMI and lowest-UMI barcodes. This is more permissive and keeps cells with total_gene_umis greater than or equal to the UMI count at that first knee. 'knee2' first restricts the curve to the high-UMI segment before knee1 and then finds a second/advanced knee using spline curvature; this is stricter and is intended to remove additional low-quality or background barcodes inside the initially retained population. 'none' disables UMI-knee filtering and instead applies QC_min_genes_per_cell. If the requested knee cannot be determined, barcode filtering is skipped with a log message; preprocessing then continues, and because QC_barcode_filter is not 'none', the min-genes cell filter is also skipped. Cells tied at the selected UMI threshold are retained."
                 }
             }
         },
@@ -208,8 +211,13 @@
                 },
                 "GUIDE_ASSIGNMENT_capture_method": {
                     "type": "string",
-                    "default": "CROP-seq",
-                    "description": "Guide capture method recorded in MuData and passed to Cleanser when GUIDE_ASSIGNMENT_method is cleanser."
+                    "default": "crop-seq",
+                    "enum": [
+                        "crop-seq",
+                        "direct-capture"
+                    ],
+                    "description": "Guide capture method recorded in MuData and passed to CLEANSER when GUIDE_ASSIGNMENT_method is cleanser.",
+                    "help_text": "CLEANSER supports crop-seq and direct-capture models. The pipeline passes this value directly as a CLEANSER command-line flag: crop-seq becomes --crop-seq and direct-capture becomes --direct-capture. Use crop-seq for CROP-seq-style libraries where the guide RNA is captured through the transcript, and direct-capture for direct guide-capture assays."
                 },
                 "GUIDE_ASSIGNMENT_cleanser_probability_threshold": {
                     "type": "number",
@@ -401,28 +409,28 @@
     },
     "allOf": [
         {
-            "$ref": "#/definitions/input_output_options"
+            "$ref": "#/$defs/input_output_options"
         },
         {
-            "$ref": "#/definitions/assay_and_library_options"
+            "$ref": "#/$defs/assay_and_library_options"
         },
         {
-            "$ref": "#/definitions/reference_options"
+            "$ref": "#/$defs/reference_options"
         },
         {
-            "$ref": "#/definitions/quality_control_options"
+            "$ref": "#/$defs/quality_control_options"
         },
         {
-            "$ref": "#/definitions/guide_assignment_options"
+            "$ref": "#/$defs/guide_assignment_options"
         },
         {
-            "$ref": "#/definitions/inference_options"
+            "$ref": "#/$defs/inference_options"
         },
         {
-            "$ref": "#/definitions/benchmark_options"
+            "$ref": "#/$defs/benchmark_options"
         },
         {
-            "$ref": "#/definitions/network_options"
+            "$ref": "#/$defs/network_options"
         }
     ]
 }

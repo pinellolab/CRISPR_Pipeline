@@ -10,5 +10,15 @@ The nf-core/crispr documentation is split into the following pages:
   - The filtering, barcode intersection, guide assignment, and concatenation order for multiple measurement sets.
 - [Interactive filtering workflow](filtering_workflow.html)
   - Standalone HTML with rendered Mermaid diagrams, implementation snippets, and the active CC configuration.
+- [Parameter reference](index.html)
+  - Standalone nf-core-style parameter reference generated from `nextflow_schema.json`.
+
+Regenerate the parameter reference with:
+
+```bash
+python3 bin/render_schema_index.py
+```
+
+The generator always writes `docs/index.html` so the published page keeps the same filename.
 
 You can find a lot more documentation about installing, configuring and running nf-core pipelines on the website: [https://nf-co.re](https://nf-co.re)

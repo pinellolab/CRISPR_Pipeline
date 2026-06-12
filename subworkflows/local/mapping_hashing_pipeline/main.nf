@@ -28,7 +28,8 @@ workflow mapping_hashing_pipeline {
         HashingRef.hashing_index,
         HashingRef.t2g_hashing,
         SeqSpecResult.parsed_seqspec,
-        SeqSpecResult.barcode_file
+        SeqSpecResult.barcode_file,
+        params.is_10x3v3
     )
 
     ks_hashing_out_dir_collected = MappingOut.ks_hashing_out_dir

@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CRISPR Pipeline parameters</title>
+  <style>
+    :root {
+      --nf-blue: #24b064;
+      --nf-dark: #0f172a;
+      --nf-muted: #64748b;
+      --nf-line: #e2e8f0;
+      --nf-bg: #f8fafc;
+      --nf-card: #ffffff;
+      --nf-code: #f1f5f9;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--nf-bg);
+      color: var(--nf-dark);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+    .hero {
+      background: linear-gradient(135deg, #0f172a 0%, #14532d 100%);
+      color: white;
+      padding: 44px 32px 38px;
+    }
+    .hero h1 { margin: 0 0 10px; font-size: clamp(32px, 5vw, 54px); letter-spacing: -0.04em; }
+    .hero p { max-width: 960px; margin: 0; color: #d1fae5; font-size: 18px; }
+    .shell {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 28px;
+      padding: 28px 32px 52px;
+      max-width: 1500px;
+      margin: 0 auto;
+    }
+    aside {
+      position: sticky;
+      top: 20px;
+      align-self: start;
+      background: var(--nf-card);
+      border: 1px solid var(--nf-line);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+    }
+    aside h2 { margin: 0 0 12px; font-size: 15px; text-transform: uppercase; color: var(--nf-muted); letter-spacing: 0.08em; }
+    aside a {
+      display: block;
+      padding: 9px 10px;
+      border-radius: 10px;
+      color: #166534;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    aside a:hover { background: #dcfce7; }
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+    .search {
+      width: 100%;
+      padding: 13px 16px;
+      border: 1px solid var(--nf-line);
+      border-radius: 14px;
+      background: white;
+      font-size: 15px;
+      box-shadow: 0 8px 25px rgba(15, 23, 42, 0.05);
+    }
+    .card {
+      background: var(--nf-card);
+      border: 1px solid var(--nf-line);
+      border-radius: 18px;
+      margin-bottom: 24px;
+      overflow: hidden;
+      box-shadow: 0 14px 35px rgba(15, 23, 42, 0.06);
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 22px 24px;
+      border-bottom: 1px solid var(--nf-line);
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }
+    .card h2 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
+    .card-header p { margin: 6px 0 0; color: var(--nf-muted); }
+    .count {
+      align-self: start;
+      white-space: nowrap;
+      background: #dcfce7;
+      color: #166534;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 980px; }
+    th, td { padding: 13px 16px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--nf-line); }
+    th { background: #f8fafc; color: #334155; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+    tr:hover td { background: #f8fafc; }
+    td.param { width: 260px; }
+    code {
+      background: var(--nf-code);
+      color: #0f172a;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    td p { margin: 0; }
+    details { margin-top: 7px; color: var(--nf-muted); }
+    summary { cursor: pointer; color: #166534; font-weight: 700; }
+    .hidden { display: none; }
+    @media (max-width: 900px) {
+      .shell { grid-template-columns: 1fr; padding: 20px; }
+      aside { position: static; }
+      .hero { padding: 34px 20px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <h1>CRISPR Pipeline parameters</h1>
+    <p>Pipeline parameters for single-cell Perturb-seq CRISPR screen processing, guide assignment, inference, and optional evaluation outputs.</p>
+  </header>
+  <div class="shell">
+    <aside>
+      <h2>Parameter groups</h2>
+      <a href="#input-output-options">Input/output options</a><a href="#assay-and-library-options">Assay and library options</a><a href="#reference-options">Reference options</a><a href="#quality-control-options">Quality control options</a><a href="#guide-assignment-options">Guide assignment options</a><a href="#inference-options">Inference options</a><a href="#benchmark-options">Benchmark options</a><a href="#network-options">Network plot options</a>
+    </aside>
+    <main>
+      <div class="toolbar">
+        <input id="search" class="search" type="search" placeholder="Search parameters, descriptions, defaults, or options...">
+      </div>
+      
+        <section class="card" id="input-output-options">
+          <div class="card-header">
+            <div>
+              <h2>Input/output options</h2>
+              <p>Define the input samplesheet and output directory.</p>
+            </div>
+            <span class="count">2 params</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Description</th>
+                  <th>Type</th>
+                  <th>Default</th>
+                  <th>Options</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td class="param"><code>input</code></td><td><p>Path to the pipeline samplesheet.</p><details><summary>More context</summary><small>The samplesheet provides modality-specific FASTQ paths and metadata used by the pipeline, including R1_path, R2_path, file_modality, measurement_sets, seqspec, barcode_onlist, guide_design, and barcode_hashtag_map when hashing is enabled.</small></details></td><td>string | null</td><td>-</td><td>file path</td></tr><tr><td class="param"><code>outdir</code></td><td><p>Directory where final pipeline outputs are published.</p></td><td>string</td><td><code>&#x27;./pipeline_outputs&#x27;</code></td><td>directory path</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        
+        <section class="card" id="assay-and-library-options">
+          <div class="card-header">
+            <div>
+              <h2>Assay and library options</h2>
+              <p>Options describing the assay design, sequencing chemistry, and barcode handling.</p>
+            </div>
+            <span class="count">11 params</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Description</th>
+                  <th>Type</th>
+                  <th>Default</th>
+                  <th>Options</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td class="param"><code>ENABLE_DATA_HASHING</code></td><td><p>Enable the hashing branch of the workflow.</p><details><summary>More context</summary><small>When true, the workflow expects hash modality rows in the samplesheet, runs hashing mapping, filtering, demultiplexing, and uses the hashing dashboard path.</small></details></td><td>boolean</td><td><code>false</code></td><td><code>true</code>, <code>false</code></td></tr><tr><td class="param"><code>ENABLE_SCRUBLET</code></td><td><p>Run Scrublet doublet detection before guide assignment in non-hashing workflows.</p></td><td>boolean</td><td><code>false</code></td><td><code>true</code>, <code>false</code></td></tr><tr><td class="param"><code>is_10x3v3</code></td><td><p>Use the 10x Genomics 3&#x27; v3 feature-barcode chemistry path for guide and hashing libraries.</p><details><summary>More context</summary><small>When true, guide mapping uses CHEM=10XV3 with kb --workflow kite:10xFB instead of deriving the guide chemistry entirely from the guide seqspec. The same 3&#x27; v3 special case is now applied to mappingHashing as in PR #78 (akexbarrera / fit-hto-3pv3), so HTO/hash libraries use the same 10XV3 + kite:10xFB behavior rather than the generic parsed seqspec chemistry.</small></details></td><td>boolean</td><td><code>true</code></td><td><code>true</code>, <code>false</code></td></tr><tr><td class="param"><code>reverse_complement_guides</code></td><td><p>Reverse-complement guide spacer sequences while building the guide reference.</p></td><td>boolean</td><td><code>false</code></td><td><code>true</code>, <code>false</code></td></tr><tr><td class="param"><code>spacer_tag</code></td><td><p>Recommended 12 bp sequence immediately upstream of the guide spacer.</p><details><summary>More context</summary><small>Use this when the guide spacer is preceded by a constant adapter/tag sequence. A 12 bp tag is recommended because it is usually specific enough to anchor the guide read while still tolerating normal read quality. When provided, mappingGuide preserves the guide read ID from the seqspec but resets the guide feature start/end to 0,0 so kb can search the whole guide read for the tagged spacer. Set null or an empty string to rely strictly on the feature coordinates encoded in the guide seqspec.</small></details></td><td>string | null</td><td><code>&#x27;GAGTACATGGGG&#x27;</code></td><td>-</td></tr><tr><td class="param"><code>scrna_workflow</code></td><td><p>kb count workflow used for scRNA mapping.</p><details><summary>More context</summary><small>standard runs regular mature transcript counting against the selected transcriptome index. nac runs nascent-aware counting by passing kb --workflow nac with both the cDNA reference and nascent reference, allowing the RNA modality to capture nascent/unspliced signal in addition to mature transcript signal. Use nac only when the selected reference bundle includes the nascent index expected by the pipeline.</small></details></td><td>string</td><td><code>&#x27;standard&#x27;</code></td><td><code>standard</code>, <code>nac</code></td></tr><tr><td class="param"><code>use_multimapping</code></td><td><p>Pass kb count multimapping mode to scRNA mapping and preserve that setting during AnnData concatenation.</p></td><td>boolean</td><td><code>false</code></td><td><code>true</code>, <code>false</code></td></tr><tr><td class="param"><code>replace_barcodes</code></td><td><p>Enable barcode replacement during RNA and guide mapping.</p><details><summary>More context</summary><small>This is the CC-Perturb-seq barcode correction strategy. When true, RNA and guide mapping pass bc_replacement_file to kb count with -r so barcodes can be translated to a shared/corrected barcode namespace before modality overlap. Downstream concatenation then reads counts_unfiltered_modified outputs. Leave false for standard 10x-style data where RNA and guide barcodes already match.</small></details></td><td>boolean</td><td><code>false</code></td><td><code>true</code>, <code>false</code></td></tr><tr><td class="param"><code>bc_replacement_file</code></td><td><p>Barcode replacement table used when replace_barcodes is true.</p></td><td>string</td><td><code>&#x27;&#x27;</code></td><td>file path</td></tr><tr><td class="param"><code>DUAL_GUIDE</code></td><td><p>Enable dual-guide-aware aggregation when concatenating guide-assigned MuData.</p></td><td>boolean</td><td><code>false</code></td><td><code>true</code>, <code>false</code></td></tr><tr><td class="param"><code>Multiplicity_of_infection</code></td><td><p>Expected CRISPR screen multiplicity of infection.</p><details><summary>More context</summary><small>Stored in guide.uns[&#x27;moi&#x27;] during MuData creation. If set to high, downstream guide assignment and perturbation inference are allowed to represent cells with multiple guide assignments, which is appropriate for high-MOI screens. If set to low, the pipeline records a low-MOI design where most cells are expected to carry zero or one perturbation; this affects how guide assignment and interpretation of perturbation-level tests should be handled. If a non high/low value is provided, create_mdata.py estimates high versus low from the average number of detected guides per cell.</small></details></td><td>string</td><td><code>&#x27;high&#x27;</code></td><td><code>high</code>, <code>low</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        
+        <section class="card" id="reference-options">
+          <div class="card-header">
+            <div>
+              <h2>Reference options</h2>
+              <p>Reference transcriptome and annotation inputs.</p>
+            </div>
+            <span class="count">4 params</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Description</th>
+                  <th>Type</th>
+                  <th>Default</th>
+                  <th>Options</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td class="param"><code>use_igvf_reference</code></td><td><p>Use the prebuilt IGVF transcriptome reference for RNA mapping.</p><details><summary>More context</summary><small>When true, the RNA mapping reference is taken from the IGVF reference path and REFERENCE_transcriptome is ignored for that mapping step.</small></details></td><td>boolean</td><td><code>true</code></td><td><code>true</code>, <code>false</code></td></tr><tr><td class="param"><code>REFERENCE_transcriptome</code></td><td><p>Transcriptome name passed to kb-python reference download when not using the prebuilt IGVF reference.</p><details><summary>More context</summary><small>Ignored for RNA mapping when use_igvf_reference = true because the pipeline uses the prebuilt IGVF reference bundle. Set use_igvf_reference = false when you want this transcriptome setting to control reference download.</small></details></td><td>string</td><td><code>&#x27;human&#x27;</code></td><td>-</td></tr><tr><td class="param"><code>REFERENCE_gtf_download_path</code></td><td><p>URL for the GTF annotation downloaded when REFERENCE_gtf_local_path does not exist.</p><details><summary>More context</summary><small>Ignored for reference selection when use_igvf_reference = true. The GTF is still used by preprocessing and cis-pair construction; if REFERENCE_gtf_local_path exists it takes priority over this URL.</small></details></td><td>string</td><td><code>&#x27;https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_43/gencode.v43.annotation.gtf.gz&#x27;</code></td><td>URL</td></tr><tr><td class="param"><code>REFERENCE_gtf_local_path</code></td><td><p>Local GTF annotation path.</p><details><summary>More context</summary><small>Ignored for RNA reference selection when use_igvf_reference = true, but still checked by preprocessing/inference for gene annotation and cis-pair construction. If this file exists at runtime, it is used instead of downloading REFERENCE_gtf_download_path.</small></details></td><td>string</td><td><code>&#x27;/path/to/gencode_gtf.gtf.gz&#x27;</code></td><td>file path</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        
+        <section class="card" id="quality-control-options">
+          <div class="card-header">
+            <div>
+              <h2>Quality control options</h2>
+              <p>Cell, gene, and barcode filtering options used during preprocessing and QC reporting.</p>
+            </div>
+            <span class="count">5 params</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Description</th>
+                  <th>Type</th>
+                  <th>Default</th>
+                  <th>Options</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td class="param"><code>QC_min_genes_per_cell</code></td><td><p>Minimum detected genes required to keep a cell when QC_barcode_filter is none.</p><details><summary>More context</summary><small>A gene is considered present in a cell when its count is greater than zero in the RNA AnnData matrix. This parameter is passed to scanpy.pp.filter_cells(min_genes=...) and is only active when QC_barcode_filter = &#x27;none&#x27;. When knee or knee2 filtering is enabled, total RNA UMI depth selects cells first and the min-genes cell filter is skipped.</small></details></td><td>integer</td><td><code>800</code></td><td>>= 0</td></tr><tr><td class="param"><code>QC_min_cells_per_gene</code></td><td><p>Minimum cell support required to keep a gene.</p><details><summary>More context</summary><small>Passed to preprocessing and to MuData guide-assignment aggregation. Values are typically interpreted as a fraction of cells.</small></details></td><td>number</td><td><code>0.05</code></td><td>>= 0</td></tr><tr><td class="param"><code>QC_pct_mito</code></td><td><p>Maximum mitochondrial read percentage allowed per cell.</p></td><td>number</td><td><code>15</code></td><td>0 to 100</td></tr><tr><td class="param"><code>QC_batch_col</code></td><td><p>Observation metadata column used as the batch label in additional QC plots.</p></td><td>string</td><td><code>&#x27;batch&#x27;</code></td><td>-</td></tr><tr><td class="param"><code>QC_barcode_filter</code></td><td><p>RNA barcode filtering strategy based on total cell RNA UMI depth.</p><details><summary>More context</summary><small>The preprocessing script sums RNA UMIs per cell, sorts barcodes from highest to lowest total_gene_umis, plots log1p(total_gene_umis) versus barcode rank, and estimates up to two knees. &#x27;knee&#x27; uses the first/basic knee: the barcode-rank point with maximum distance from the line joining the highest-UMI and lowest-UMI barcodes. This is more permissive and keeps cells with total_gene_umis greater than or equal to the UMI count at that first knee. &#x27;knee2&#x27; first restricts the curve to the high-UMI segment before knee1 and then finds a second/advanced knee using spline curvature; this is stricter and is intended to remove additional low-quality or background barcodes inside the initially retained population. &#x27;none&#x27; disables UMI-knee filtering and instead applies QC_min_genes_per_cell. If the requested knee cannot be determined, barcode filtering is skipped with a log message; preprocessing then continues, and because QC_barcode_filter is not &#x27;none&#x27;, the min-genes cell filter is also skipped. Cells tied at the selected UMI threshold are retained.</small></details></td><td>string</td><td><code>&#x27;knee2&#x27;</code></td><td><code>none</code>, <code>knee</code>, <code>knee2</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        
+        <section class="card" id="guide-assignment-options">
+          <div class="card-header">
+            <div>
+              <h2>Guide assignment options</h2>
+              <p>Guide assignment method and thresholds.</p>
+            </div>
+            <span class="count">5 params</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Description</th>
+                  <th>Type</th>
+                  <th>Default</th>
+                  <th>Options</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td class="param"><code>GUIDE_ASSIGNMENT_method</code></td><td><p>Method used to assign guide RNAs to cells.</p></td><td>string</td><td><code>&#x27;sceptre&#x27;</code></td><td><code>sceptre</code>, <code>cleanser</code></td></tr><tr><td class="param"><code>GUIDE_ASSIGNMENT_capture_method</code></td><td><p>Guide capture method recorded in MuData and passed to CLEANSER when GUIDE_ASSIGNMENT_method is cleanser.</p><details><summary>More context</summary><small>CLEANSER supports crop-seq and direct-capture models. The pipeline passes this value directly as a CLEANSER command-line flag: crop-seq becomes --crop-seq and direct-capture becomes --direct-capture. Use crop-seq for CROP-seq-style libraries where the guide RNA is captured through the transcript, and direct-capture for direct guide-capture assays.</small></details></td><td>string</td><td><code>&#x27;crop-seq&#x27;</code></td><td><code>crop-seq</code>, <code>direct-capture</code></td></tr><tr><td class="param"><code>GUIDE_ASSIGNMENT_cleanser_probability_threshold</code></td><td><p>Probability threshold passed to Cleanser guide assignment.</p></td><td>number</td><td><code>1</code></td><td>0 to 1</td></tr><tr><td class="param"><code>GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold</code></td><td><p>Posterior probability threshold for SCEPTRE mixture-based guide assignment.</p></td><td>number</td><td><code>0.8</code></td><td>0 to 1</td></tr><tr><td class="param"><code>GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep</code></td><td><p>Number of EM initializations passed to SCEPTRE guide assignment.</p></td><td>integer</td><td><code>5</code></td><td>>= 1</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        
+        <section class="card" id="inference-options">
+          <div class="card-header">
+            <div>
+              <h2>Inference options</h2>
+              <p>Differential expression and perturbation inference settings.</p>
+            </div>
+            <span class="count">16 params</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Description</th>
+                  <th>Type</th>
+                  <th>Default</th>
+                  <th>Options</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td class="param"><code>INFERENCE_method</code></td><td><p>Inference method to run.</p><details><summary>More context</summary><small>default runs cis SCEPTRE, cis PerTurbo, trans PerTurbo, and writes the merged cis/trans output tables. sceptre runs SCEPTRE only. perturbo runs PerTurbo only. sceptre,perturbo runs both methods on the same cis pair set.</small></details></td><td>string</td><td><code>&#x27;default&#x27;</code></td><td><code>default</code>, <code>sceptre</code>, <code>perturbo</code>, <code>sceptre,perturbo</code></td></tr><tr><td class="param"><code>INFERENCE_input_mudata</code></td><td><p>Input MuData file for -entry INFERENCE_FROM_MUDATA runs.</p></td><td>string | null</td><td><code>null</code></td><td>file path</td></tr><tr><td class="param"><code>INFERENCE_target_guide_pairing_strategy</code></td><td><p>Strategy used to define guide-target pairs before inference.</p><details><summary>More context</summary><small>default builds cis pairs using intended targets and the configured max distance. by_distance builds distance-based cis pairs. predefined_pairs uses INFERENCE_predefined_pairs_to_test.</small></details></td><td>string</td><td><code>&#x27;default&#x27;</code></td><td><code>default</code>, <code>by_distance</code>, <code>predefined_pairs</code></td></tr><tr><td class="param"><code>INFERENCE_predefined_pairs_to_test</code></td><td><p>CSV file containing predefined guide-target pairs.</p><details><summary>More context</summary><small>Required when INFERENCE_target_guide_pairing_strategy is predefined_pairs.</small></details></td><td>string | null</td><td><code>null</code></td><td>file path</td></tr><tr><td class="param"><code>INFERENCE_max_target_distance_bp</code></td><td><p>Maximum genomic distance, in base pairs, used when constructing cis guide-target pairs.</p></td><td>integer</td><td><code>1000000</code></td><td>>= 0</td></tr><tr><td class="param"><code>INFERENCE_PERTURBO_BATCH_SIZE</code></td><td><p>Batch size passed to PerTurbo inference for cis and trans runs.</p></td><td>integer</td><td><code>4096</code></td><td>>= 1</td></tr><tr><td class="param"><code>INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK</code></td><td><p>Maximum genes per chunk for trans PerTurbo all-by-all inference.</p><details><summary>More context</summary><small>Values greater than 0 cap each balanced trans gene chunk. Values less than or equal to 0 disable trans gene chunking in the PerTurbo chunked runner.</small></details></td><td>integer</td><td><code>8000</code></td><td>-</td></tr><tr><td class="param"><code>INFERENCE_SCEPTRE_side</code></td><td><p>Alternative-hypothesis side passed to SCEPTRE inference.</p></td><td>string</td><td><code>&#x27;both&#x27;</code></td><td><code>both</code>, <code>left</code>, <code>right</code></td></tr><tr><td class="param"><code>INFERENCE_SCEPTRE_grna_integration_strategy</code></td><td><p>Guide RNA integration strategy passed to SCEPTRE inference.</p></td><td>string</td><td><code>&#x27;union&#x27;</code></td><td>-</td></tr><tr><td class="param"><code>INFERENCE_SCEPTRE_resampling_approximation</code></td><td><p>Resampling approximation passed to SCEPTRE inference.</p></td><td>string</td><td><code>&#x27;skew_normal&#x27;</code></td><td>-</td></tr><tr><td class="param"><code>INFERENCE_SCEPTRE_control_group</code></td><td><p>Control group strategy passed to SCEPTRE inference.</p></td><td>string</td><td><code>&#x27;complement&#x27;</code></td><td>-</td></tr><tr><td class="param"><code>INFERENCE_SCEPTRE_resampling_mechanism</code></td><td><p>Resampling mechanism passed to SCEPTRE inference.</p></td><td>string</td><td><code>&#x27;default&#x27;</code></td><td>-</td></tr><tr><td class="param"><code>INFERENCE_SCEPTRE_CHUNK_MODE</code></td><td><p>SCEPTRE MuData gene-chunking mode before inference.</p><details><summary>More context</summary><small>auto chunks when the cell-by-gene matrix exceeds INFERENCE_SCEPTRE_MAX_MATRIX_ENTRIES. off keeps a single input. force chunks regardless of matrix size.</small></details></td><td>string</td><td><code>&#x27;auto&#x27;</code></td><td><code>auto</code>, <code>off</code>, <code>force</code></td></tr><tr><td class="param"><code>INFERENCE_SCEPTRE_MAX_MATRIX_ENTRIES</code></td><td><p>Matrix-size threshold used by SCEPTRE auto chunking.</p></td><td>integer</td><td><code>2147483647</code></td><td>>= 1</td></tr><tr><td class="param"><code>INFERENCE_SCEPTRE_GENE_CHUNK_SIZE</code></td><td><p>Number of genes per SCEPTRE chunk when chunking is enabled.</p></td><td>integer</td><td><code>1000</code></td><td>>= 1</td></tr><tr><td class="param"><code>INFERENCE_SCEPTRE_FORCE_CHUNK</code></td><td><p>Force SCEPTRE chunking regardless of matrix size.</p><details><summary>More context</summary><small>This is a compatibility flag that passes --force-chunk to chunk_mudata_sceptre.py.</small></details></td><td>boolean</td><td><code>false</code></td><td><code>true</code>, <code>false</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        
+        <section class="card" id="benchmark-options">
+          <div class="card-header">
+            <div>
+              <h2>Benchmark options</h2>
+              <p>Optional transcription-factor benchmark analysis against ENCODE BED files.</p>
+            </div>
+            <span class="count">2 params</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Description</th>
+                  <th>Type</th>
+                  <th>Default</th>
+                  <th>Options</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td class="param"><code>ENABLE_BENCHMARK</code></td><td><p>Run the transcription factor benchmark workflow after inference.</p></td><td>boolean</td><td><code>false</code></td><td><code>true</code>, <code>false</code></td></tr><tr><td class="param"><code>ENCODE_BED_DIR</code></td><td><p>Directory containing ENCODE BED files used by the optional benchmark workflow.</p></td><td>string</td><td><code>&#x27;${projectDir}/encode_bed_files&#x27;</code></td><td>directory path</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        
+        <section class="card" id="network-options">
+          <div class="card-header">
+            <div>
+              <h2>Network plot options</h2>
+              <p>Network-display settings used by dashboard/evaluation plots.</p>
+            </div>
+            <span class="count">2 params</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Description</th>
+                  <th>Type</th>
+                  <th>Default</th>
+                  <th>Options</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td class="param"><code>NETWORK_custom_central_nodes</code></td><td><p>Comma-separated custom central nodes to highlight in network plots.</p></td><td>string</td><td><code>&#x27;undefined&#x27;</code></td><td>-</td></tr><tr><td class="param"><code>NETWORK_central_nodes_num</code></td><td><p>Number of central nodes to highlight when NETWORK_custom_central_nodes is undefined.</p></td><td>integer</td><td><code>1</code></td><td>>= 0</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        
+    </main>
+  </div>
+  <script>
+    const search = document.getElementById('search');
+    search.addEventListener('input', () => {
+      const q = search.value.trim().toLowerCase();
+      document.querySelectorAll('tbody tr').forEach(row => {
+        row.classList.toggle('hidden', q && !row.innerText.toLowerCase().includes(q));
+      });
+      document.querySelectorAll('section.card').forEach(section => {
+        const visibleRows = section.querySelectorAll('tbody tr:not(.hidden)').length;
+        section.classList.toggle('hidden', q && visibleRows === 0);
+      });
+    });
+  </script>
+</body>
+</html>

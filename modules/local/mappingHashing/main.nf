@@ -11,6 +11,7 @@ process mappingHashing {
     path t2g_hashing
     path parsed_seqSpec_file
     path barcode_file
+    val is_10xv3v
 
     output:
     path "*_ks_hashing_out", emit: ks_hashing_out_dir
@@ -20,12 +21,21 @@ process mappingHashing {
         def batch = meta.measurement_sets
         def fastq_files = reads.join(' ')
         """
+        set -euo pipefail
         echo "Processing $batch with $fastq_files"
 
-        chemistry=\$(extract_parsed_seqspec.py --file ${parsed_seqSpec_file})
+        if [ "${is_10xv3v}" == "true" ]; then
+            CHEM="10XV3"
+            WORKFLOW="kite:10xFB"
+        else
+            CHEM=\$(extract_parsed_seqspec.py --file ${parsed_seqSpec_file})
+            WORKFLOW="kite"
+        fi
+
+        echo "Final Chemistry: \$CHEM"
 
         kb count -i ${hashing_index} -g ${t2g_hashing} --verbose -w ${barcode_file} \\
-                --h5ad -x \$chemistry -o ${batch}_ks_hashing_out -t ${task.cpus} \\
+                --workflow \$WORKFLOW --h5ad -x \$CHEM -o ${batch}_ks_hashing_out -t ${task.cpus} \\
                 ${fastq_files} --overwrite
 
         echo "Hash KB mapping Complete"
