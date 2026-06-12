@@ -75,59 +75,93 @@ Before running the pipeline, customize the configuration files for your environm
 
 #### 1. Data and Analysis Parameters (`nextflow.config`)
 
-Update the pipeline-specific parameters in the `params` section, for example:
+Update the pipeline-specific parameters in the `params` section. The tables below document the options that change biological processing, guide assignment, inference, filtering, or optional analysis outputs. Compute resources, containers, cloud settings, email hooks, and other execution-only settings are documented separately in the compute configuration section.
 
-```groovy
-// Input data paths
-    input = null
+The same fields are also represented in `nextflow_schema.json`, using nf-core-style parameter groups so GUI/launch tools can show the options with descriptions.
 
-    // TO-DO, pipeline parameters
-    ENABLE_DATA_HASHING = false //use for datasets contaning hash
-    ENABLE_SCRUBLET = false //Using scrublet can be chalenge in datasets with hundred of thousands cells (ex: 300k +)
-    use_igvf_reference = true // Download the reference from IGVF to use as gene file annotation, this method when true will overwrite the reference_transcriptome and gtf_download_path
-    is_10x3v3 = true // In case using 10x3v3 use this option to execute the barcode translation operation. Otherwise guides and transcriptomes from the same cell will point for different barcodes and the overlap between modalities will be very small
-    reverse_complement_guides = false // Use true to reverse complement your guides while mapping it. The metadata info will be preserved and will use the original complementariety and direction
+Runtime/debug/internal keys such as `DEBUG_VAR`, dashboard asset paths (`css`, `js`, `svg`), and currently unused placeholders such as `INFERENCE_SCEPTRE_formula_object` are intentionally not listed here.
 
-    DUAL_GUIDE = false  // Case using Dual Guide system such as Replogle 2022 paper
-    REFERENCE_transcriptome = 'human' // will be used to download the kallisto human index
-    REFERENCE_gtf_download_path = 'https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_46/gencode.v46.annotation.gtf.gz' // Case creating a custom reference from the internet
-    REFERENCE_gtf_local_path = '/path/to/gencode_gtf.gtf.gz' // Case provind your own gtf data.
+##### Input and output options
 
-    QC_min_genes_per_cell = 500 //This parameter will be used to filter cel with low quality (aka: less than X transcript with more than one read)
-    QC_min_cells_per_gene = 0.05 //Fraction of cells a gene should be present to be considered in the inference steps. (0.05 is an number )
-    QC_pct_mito = 20 //Percentage of Mitochondrial reads from a cell total to discard the cell
+| Parameter | Default | Options | Pipeline context |
+|---|---:|---|---|
+| `input` | `null` | CSV or TSV samplesheet path | Samplesheet containing modality-specific FASTQ paths and metadata used to create the RNA, guide, and optional hashing channels. |
+| `outdir` | `./pipeline_outputs` | Directory path | Output directory for published final files, including MuData, per-guide/per-element result tables, dashboard archive, and QC metrics. |
 
-    Multiplicity_of_infection = 'low' // 'high' or 'low'
+##### Assay and library options
 
-    GUIDE_ASSIGNMENT_method = 'sceptre'
-    GUIDE_ASSIGNMENT_capture_method = 'CROP-seq'
-    GUIDE_ASSIGNMENT_cleanser_probability_threshold = 1
-    GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold = 0.8
-    GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep = 5
+| Parameter | Default | Options | Pipeline context |
+|---|---:|---|---|
+| `ENABLE_DATA_HASHING` | `false` | `true`, `false` | Enables the hashing workflow: hash seqspec checks, hash mapping, hashtag filtering, demultiplexing, hash-aware MuData creation, and hash dashboard sections. |
+| `ENABLE_SCRUBLET` | `false` | `true`, `false` | Runs Scrublet doublet detection before guide assignment in the non-hashing workflow. |
+| `is_10x3v3` | `true` | `true`, `false` | Forces guide mapping through the 10x Genomics 3' v3 feature-barcode chemistry path. Set `false` when guide chemistry should be derived from the guide seqspec. |
+| `reverse_complement_guides` | `false` | `true`, `false` | Reverse-complements guide spacer sequences while building the guide reference, preserving the metadata fields. |
+| `spacer_tag` | `GAGTACATGGGG` | DNA sequence, empty string, or `null` | Sequence immediately upstream of the guide spacer. When provided, guide mapping searches the guide read around this spacer instead of relying only on fixed seqspec feature coordinates. |
+| `scrna_workflow` | `standard` | `standard`, `nac` | Selects the kb count RNA workflow. `standard` performs regular transcript counting; `nac` uses nascent-aware counting with cDNA and nascent references. |
+| `use_multimapping` | `false` | `true`, `false` | Passes kb count multimapping mode for scRNA mapping and keeps that setting during AnnData concatenation. |
+| `replace_barcodes` | `false` | `true`, `false` | Enables barcode replacement during RNA and guide mapping. Downstream concatenation expects the modified barcode output directories when enabled. |
+| `bc_replacement_file` | `''` | File path | Replacement table used by kb count when `replace_barcodes = true`. |
+| `DUAL_GUIDE` | `false` | `true`, `false` | Enables dual-guide-aware aggregation when concatenating guide-assigned MuData, for dual-guide perturbation designs. |
+| `Multiplicity_of_infection` | `high` | `high`, `low` | Records the expected screen MOI in MuData and informs guide-assignment/inference context. |
 
-    INFERENCE_method = 'default' // sceptre or perturbo. Default will run sceptre and perturbo in cis and perturbo in trans (for elements and per guide)
-    INFERENCE_input_mudata = null // required only for -entry INFERENCE_FROM_MUDATA
-    INFERENCE_target_guide_pairing_strategy = 'default'
-    INFERENCE_PERTURBO_BATCH_SIZE = 4096 // Batch size passed to PerTurbo training in both cis and trans runs
-    INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK = 8000 // For trans PerTurbo only; values <= 0 disable chunking and values > 0 cap each balanced gene chunk
+##### Reference options
 
-    INFERENCE_predefined_pairs_to_test = "path/to/file.csv"
-    INFERENCE_max_target_distance_bp = 1000000
+| Parameter | Default | Options | Pipeline context |
+|---|---:|---|---|
+| `use_igvf_reference` | `true` | `true`, `false` | Uses the prebuilt IGVF transcriptome reference for RNA mapping. When enabled, `REFERENCE_transcriptome` is ignored for RNA reference selection. |
+| `REFERENCE_transcriptome` | `human` | kb-python transcriptome name | Transcriptome reference name used by kb-python when `use_igvf_reference = false`. |
+| `REFERENCE_gtf_download_path` | GENCODE v43 URL | URL | GTF annotation downloaded when `REFERENCE_gtf_local_path` does not exist. The GTF is used for preprocessing annotation and cis pair construction. |
+| `REFERENCE_gtf_local_path` | `/path/to/gencode_gtf.gtf.gz` | File path | Local GTF annotation. If present, it is used instead of downloading `REFERENCE_gtf_download_path`. |
 
-    INFERENCE_SCEPTRE_side = 'both'
-    INFERENCE_SCEPTRE_grna_integration_strategy = 'union'
-    INFERENCE_SCEPTRE_resampling_approximation = 'skew_normal'
-    INFERENCE_SCEPTRE_control_group = 'complement'
-    INFERENCE_SCEPTRE_resampling_mechanism = 'default'
-    INFERENCE_SCEPTRE_formula_object = 'default'
-    INFERENCE_SCEPTRE_CHUNK_MODE = 'auto' // auto, off, force
-    INFERENCE_SCEPTRE_MAX_MATRIX_ENTRIES = 2147483647 // chunk when n_cells*n_genes exceeds this threshold
-    INFERENCE_SCEPTRE_GENE_CHUNK_SIZE = 4000 // genes per chunk when chunking is enabled
-    INFERENCE_SCEPTRE_FORCE_CHUNK = false // force chunking regardless of matrix size
+##### Quality control options
 
-    NETWORK_custom_central_nodes = 'undefined'
-    NETWORK_central_nodes_num = 1
-```
+| Parameter | Default | Options | Pipeline context |
+|---|---:|---|---|
+| `QC_min_genes_per_cell` | `800` | Integer | Minimum detected genes required to keep a cell when `QC_barcode_filter = 'none'`. |
+| `QC_min_cells_per_gene` | `0.05` | Number or fraction | Minimum cell support required to keep a gene. Also passed to guide-assignment aggregation. |
+| `QC_pct_mito` | `15` | `0` to `100` | Maximum mitochondrial read percentage allowed per cell during preprocessing. |
+| `QC_batch_col` | `batch` | Observation column name | Batch column used in additional QC plots. |
+| `QC_barcode_filter` | `knee2` | `none`, `knee`, `knee2` | RNA barcode filtering strategy. `none` skips UMI-knee filtering and uses `QC_min_genes_per_cell`; `knee` uses the first barcode-rank knee; `knee2` uses the second, stricter knee point. |
+
+##### Guide assignment options
+
+| Parameter | Default | Options | Pipeline context |
+|---|---:|---|---|
+| `GUIDE_ASSIGNMENT_method` | `sceptre` | `sceptre`, `cleanser` | Selects the guide-to-cell assignment method before inference. |
+| `GUIDE_ASSIGNMENT_capture_method` | `CROP-seq` | Capture method string, commonly `CROP-seq` or `crop-seq` | Recorded in MuData and passed to Cleanser when `GUIDE_ASSIGNMENT_method = 'cleanser'`. |
+| `GUIDE_ASSIGNMENT_cleanser_probability_threshold` | `1` | `0` to `1` | Probability threshold used by Cleanser guide assignment. |
+| `GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold` | `0.8` | `0` to `1` | Posterior probability threshold for SCEPTRE mixture-based guide assignment. |
+| `GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep` | `5` | Integer `>= 1` | Number of EM initializations used by SCEPTRE guide assignment. |
+
+##### Inference options
+
+| Parameter | Default | Options | Pipeline context |
+|---|---:|---|---|
+| `INFERENCE_method` | `default` | `default`, `sceptre`, `perturbo`, `sceptre,perturbo` | Selects inference workflow. `default` runs cis SCEPTRE, cis PerTurbo, trans PerTurbo, and writes merged cis/trans outputs. |
+| `INFERENCE_input_mudata` | `null` | MuData `.h5mu` path | Required only for `-entry INFERENCE_FROM_MUDATA`, where inference is rerun from an existing post-guide-assignment MuData file. |
+| `INFERENCE_target_guide_pairing_strategy` | `default` | `default`, `by_distance`, `predefined_pairs` | Controls how guide-target pairs are built before inference. `default` builds the standard cis pairs; `by_distance` uses genomic distance; `predefined_pairs` uses a user-provided table. |
+| `INFERENCE_predefined_pairs_to_test` | `null` | CSV path | Pair table required when `INFERENCE_target_guide_pairing_strategy = 'predefined_pairs'`. |
+| `INFERENCE_max_target_distance_bp` | `1000000` | Integer bp distance | Maximum guide-target genomic distance used for cis pair construction. |
+| `INFERENCE_PERTURBO_BATCH_SIZE` | `4096` | Integer `>= 1` | Batch size passed to PerTurbo inference in cis and trans runs. |
+| `INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK` | `8000` | Integer; `<= 0` disables chunking | Maximum genes per chunk for trans PerTurbo all-by-all inference. |
+| `INFERENCE_SCEPTRE_side` | `both` | `both`, `left`, `right` | Alternative-hypothesis side passed to SCEPTRE inference. |
+| `INFERENCE_SCEPTRE_grna_integration_strategy` | `union` | SCEPTRE strategy string | Guide RNA integration strategy passed to SCEPTRE inference. |
+| `INFERENCE_SCEPTRE_resampling_approximation` | `skew_normal` | SCEPTRE approximation string | Resampling approximation passed to SCEPTRE inference. |
+| `INFERENCE_SCEPTRE_control_group` | `complement` | SCEPTRE control group string | Control group strategy passed to SCEPTRE inference. |
+| `INFERENCE_SCEPTRE_resampling_mechanism` | `default` | SCEPTRE mechanism string | Resampling mechanism passed to SCEPTRE inference. |
+| `INFERENCE_SCEPTRE_CHUNK_MODE` | `auto` | `auto`, `off`, `force` | Controls gene chunking before SCEPTRE inference. `auto` chunks large matrices, `off` keeps a single input, and `force` chunks regardless of matrix size. |
+| `INFERENCE_SCEPTRE_MAX_MATRIX_ENTRIES` | `2147483647` | Integer `>= 1` | Cell-by-gene matrix size threshold used by SCEPTRE auto chunking. |
+| `INFERENCE_SCEPTRE_GENE_CHUNK_SIZE` | `1000` | Integer `>= 1` | Number of genes per SCEPTRE chunk when chunking is enabled. |
+| `INFERENCE_SCEPTRE_FORCE_CHUNK` | `false` | `true`, `false` | Compatibility flag that passes `--force-chunk` to the SCEPTRE chunking step. |
+
+##### Optional analysis and display options
+
+| Parameter | Default | Options | Pipeline context |
+|---|---:|---|---|
+| `ENABLE_BENCHMARK` | `false` | `true`, `false` | Runs the optional transcription-factor benchmark workflow after inference. |
+| `ENCODE_BED_DIR` | `${projectDir}/encode_bed_files` | Directory path | Directory containing ENCODE BED files used by the optional benchmark workflow. |
+| `NETWORK_custom_central_nodes` | `undefined` | Comma-separated node names or `undefined` | Custom central nodes to highlight in network plots. |
+| `NETWORK_central_nodes_num` | `1` | Integer `>= 0` | Number of central nodes to highlight when custom central nodes are not provided. |
 
 ### Run default inference from an existing MuData
 
