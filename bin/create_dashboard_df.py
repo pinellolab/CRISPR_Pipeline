@@ -1137,11 +1137,24 @@ def create_inference_blocks(mudata, use_default=False):
                 inference_table = pd.DataFrame({k: v for k, v in mudata.uns[results_key].items()})
                 
                 n=10000
-
-                if analysis_type == 'cis':
-                    inference_table =   inference_table.sort_values(by='sceptre_p_value').head(n)
+                pvalue_candidates = (
+                    ["sceptre_p_value", "p_value", "perturbo_p_value"]
+                    if analysis_type == "cis"
+                    else ["perturbo_p_value", "p_value", "sceptre_p_value"]
+                )
+                pvalue_col = next(
+                    (col for col in pvalue_candidates if col in inference_table.columns),
+                    None,
+                )
+                if pvalue_col:
+                    print(f"Sorting {results_key} by {pvalue_col}")
+                    inference_table = inference_table.sort_values(by=pvalue_col).head(n)
                 else:
-                    inference_table =   inference_table.sort_values(by='p_value').head(n)
+                    print(
+                        f"Warning: no p-value column found in {results_key}; "
+                        f"available columns: {list(inference_table.columns)}"
+                    )
+                    inference_table = inference_table.head(n)
 
                 #capture first 10k
                     

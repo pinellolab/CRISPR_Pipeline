@@ -11,6 +11,25 @@ import argparse
 import os
 
 
+def select_inference_columns(df):
+    """Return log2 fold-change and p-value columns available in inference output."""
+    candidate_pairs = [
+        ("perturbo_log2_fc", "perturbo_p_value"),
+        ("sceptre_log2_fc", "sceptre_p_value"),
+        ("log2_fc", "p_value"),
+    ]
+    for fc_col, p_col in candidate_pairs:
+        if fc_col in df.columns and p_col in df.columns:
+            print(f"Using inference columns: {fc_col}, {p_col}")
+            return fc_col, p_col
+
+    raise KeyError(
+        "Could not find inference columns. Expected one of: "
+        + ", ".join(f"{fc}/{p}" for fc, p in candidate_pairs)
+        + f". Available columns: {list(df.columns)}"
+    )
+
+
 def savefig(path):
     """Utility to save figures cleanly."""
     plt.savefig(path, dpi=300, bbox_inches="tight")
@@ -104,6 +123,7 @@ def run_evaluation_controls(md_read, outdir):
     os.makedirs(outdir, exist_ok=True)
 
     col_used = 'trans_per_guide_results'
+    fc_col, p_col = select_inference_columns(md_read.uns[col_used])
     #converting to avoid non boolean values
     col = md_read['guide'].var['targeting']
 
@@ -147,12 +167,13 @@ def run_evaluation_controls(md_read, outdir):
 
 
         
+    non_target_controls = non_target_controls.copy()
     non_target_controls['direct_target'] = 0
     print (f"Number of non-targeting control guides selected for evaluation: {non_target_controls.shape[0]}")
 
     table_to_test_cis = md_read.uns[col_used][
         md_read.uns[col_used].apply(lambda x: x['gene_id'] == x['intended_target_name'], axis=1)
-    ].drop_duplicates()
+    ].drop_duplicates().copy()
     print (md_read.uns[col_used].head(5).values)
 
     table_to_test_cis['direct_target'] = 1
@@ -160,7 +181,9 @@ def run_evaluation_controls(md_read, outdir):
     table_to_fdr = pd.concat([
         table_to_test_cis,
         non_target_controls.sample(n=table_to_test_cis.shape[0], random_state=42)
-    ])
+    ]).copy()
+    table_to_fdr["log2_fc"] = table_to_fdr[fc_col]
+    table_to_fdr["p_value"] = table_to_fdr[p_col]
     print (table_to_fdr)
     # Volcano plot
     plot_volcano(table_to_fdr, outdir=outdir)
