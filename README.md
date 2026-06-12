@@ -94,7 +94,7 @@ Runtime/debug/internal keys such as `DEBUG_VAR`, dashboard asset paths (`css`, `
 |---|---:|---|---|
 | `ENABLE_DATA_HASHING` | `false` | `true`, `false` | Enables the hashing workflow: hash seqspec checks, hash mapping, hashtag filtering, demultiplexing, hash-aware MuData creation, and hash dashboard sections. |
 | `ENABLE_SCRUBLET` | `false` | `true`, `false` | Runs Scrublet doublet detection before guide assignment in the non-hashing workflow. |
-| `is_10x3v3` | `true` | `true`, `false` | Uses the 10x Genomics 3' v3 feature-barcode chemistry path (`10XV3`, `kite:10xFB`) for guide mapping and, after PR #78, hashing/HTO mapping as well. Set `false` when chemistry should come entirely from the seqspec. |
+| `is_10x3v3` | `true` | `true`, `false` | Controls 10x Genomics 3' v3 feature-barcode chemistry (`10XV3`, `kite:10xFB`) for guide or hashing mapping depending on `ENABLE_DATA_HASHING`. RNA mapping always uses the RNA seqspec. Case 1: when `ENABLE_DATA_HASHING = false` and `is_10x3v3 = true`, guide mapping uses the 10x v3 feature-barcode kb settings instead of deriving guide chemistry from the guide seqspec. Case 2: when `ENABLE_DATA_HASHING = true` and `is_10x3v3 = true`, guide and RNA mapping use their seqspecs, while hash/HTO mapping uses the 10x v3 feature-barcode kb settings. This second case supports 10x v3 HTO data where barcode replacement/translation may be needed so hash, RNA, and guide barcodes match downstream. |
 | `reverse_complement_guides` | `false` | `true`, `false` | Reverse-complements guide spacer sequences while building the guide reference, preserving the metadata fields. |
 | `spacer_tag` | `GAGTACATGGGG` | DNA sequence, empty string, or `null` | Recommended 12 bp sequence immediately upstream of the guide spacer. When provided, guide mapping searches the whole guide read around this tag instead of relying only on fixed seqspec feature coordinates. |
 | `scrna_workflow` | `standard` | `standard`, `nac` | Selects the kb count RNA workflow. `standard` performs mature transcript counting; `nac` performs nascent-aware counting with cDNA and nascent references for unspliced/nascent signal. |
@@ -158,7 +158,7 @@ Runtime/debug/internal keys such as `DEBUG_VAR`, dashboard asset paths (`css`, `
 
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
-| `ENABLE_BENCHMARK` | `false` | `true`, `false` | Runs the optional transcription-factor benchmark workflow after inference. |
+| `ENABLE_BENCHMARK` | `true` | `true`, `false` | Runs the optional transcription-factor benchmark workflow after inference. |
 | `ENCODE_BED_DIR` | `${projectDir}/encode_bed_files` | Directory path | Directory containing ENCODE BED files used by the optional benchmark workflow. |
 | `NETWORK_custom_central_nodes` | `undefined` | Comma-separated node names or `undefined` | Custom central nodes to highlight in network plots. |
 | `NETWORK_central_nodes_num` | `1` | Integer `>= 0` | Number of central nodes to highlight when custom central nodes are not provided. |
@@ -392,12 +392,14 @@ The trans outputs report PerTurbo all-by-all trans tests.
 | `sceptre_p_value` | SCEPTRE p-value from cis per-element results. |
 | `sceptre_q_value` | BH-adjusted SCEPTRE p-value from cis per-element results. |
 | `sceptre_fc_se` | SCEPTRE fold-change standard error from cis per-element results. |
-| `sceptre_log10_p_value` | `-log10(max(sceptre_p_value, 1e-300))` from cis per-element results. |
+| `sceptre_negLog10p` | Catalog-facing SCEPTRE significance score: `-log10(max(sceptre_p_value, 1e-300))`. Prefer this for catalog/export consumers that should avoid extremely small raw p-values. |
+| `sceptre_log10_p_value` | Backward-compatible alias of `sceptre_negLog10p`. |
 | `perturbo_log2_fc` | PerTurbo effect size estimate from trans per-element results. |
 | `perturbo_p_value` | PerTurbo p-value from trans per-element results. |
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value from trans per-element results. |
 | `perturbo_fc_se` | PerTurbo posterior standard error from trans per-element results. |
-| `perturbo_log10_p_value` | `-log10(max(perturbo_p_value, 1e-300))` from trans per-element results. |
+| `perturbo_negLog10p` | Catalog-facing PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. Prefer this for catalog/export consumers that should avoid extremely small raw p-values. |
+| `perturbo_log10_p_value` | Backward-compatible alias of `perturbo_negLog10p`. |
 | `element_id` | Element identifier (equal to `element_name` in this pipeline). |
 | `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
 | `element_chr` | Element chromosome. |

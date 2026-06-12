@@ -101,11 +101,11 @@ def test_create_catalog_per_element_merge_and_metrics():
     assert row_a['sceptre_p_value'] == 0.01
     assert row_a['sceptre_q_value'] == 0.02
     assert row_a['sceptre_fc_se'] == 0.3
+    assert np.isclose(row_a['sceptre_negLog10p'], 2.0)
     assert np.isclose(row_a['sceptre_log10_p_value'], 2.0)
     assert row_a['perturbo_log2_fc'] == 0.5
+    assert np.isclose(row_a['perturbo_negLog10p'], -np.log10(0.2))
     assert np.isclose(row_a['perturbo_log10_p_value'], -np.log10(0.2))
-    # BH on [0.2, 0.0] => [0.2, 0.0]
-    assert np.isclose(row_a['perturbo_fdr_log10_p_value'], -np.log10(0.2))
     assert row_a['guide_ids'] == 'gA1;gA2'
     assert row_a['gene_name'] == 'SYM1'
     assert row_a['nPerturbedCells'] == 2
@@ -115,10 +115,11 @@ def test_create_catalog_per_element_merge_and_metrics():
     assert pd.isna(row_b['sceptre_p_value'])
     assert pd.isna(row_b['sceptre_q_value'])
     assert pd.isna(row_b['sceptre_fc_se'])
+    assert pd.isna(row_b['sceptre_negLog10p'])
     assert pd.isna(row_b['sceptre_log10_p_value'])
     assert row_b['perturbo_log2_fc'] == -1.0
+    assert row_b['perturbo_negLog10p'] == 300.0
     assert row_b['perturbo_log10_p_value'] == 300.0
-    assert row_b['perturbo_fdr_log10_p_value'] == 300.0
     assert row_b['gene_name'] == 'SYM2'
     assert row_b['nPerturbedCells'] == 1
 

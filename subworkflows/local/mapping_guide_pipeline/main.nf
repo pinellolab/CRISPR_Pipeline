@@ -34,6 +34,7 @@ workflow mapping_guide_pipeline {
         SeqSpecResult.barcode_file,
         bc_replacement_ch,
         params.is_10x3v3,
+        params.ENABLE_DATA_HASHING,
         spacer_tag
     )
 

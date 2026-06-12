@@ -64,7 +64,7 @@
 </tr>
 <tr>
 <td><code>is_10x3v3</code></td>
-<td>Use the 10x Genomics 3' v3 feature-barcode chemistry path for guide and hashing libraries. <details><summary>Help</summary><small>When true, guide mapping uses CHEM=10XV3 with kb --workflow kite:10xFB instead of deriving the guide chemistry entirely from the guide seqspec. The same 3' v3 special case is now applied to mappingHashing as in PR #78 (akexbarrera / fit-hto-3pv3), so HTO/hash libraries use the same 10XV3 + kite:10xFB behavior rather than the generic parsed seqspec chemistry.</small></details></td>
+<td>Use 10x Genomics 3' v3 feature-barcode chemistry for guide or hashing mapping, depending on whether hashing is enabled. <details><summary>Help</summary><small>This parameter only changes feature-barcode modalities; RNA mapping always derives chemistry from the RNA seqspec. Case 1: when ENABLE_DATA_HASHING = false and is_10x3v3 = true, mappingGuide uses CHEM=10XV3 with kb --workflow kite:10xFB instead of deriving guide chemistry from the guide seqspec. Case 2: when ENABLE_DATA_HASHING = true and is_10x3v3 = true, mappingGuide remains seqspec-driven, mappingscRNA remains seqspec-driven, and mappingHashing uses CHEM=10XV3 with kb --workflow kite:10xFB. This second case matches the PR #78 hashing/HTO special case for 10x 3' v3 HTO datasets where barcode replacement/translation may be needed so hashing, RNA, and guide barcodes match downstream. When is_10x3v3 = false, guide and hash mapping both derive chemistry from their seqspecs.</small></details></td>
 <td><code>boolean</code></td>
 <td>True</td>
 <td></td>
@@ -458,7 +458,7 @@
 <td><code>ENABLE_BENCHMARK</code></td>
 <td>Run the transcription factor benchmark workflow after inference.</td>
 <td><code>boolean</code></td>
-<td>False</td>
+<td>True</td>
 <td></td>
 <td></td>
 </tr>

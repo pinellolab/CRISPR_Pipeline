@@ -35,7 +35,7 @@ def _write_tsv(df, path):
     df.to_csv(path, sep="\t", index=False, compression="gzip")
 
 
-def test_merge_method_results_preserves_sceptre_se_and_adds_fdr(tmp_path, monkeypatch):
+def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, monkeypatch):
     base_mudata = tmp_path / "base.h5mu"
     _make_test_mudata().write(base_mudata)
 
@@ -106,18 +106,17 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_fdr(tmp_path, monkey
     for observed in (guide_out, element_out):
         assert "sceptre_q_value" in observed.columns
         assert "sceptre_fc_se" in observed.columns
-        assert "perturbo_fdr_log10_p_value" in observed.columns
+        assert "perturbo_q_value" in observed.columns
+        assert "perturbo_fc_se" in observed.columns
 
     assert np.isclose(guide_out.loc[0, "sceptre_q_value"], 0.02)
     assert np.isclose(guide_out.loc[0, "sceptre_fc_se"], 0.1)
-    assert np.isclose(
-        guide_out.loc[0, "perturbo_fdr_log10_p_value"], -np.log10(0.02)
-    )
+    assert np.isclose(guide_out.loc[0, "perturbo_q_value"], 0.02)
 
     mdata = mu.read_h5mu(tmp_path / "inference_mudata.h5mu")
     stored = pd.DataFrame(mdata.uns["per_element_results"])
     assert "sceptre_q_value" in stored.columns
-    assert "perturbo_fdr_log10_p_value" in stored.columns
+    assert "perturbo_q_value" in stored.columns
 
 
 def test_merge_sceptre_chunk_results_adds_global_q_values(tmp_path):
@@ -162,7 +161,7 @@ def test_merge_sceptre_chunk_results_adds_global_q_values(tmp_path):
     assert np.isclose(observed.loc[0, "q_value"], 0.02)
 
 
-def test_merge_cis_trans_results_writes_fdr_columns_to_outputs_and_mudata(
+def test_merge_cis_trans_results_writes_q_columns_to_outputs_and_mudata(
     tmp_path, monkeypatch
 ):
     base_mudata = tmp_path / "base.h5mu"
@@ -241,16 +240,16 @@ def test_merge_cis_trans_results_writes_fdr_columns_to_outputs_and_mudata(
 
     assert "sceptre_q_value" in cis_observed.columns
     assert "sceptre_fc_se" in cis_observed.columns
-    assert "perturbo_fdr_log10_p_value" in cis_observed.columns
-    assert "perturbo_fdr_log10_p_value" in trans_observed.columns
-    assert np.isclose(
-        trans_observed.loc[0, "perturbo_fdr_log10_p_value"], -np.log10(0.1)
-    )
+    assert "perturbo_q_value" in cis_observed.columns
+    assert "perturbo_q_value" in trans_observed.columns
+    assert "perturbo_fc_se" in cis_observed.columns
+    assert "perturbo_fc_se" in trans_observed.columns
+    assert np.isclose(trans_observed.loc[0, "perturbo_q_value"], 0.1)
 
     mdata = mu.read_h5mu(tmp_path / "inference_mudata.h5mu")
     stored_cis = pd.DataFrame(mdata.uns["cis_per_element_results"])
     stored_trans = pd.DataFrame(mdata.uns["trans_per_element_results"])
     assert "sceptre_q_value" in stored_cis.columns
     assert "sceptre_fc_se" in stored_cis.columns
-    assert "perturbo_fdr_log10_p_value" in stored_cis.columns
-    assert "perturbo_fdr_log10_p_value" in stored_trans.columns
+    assert "perturbo_q_value" in stored_cis.columns
+    assert "perturbo_q_value" in stored_trans.columns

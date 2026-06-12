@@ -12,6 +12,7 @@ process mappingGuide {
     path barcode_file
     path bc_replacement_file
     val is_10xv3v
+    val enable_data_hashing
     val spacer_tag
 
     output:
@@ -29,22 +30,19 @@ process mappingGuide {
     set -euo pipefail
     echo "Processing $batch"
 
-    # 1. Determine the Base Chemistry
-    # If it is 10xV3, we force that string. 
-    # Otherwise, we extract it from the seqspec file.
-    if [ "${is_10xv3v}" == "true" ]; then
+    if [ "${is_10xv3v}" == "true" ] && [ "${enable_data_hashing}" != "true" ]; then
+        echo "10x3v3 enabled without hashing: using 10XV3 feature-barcode guide mapping."
         CHEM="10XV3"
         WORKFLOW="kite:10xFB"
     else
+        echo "Using guide seqspec-derived chemistry."
         RAW_CHEM=\$(extract_parsed_seqspec.py --file ${parsed_seqSpec_file})
         WORKFLOW="kite"
-        
-        # 2. Apply Spacer Logic (Modify Chemistry) if needed.
-        # If spacer exists, take the feature/guide part of the parsed chemistry,
-        # preserve its read id, and set its start/end to 0.
+
+        # Apply spacer logic when needed. If a spacer exists, take the feature/guide
+        # part of the parsed chemistry, preserve its read id, and set start/end to 0.
         # Ex: 0,0,16:0,16,26:0,37,58 -> 0,0,16:0,16,26:0,0,0
         #     0,0,16:0,16,26:1,20,30 -> 0,0,16:0,16,26:1,0,0
-        
         if [ "${has_spacer}" == "true" ]; then
             echo "Spacer tag detected ('${spacer_tag}'). Enabling automatic guide whole-read search."
             echo "The guide feature read is preserved from the parsed seqspec chemistry; only feature start/end are reset to 0,0."

@@ -21,11 +21,13 @@ OUTPUT_COLUMNS = [
     "sceptre_p_value",
     "sceptre_q_value",
     "sceptre_fc_se",
+    "sceptre_negLog10p",
     "sceptre_log10_p_value",
     "perturbo_log2_fc",
     "perturbo_p_value",
     "perturbo_q_value",
     "perturbo_fc_se",
+    "perturbo_negLog10p",
     "perturbo_log10_p_value",
     "element_id",
     "element_type",
@@ -336,13 +338,13 @@ def create_catalog_per_element(
         how="left",
     )
 
-    merged["sceptre_log10_p_value"] = _neg_log10(
-        merged["_sceptre_p_value"], pvalue_floor
-    )
+    merged["sceptre_negLog10p"] = _neg_log10(merged["_sceptre_p_value"], pvalue_floor)
+    merged["sceptre_log10_p_value"] = merged["sceptre_negLog10p"]
     merged["sceptre_p_value"] = merged["_sceptre_p_value"]
-    merged["perturbo_log10_p_value"] = _neg_log10(
+    merged["perturbo_negLog10p"] = _neg_log10(
         merged["_perturbo_p_value"], pvalue_floor
     )
+    merged["perturbo_log10_p_value"] = merged["perturbo_negLog10p"]
     merged["perturbo_p_value"] = merged["_perturbo_p_value"]
 
     merged["element_name"] = merged["intended_target_name"]
