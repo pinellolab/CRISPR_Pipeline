@@ -19,6 +19,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from tf_enrichment import run_tf_enrichment
+from tf_benchmark_utils import normalize_tf_benchmark_results
 
 
 PEAK_META_DICT = {
@@ -46,7 +47,7 @@ def _load_results(mdata):
     if not isinstance(results, pd.DataFrame):
         results = pd.DataFrame(results)
 
-    results = results.drop_duplicates().copy()
+    results = normalize_tf_benchmark_results(results.drop_duplicates())
     if "intended_target_name" not in results.columns:
         if "guide_id" not in results.columns:
             raise ValueError("Missing guide_id in trans_per_element_results.")
@@ -64,16 +65,24 @@ def _load_results(mdata):
                 .replace("nan", "non-targeting")
             ),
         )
-        results = (
-            results.groupby(["gene_id", "intended_target_name", "method"], as_index=False)
-            .agg(
-                log2_fc=("log2_fc", "mean"),
-                p_value=("p_value", "min"),
-            )
-        )
+        aggregations = {"p_value": ("p_value", "min")}
+        if "log2_fc" in results.columns:
+            aggregations["log2_fc"] = ("log2_fc", "mean")
+        results = results.groupby(
+            ["gene_id", "intended_target_name", "method"], as_index=False
+        ).agg(**aggregations)
     else:
         if "method" not in results.columns:
             results = results.assign(method="PerTurbo")
+
+    required_columns = {"gene_id", "intended_target_name", "method", "p_value"}
+    missing_columns = required_columns.difference(results.columns)
+    if missing_columns:
+        raise ValueError(
+            "TF benchmark results are missing required columns: "
+            f"{sorted(missing_columns)}. "
+            f"Available columns: {sorted(results.columns.tolist())}"
+        )
     return results
 
 

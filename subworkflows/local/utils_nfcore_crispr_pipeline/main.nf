@@ -243,14 +243,21 @@ def validateSamplesheetRow(row) {
         'barcode_onlist',
         'guide_design'
     ]
+    // lane is retained in the input schema but may be empty; samples are grouped by modality and measurement set.
+    def required_value_columns = required_columns - ['lane']
     def missing_columns = required_columns.findAll { column -> !row.containsKey(column) }
     if (missing_columns) {
         error("Input samplesheet is missing required column(s): ${missing_columns.join(', ')}. Check that the file is comma- or tab-delimited and has the expected header.")
     }
 
-    def missing_values = required_columns.findAll { column -> !row[column]?.toString()?.trim() }
+    def missing_values = required_value_columns.findAll { column -> !row[column]?.toString()?.trim() }
     if (missing_values) {
-        error("Input samplesheet row is missing required value(s): ${missing_values.join(', ')}. Row: ${row}")
+        def row_context = [
+            "file_modality=${row.file_modality ?: '<empty>'}",
+            "measurement_sets=${row.measurement_sets ?: '<empty>'}",
+            "sequencing_run=${row.sequencing_run ?: '<empty>'}"
+        ].join(', ')
+        error("Input samplesheet row is missing required value(s): ${missing_values.join(', ')}. ${row_context}")
     }
 
     return true
