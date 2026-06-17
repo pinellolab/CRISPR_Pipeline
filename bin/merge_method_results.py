@@ -5,6 +5,11 @@ import pandas as pd
 import mudata as mu
 import numpy as np
 from scipy.stats import false_discovery_control
+from analysis_output_formatting import (
+    format_element_output,
+    format_guide_output,
+    make_h5mu_safe_dataframe,
+)
 
 
 ELEMENT_BASE_KEYS = ["gene_id", "intended_target_name"]
@@ -244,10 +249,13 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     
     # Load base mudata for structure
     base_mdata = mu.read_h5mu(base_mudata_path)
+
+    merged_guide_df = format_guide_output(merged_guide_df)
+    merged_element_df = format_element_output(merged_element_df, base_mdata)
     
     # Store merged results in mudata
-    base_mdata.uns['per_guide_results'] = merged_guide_df
-    base_mdata.uns['per_element_results'] = merged_element_df
+    base_mdata.uns['per_guide_results'] = make_h5mu_safe_dataframe(merged_guide_df)
+    base_mdata.uns['per_element_results'] = make_h5mu_safe_dataframe(merged_element_df)
     
     # Write outputs
     print("Writing merged results...")

@@ -5,6 +5,11 @@ import pandas as pd
 import mudata as mu
 import numpy as np
 from scipy.stats import false_discovery_control
+from analysis_output_formatting import (
+    format_element_output,
+    format_guide_output,
+    make_h5mu_safe_dataframe,
+)
 
 
 def _bh_adjust(pvalues: pd.Series) -> pd.Series:
@@ -74,13 +79,18 @@ def merge_cis_trans_results(cis_per_guide_path, cis_per_element_path, trans_per_
     
     # Load base mudata for structure
     base_mdata = mu.read_h5mu(base_mudata_path)
+
+    cis_per_guide = format_guide_output(cis_per_guide)
+    trans_per_guide = format_guide_output(trans_per_guide)
+    cis_per_element = format_element_output(cis_per_element, base_mdata)
+    trans_per_element = format_element_output(trans_per_element, base_mdata)
     
     # Store results in separate cis/trans fields
     print("Storing separated cis/trans results...")
-    base_mdata.uns['cis_per_guide_results'] = cis_per_guide
-    base_mdata.uns['cis_per_element_results'] = cis_per_element
-    base_mdata.uns['trans_per_guide_results'] = trans_per_guide
-    base_mdata.uns['trans_per_element_results'] = trans_per_element
+    base_mdata.uns['cis_per_guide_results'] = make_h5mu_safe_dataframe(cis_per_guide)
+    base_mdata.uns['cis_per_element_results'] = make_h5mu_safe_dataframe(cis_per_element)
+    base_mdata.uns['trans_per_guide_results'] = make_h5mu_safe_dataframe(trans_per_guide)
+    base_mdata.uns['trans_per_element_results'] = make_h5mu_safe_dataframe(trans_per_element)
     
     # Remove the original combined results to avoid confusion
     if 'per_guide_results' in base_mdata.uns:

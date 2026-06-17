@@ -21,12 +21,22 @@ def _make_test_mudata():
     gene = ad.AnnData(
         X=np.ones((2, 2), dtype=float),
         obs=obs.copy(),
-        var=pd.DataFrame(index=["GENE1", "GENE2"]),
+        var=pd.DataFrame({"symbol": ["SYM1", "SYM2"]}, index=["GENE1", "GENE2"]),
     )
     guide = ad.AnnData(
         X=np.ones((2, 2), dtype=float),
         obs=obs.copy(),
-        var=pd.DataFrame(index=["g1", "g2"]),
+        var=pd.DataFrame(
+            {
+                "guide_id": ["g1", "g2"],
+                "intended_target_name": ["target1", "target2"],
+                "intended_target_chr": ["chr1", "chr2"],
+                "intended_target_start": [100, 200],
+                "intended_target_end": [150, 250],
+                "type": ["targeting", "targeting"],
+            },
+            index=["g1", "g2"],
+        ),
     )
     return mu.MuData({"gene": gene, "guide": guide})
 
@@ -108,15 +118,33 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
         assert "sceptre_fc_se" in observed.columns
         assert "perturbo_q_value" in observed.columns
         assert "perturbo_fc_se" in observed.columns
+        assert "sceptre_negLog10p" in observed.columns
+        assert "sceptre_log10_p_value" in observed.columns
+        assert "perturbo_negLog10p" in observed.columns
+        assert "perturbo_log10_p_value" in observed.columns
 
     assert np.isclose(guide_out.loc[0, "sceptre_q_value"], 0.02)
     assert np.isclose(guide_out.loc[0, "sceptre_fc_se"], 0.1)
     assert np.isclose(guide_out.loc[0, "perturbo_q_value"], 0.02)
+    assert np.isclose(guide_out.loc[0, "sceptre_negLog10p"], 2.0)
+    assert np.isclose(guide_out.loc[0, "perturbo_negLog10p"], 2.0)
+    assert "element_id" in element_out.columns
+    assert "element_type" in element_out.columns
+    assert "guide_ids" in element_out.columns
+    assert "gene_name" in element_out.columns
+    assert "nPerturbedCells" in element_out.columns
+    assert element_out.loc[0, "element_id"] == "target1"
+    assert element_out.loc[0, "guide_ids"] == "g1"
+    assert element_out.loc[0, "gene_name"] == "SYM1"
 
     mdata = mu.read_h5mu(tmp_path / "inference_mudata.h5mu")
     stored = pd.DataFrame(mdata.uns["per_element_results"])
     assert "sceptre_q_value" in stored.columns
     assert "perturbo_q_value" in stored.columns
+    assert "sceptre_negLog10p" in stored.columns
+    assert "perturbo_negLog10p" in stored.columns
+    assert "element_id" in stored.columns
+    assert "nPerturbedCells" in stored.columns
 
 
 def test_merge_sceptre_chunk_results_adds_global_q_values(tmp_path):
@@ -236,7 +264,9 @@ def test_merge_cis_trans_results_writes_q_columns_to_outputs_and_mudata(
     )
 
     cis_observed = pd.read_csv(tmp_path / "cis_per_element_output.tsv.gz", sep="\t")
+    cis_guide_observed = pd.read_csv(tmp_path / "cis_per_guide_output.tsv.gz", sep="\t")
     trans_observed = pd.read_csv(tmp_path / "trans_per_element_output.tsv.gz", sep="\t")
+    trans_guide_observed = pd.read_csv(tmp_path / "trans_per_guide_output.tsv.gz", sep="\t")
 
     assert "sceptre_q_value" in cis_observed.columns
     assert "sceptre_fc_se" in cis_observed.columns
@@ -245,6 +275,26 @@ def test_merge_cis_trans_results_writes_q_columns_to_outputs_and_mudata(
     assert "perturbo_fc_se" in cis_observed.columns
     assert "perturbo_fc_se" in trans_observed.columns
     assert np.isclose(trans_observed.loc[0, "perturbo_q_value"], 0.1)
+    assert "sceptre_negLog10p" in cis_observed.columns
+    assert "sceptre_log10_p_value" in cis_observed.columns
+    assert "perturbo_negLog10p" in cis_observed.columns
+    assert "perturbo_log10_p_value" in cis_observed.columns
+    assert "perturbo_negLog10p" in trans_observed.columns
+    assert "perturbo_log10_p_value" in trans_observed.columns
+    assert "sceptre_negLog10p" in cis_guide_observed.columns
+    assert "perturbo_negLog10p" in cis_guide_observed.columns
+    assert "perturbo_negLog10p" in trans_guide_observed.columns
+    assert "element_id" in cis_observed.columns
+    assert "element_type" in cis_observed.columns
+    assert "guide_ids" in cis_observed.columns
+    assert "gene_name" in cis_observed.columns
+    assert "nPerturbedCells" in cis_observed.columns
+    assert "element_id" in trans_observed.columns
+    assert "guide_ids" in trans_observed.columns
+    assert cis_observed.loc[0, "element_id"] == "target1"
+    assert cis_observed.loc[0, "gene_name"] == "SYM1"
+    assert np.isclose(cis_observed.loc[0, "sceptre_negLog10p"], 2.0)
+    assert np.isclose(trans_observed.loc[0, "perturbo_negLog10p"], -np.log10(0.05))
 
     mdata = mu.read_h5mu(tmp_path / "inference_mudata.h5mu")
     stored_cis = pd.DataFrame(mdata.uns["cis_per_element_results"])
@@ -253,3 +303,6 @@ def test_merge_cis_trans_results_writes_q_columns_to_outputs_and_mudata(
     assert "sceptre_fc_se" in stored_cis.columns
     assert "perturbo_q_value" in stored_cis.columns
     assert "perturbo_q_value" in stored_trans.columns
+    assert "sceptre_negLog10p" in stored_cis.columns
+    assert "perturbo_negLog10p" in stored_trans.columns
+    assert "element_id" in stored_cis.columns

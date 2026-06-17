@@ -324,10 +324,14 @@ The cis outputs report guide-gene or target-element-gene tests restricted to the
 | `sceptre_p_value` | SCEPTRE (uncorrected) p_value  of differential expression |
 | `sceptre_q_value` | BH-adjusted SCEPTRE p-value. |
 | `sceptre_fc_se` | SCEPTRE fold-change standard error. |
+| `sceptre_negLog10p` | SCEPTRE significance score: `-log10(max(sceptre_p_value, 1e-300))`. |
+| `sceptre_log10_p_value` | Backward-compatible alias of `sceptre_negLog10p`. |
 | `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this cis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
+| `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
+| `perturbo_log10_p_value` | Backward-compatible alias of `perturbo_negLog10p`. |
 
 #### `cis_per_element_output.tsv.gz`
 
@@ -342,10 +346,23 @@ The cis outputs report guide-gene or target-element-gene tests restricted to the
 | `sceptre_p_value` | SCEPTRE (uncorrected) p_value |
 | `sceptre_q_value` | BH-adjusted SCEPTRE p-value. |
 | `sceptre_fc_se` | SCEPTRE fold-change standard error. |
+| `sceptre_negLog10p` | SCEPTRE significance score: `-log10(max(sceptre_p_value, 1e-300))`. |
+| `sceptre_log10_p_value` | Backward-compatible alias of `sceptre_negLog10p`. |
 | `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this cis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
+| `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
+| `perturbo_log10_p_value` | Backward-compatible alias of `perturbo_negLog10p`. |
+| `element_id` | Element identifier (equal to `element_name` in this pipeline). |
+| `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
+| `element_chr` | Element chromosome. |
+| `element_start` | Element start coordinate. |
+| `element_end` | Element end coordinate. |
+| `element_name` | Element name mapped from `intended_target_name`. |
+| `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
+| `gene_name` | Gene symbol from local gene metadata when available. |
+| `nPerturbedCells` | Number of unique cells assigned at least one guide for the element. |
 
 `intended_target_name` for non-targeting controls is bucketed as `non-targeting|N` (for example, `non-targeting|1`).
 SCEPTRE outputs contain discovery-analysis results only (calibration-check rows are not exported).
@@ -369,6 +386,8 @@ The trans outputs report PerTurbo all-by-all trans tests.
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this trans output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
+| `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
+| `perturbo_log10_p_value` | Backward-compatible alias of `perturbo_negLog10p`. |
 
 #### `trans_per_element_output.tsv.gz`
 
@@ -383,6 +402,17 @@ The trans outputs report PerTurbo all-by-all trans tests.
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this trans output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
+| `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
+| `perturbo_log10_p_value` | Backward-compatible alias of `perturbo_negLog10p`. |
+| `element_id` | Element identifier (equal to `element_name` in this pipeline). |
+| `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
+| `element_chr` | Element chromosome. |
+| `element_start` | Element start coordinate. |
+| `element_end` | Element end coordinate. |
+| `element_name` | Element name mapped from `intended_target_name`. |
+| `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
+| `gene_name` | Gene symbol from local gene metadata when available. |
+| `nPerturbedCells` | Number of unique cells assigned at least one guide for the element. |
 
 #### `catalog_per_element_output.tsv.gz`
 
@@ -475,7 +505,15 @@ pipeline_dashboard/
 
 ### Pipeline metadata
 
-`pipeline_info/` contains run metadata for reproducibility, including the resolved `nextflow.config`, `nextflow.log`, timestamped `params_*.json`, software versions, and the original samplesheet copied as `original_samplesheet.csv` or `original_samplesheet.tsv`. If the samplesheet path comes from a profile or config file, the copied file is taken from that resolved `params.input` value.
+`pipeline_info/` contains run metadata for reproducibility, including the resolved `nextflow.config`, `nextflow.log`, timestamped `params_*.json`, software versions, the original samplesheet copied as `original_samplesheet.csv` or `original_samplesheet.tsv`, and Nextflow execution resource reports. If the samplesheet path comes from a profile or config file, the copied file is taken from that resolved `params.input` value.
+
+The resource reports are:
+
+| File | Description |
+|---|---|
+| `execution_trace.txt` | Per-task TSV with process name, status, requested CPUs/memory/time, attempts, wall time, CPU usage, RSS/VMEM, peak RSS/VMEM, I/O counters, container, and work directory. This is the best source for per-process memory and runtime auditing. |
+| `execution_report.html` | Nextflow HTML execution report summarizing resource usage across tasks. |
+| `execution_timeline.html` | Nextflow HTML task timeline for reviewing task start/end times and concurrency. |
 
 ## Pipeline Testing Guide
 
