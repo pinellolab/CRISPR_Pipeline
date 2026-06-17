@@ -15,6 +15,9 @@
 
 A comprehensive pipeline for single-cell Perturb-Seq analysis that enables robust processing and analysis of CRISPR screening data at single-cell resolution.
 
+
+[input parameters and explanations] (https://pinellolab.github.io/CRISPR_Pipeline/) 
+
 ## Prerequisites
 
 Nextflow and Singularity must be installed before running the pipeline:
@@ -89,6 +92,10 @@ Runtime/debug/internal keys such as `DEBUG_VAR`, dashboard asset paths (`css`, `
 | `outdir` | `./pipeline_outputs` | Directory path | Output directory for published final files, including MuData, per-guide/per-element result tables, dashboard archive, and QC metrics. |
 
 ##### Assay and library options
+
+[input parameters and explanations] (https://pinellolab.github.io/CRISPR_Pipeline/) 
+
+
 
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
