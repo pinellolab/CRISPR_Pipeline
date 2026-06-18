@@ -47,9 +47,13 @@ def igv(mdata, gtf: str, method: Optional[Literal['sceptre', 'perturbo']] = None
 
     # Process GTF file
     df_gtf = read_gtf(gtf).to_pandas()
-    gencode_df = df_gtf[['gene_id', 'gene_name']]
+    gencode_df = df_gtf[['gene_id', 'gene_name']].copy()
     gencode_df['gene_id2'] = gencode_df['gene_id'].str.split('.').str[0]
-    gencode_df = gencode_df.drop_duplicates()
+    gencode_df = (
+        gencode_df
+        .rename(columns={'gene_name': 'gtf_gene_name'})
+        .drop_duplicates(subset=['gene_id2'], keep='first')
+    )
 
     # Initialize data structures
     bedpe = defaultdict(list)
@@ -58,7 +62,7 @@ def igv(mdata, gtf: str, method: Optional[Literal['sceptre', 'perturbo']] = None
     # Process test results
     test_results = pd.DataFrame({k: v for k, v in mdata.uns[results_key].items()})
     merged_df = test_results.merge(
-        gencode_df[['gene_id2', 'gene_name']],
+        gencode_df[['gene_id2', 'gtf_gene_name']],
         left_on='gene_id',
         right_on='gene_id2',
         how='left'
@@ -68,7 +72,7 @@ def igv(mdata, gtf: str, method: Optional[Literal['sceptre', 'perturbo']] = None
     merged_df = merged_df.dropna(subset=[log2_fc_col, p_value_col])
 
     for index, row in merged_df.iterrows():
-        if row["intended_target_name"] == row["gene_name"]:
+        if row["intended_target_name"] == row["gtf_gene_name"]:
             # PROMOTER interactions
             if row["intended_target_name"] in coordinate_dict:
                 coords = coordinate_dict[row["intended_target_name"]]
