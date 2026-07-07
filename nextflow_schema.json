@@ -31,6 +31,12 @@
                     "format": "directory-path",
                     "default": "./pipeline_outputs",
                     "description": "Directory where final pipeline outputs are published."
+                },
+                "DEMO_MODE": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Pre-run only: process one complete measurement set from the samplesheet.",
+                    "help_text": "Among measurement_sets IDs containing both scRNA and gRNA rows, selects the set with the fewest distinct scRNA FASTQ paths across R1_path and R2_path. When ENABLE_DATA_HASHING is true, eligible sets must also contain hash rows. Ties are resolved by measurement_sets ID so repeated runs remain stable regardless of samplesheet row order. All lanes/read pairs for the selected set are retained. Demo outputs are prominently marked and must not be used as final full-dataset results."
                 }
             }
         },

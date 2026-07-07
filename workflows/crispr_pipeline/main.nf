@@ -187,7 +187,8 @@ workflow CRISPR_PIPELINE {
             Benchmark = tf_benchmark(
                 Inference.inference_mudata,
                 Preprocessing.gencode_gtf,
-                file(params.ENCODE_BED_DIR)
+                file(params.ENCODE_BED_DIR),
+                params.DEMO_MODE
             )
             benchmark_output_dir = Benchmark.benchmark_output
         } else {
@@ -254,7 +255,8 @@ workflow CRISPR_PIPELINE {
             Benchmark = tf_benchmark(
                 Inference.inference_mudata,
                 Preprocessing.gencode_gtf,
-                file(params.ENCODE_BED_DIR)
+                file(params.ENCODE_BED_DIR),
+                params.DEMO_MODE
             )
             benchmark_output_dir = Benchmark.benchmark_output
         } else {

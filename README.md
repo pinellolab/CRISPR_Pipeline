@@ -90,6 +90,23 @@ Runtime/debug/internal keys such as `DEBUG_VAR`, dashboard asset paths (`css`, `
 |---|---:|---|---|
 | `input` | `null` | CSV or TSV samplesheet path | Samplesheet containing modality-specific FASTQ paths and metadata used to create the RNA, guide, and optional hashing channels. |
 | `outdir` | `./pipeline_outputs` | Directory path | Output directory for published final files, including MuData, per-guide/per-element result tables, dashboard archive, and QC metrics. |
+| `DEMO_MODE` | `false` | `true`, `false` | Pre-run only. Selects the complete `measurement_sets` group with the fewest scRNA FASTQ files. If hashing is enabled, hash rows are required and retained too. Demo outputs are not final results. |
+
+##### Demo pre-runs
+
+Use demo mode to validate configuration, references, SeqSpecs, and pipeline execution on one matched measurement set before starting the full run:
+
+```bash
+nextflow run . \
+  --input samplesheet.csv \
+  --outdir demo_outputs \
+  --DEMO_MODE true \
+  -profile local
+```
+
+Selection is deterministic across repeated runs and independent of samplesheet row order. The pipeline finds every `measurement_sets` ID containing both `scRNA` and `gRNA`, counts its distinct non-empty scRNA `R1_path` and `R2_path` values, and selects the set with the fewest scRNA FASTQ files. Ties are resolved using the `measurement_sets` ID. It keeps every supported RNA/guide/hash row for that ID, including multiple lanes/read pairs. When `ENABLE_DATA_HASHING = true`, only sets that also contain `hash` are eligible. The filtered file is saved as `pipeline_info/demo_samplesheet.csv` or `.tsv`; the selected ID and scRNA FASTQ count are recorded in `DEMO_MODE_WARNING.txt`.
+
+Demo mode is strictly for pre-runs. The pipeline prints warnings at startup and completion, writes `DEMO_MODE_WARNING.txt` at the output root and in `pipeline_info/`, marks the dashboard benchmark card, and adds a red pre-run warning to the TF benchmark plot plus its benchmark output directory. Rerun with `DEMO_MODE = false` for final results.
 
 ##### Assay and library options
 
@@ -165,7 +182,7 @@ Runtime/debug/internal keys such as `DEBUG_VAR`, dashboard asset paths (`css`, `
 
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
-| `ENABLE_BENCHMARK` | `true` | `true`, `false` | Runs the optional transcription-factor benchmark workflow after inference. |
+| `ENABLE_BENCHMARK` | `true` | `true`, `false` | Runs the optional transcription-factor benchmark workflow after inference. In demo mode, benchmark plots, files, and the dashboard block are marked as pre-run-only and not final results. |
 | `ENCODE_BED_DIR` | `${projectDir}/encode_bed_files` | Directory path | Directory containing ENCODE BED files used by the optional benchmark workflow. |
 | `NETWORK_custom_central_nodes` | `undefined` | Comma-separated node names or `undefined` | Custom central nodes to highlight in network plots. |
 | `NETWORK_central_nodes_num` | `1` | Integer `>= 0` | Number of central nodes to highlight when custom central nodes are not provided. |
@@ -512,7 +529,7 @@ pipeline_dashboard/
 
 ### Pipeline metadata
 
-`pipeline_info/` contains run metadata for reproducibility, including the resolved `nextflow.config`, `nextflow.log`, timestamped `params_*.json`, software versions, the original samplesheet copied as `original_samplesheet.csv` or `original_samplesheet.tsv`, and Nextflow execution resource reports. If the samplesheet path comes from a profile or config file, the copied file is taken from that resolved `params.input` value.
+`pipeline_info/` contains run metadata for reproducibility, including the resolved `nextflow.config`, `nextflow.log`, timestamped `params_*.json`, software versions, the original samplesheet copied as `original_samplesheet.csv` or `original_samplesheet.tsv`, and Nextflow execution resource reports. If the samplesheet path comes from a profile or config file, the copied file is taken from that resolved `params.input` value. Demo runs also contain the selected `demo_samplesheet.csv` or `.tsv` and `DEMO_MODE_WARNING.txt`; the warning is duplicated at the output root so reduced-data outputs cannot be mistaken for a full run.
 
 The resource reports are:
 

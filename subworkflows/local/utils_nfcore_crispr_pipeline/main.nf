@@ -14,6 +14,7 @@ include { completionSummary         } from '../../nf-core/utils_nfcore_pipeline'
 include { imNotification            } from '../../nf-core/utils_nfcore_pipeline'
 include { UTILS_NFCORE_PIPELINE     } from '../../nf-core/utils_nfcore_pipeline'
 include { UTILS_NEXTFLOW_PIPELINE   } from '../../nf-core/utils_nextflow_pipeline'
+include { FILTER_DEMO_SAMPLESHEET   } from '../../../modules/local/filter_demo_samplesheet'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -30,6 +31,8 @@ workflow PIPELINE_INITIALISATION {
     nextflow_cli_args //   array: List of positional nextflow CLI args
     outdir            //  string: The output directory where the results will be saved
     input             //  string: Path to input samplesheet
+    demo_mode         // boolean: Filter the samplesheet to one complete measurement set
+    enable_hashing    // boolean: Require hash rows in the demo measurement set
 
     main:
 
@@ -59,14 +62,28 @@ workflow PIPELINE_INITIALISATION {
         copyOriginalSamplesheet(outdir, input)
     }
 
+    ch_input_samplesheet = Channel.fromPath(input, checkIfExists: true)
+    if (demo_mode) {
+        log.warn """
+================================================================================
+DEMO MODE / PRE-RUN ONLY: only one complete measurement set will be processed.
+Measurement set: complete set with the fewest scRNA FASTQ files
+Do not report, publish, or treat these outputs as results from the full dataset.
+================================================================================
+""".stripIndent().trim()
+        FILTER_DEMO_SAMPLESHEET(ch_input_samplesheet, enable_hashing)
+        ch_samplesheet_file = FILTER_DEMO_SAMPLESHEET.out.samplesheet
+    } else {
+        ch_samplesheet_file = ch_input_samplesheet
+    }
+
     //
     // Create channel from input file provided through params.input
     //
 
     samplesheet_sep = detectSamplesheetSeparator(input)
 
-    Channel
-        .fromPath(params.input)
+    ch_samplesheet_file
         .splitCsv(header: true, strip: true, sep: samplesheet_sep)
         .filter { row ->
             row.values().any { value -> value != null && value.toString().trim() }
@@ -132,6 +149,7 @@ workflow PIPELINE_COMPLETION {
     outdir          //    path: Path to output directory where results will be published
     monochrome_logs // boolean: Disable ANSI colour codes in log output
     hook_url        //  string: hook URL for notifications
+    demo_mode       // boolean: Mark completion as a reduced-data pre-run
 
 
     main:
@@ -141,6 +159,15 @@ workflow PIPELINE_COMPLETION {
     // Completion email and summary
     //
     workflow.onComplete {
+        if (demo_mode) {
+            log.warn '''
+================================================================================
+DEMO MODE COMPLETED: these outputs were generated from one measurement set only.
+They are pre-run diagnostics and must not be used as final full-dataset results.
+See DEMO_MODE_WARNING.txt in the output directory.
+================================================================================
+'''.stripIndent().trim()
+        }
         if (email || email_on_fail) {
             completionEmail(
                 summary_params,

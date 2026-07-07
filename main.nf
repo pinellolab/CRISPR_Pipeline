@@ -101,7 +101,9 @@ workflow {
         params.monochrome_logs,
         args,
         params.outdir,
-        params.input //updated_samplesheet
+        params.input, //updated_samplesheet
+        params.DEMO_MODE,
+        params.ENABLE_DATA_HASHING
     )
 
     PIPELINE_INITIALISATION.out.samplesheet.view { meta, fastqs ->
@@ -124,6 +126,7 @@ workflow {
         params.outdir,
         params.monochrome_logs,
         params.hook_url,
+        params.DEMO_MODE,
 
     )
 }

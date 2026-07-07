@@ -110,10 +110,20 @@ def generate_tf_benchmark(
     output_dir,
     reference_gtf=None,
     dataset_name="Current run",
+    demo_mode=False,
 ):
     os.makedirs(output_dir, exist_ok=True)
     tables_dir = os.path.join(output_dir, "benchmark_tables")
     os.makedirs(tables_dir, exist_ok=True)
+
+    if demo_mode:
+        warning = (
+            "DEMO MODE / PRE-RUN ONLY\n"
+            "This benchmark used one measurement set only. It is not a final-results "
+            "benchmark and must not be reported as representing the full dataset.\n"
+        )
+        Path(output_dir, "DEMO_MODE_WARNING.txt").write_text(warning)
+        print(f"WARNING: {warning.strip()}", file=sys.stderr)
 
     mdata = mu.read(mudata_path)
     results = _load_results(mdata)
@@ -226,8 +236,24 @@ def generate_tf_benchmark(
         title="Promoter window (bp)",
     )
 
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
-    fig.suptitle(dataset_name)
+    top_margin = 0.88 if demo_mode else 0.95
+    plt.tight_layout(rect=[0, 0.04 if demo_mode else 0, 1, top_margin])
+    if demo_mode:
+        fig.suptitle(
+            f"DEMO MODE — PRE-RUN ONLY (NOT FINAL RESULTS)\n{dataset_name}",
+            color="darkred",
+            fontweight="bold",
+        )
+        fig.text(
+            0.5,
+            0.01,
+            "One measurement set only — do not use as the full-dataset benchmark",
+            ha="center",
+            color="darkred",
+            fontweight="bold",
+        )
+    else:
+        fig.suptitle(dataset_name)
     fig_path = os.path.join(output_dir, "tf_benchmark.png")
     fig.savefig(fig_path, dpi=200)
     plt.close(fig)
@@ -240,6 +266,11 @@ def main():
     parser.add_argument("--output_dir", default="benchmark_output", help="Output directory")
     parser.add_argument("--gtf", default=None, help="Reference GTF (optional)")
     parser.add_argument("--dataset_name", default="Current run", help="Dataset name for plot title")
+    parser.add_argument(
+        "--demo-mode",
+        action="store_true",
+        help="Mark every benchmark artifact as a one-measurement-set pre-run",
+    )
     args = parser.parse_args()
 
     generate_tf_benchmark(
@@ -248,6 +279,7 @@ def main():
         output_dir=args.output_dir,
         reference_gtf=args.gtf,
         dataset_name=args.dataset_name,
+        demo_mode=args.demo_mode,
     )
 
 

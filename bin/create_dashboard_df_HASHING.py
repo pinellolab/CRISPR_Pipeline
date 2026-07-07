@@ -1252,9 +1252,11 @@ def collect_evaluation_plots(use_default=False):
 
     return network_plots, network_descs, volcano_plots, volcano_descs,precission_plots ,precission_desc, bar_plot_direct_x_control_plots ,bar_plot_direct_x_control_desc
 
-def collect_benchmark_block(benchmark_dir):
-    if not benchmark_dir or not os.path.exists(benchmark_dir):
+def collect_benchmark_block(benchmark_dir, demo_mode=False):
+    if (not benchmark_dir or not os.path.exists(benchmark_dir)) and not demo_mode:
         return None
+    benchmark_dir = benchmark_dir or ""
+    is_demo = demo_mode or os.path.exists(os.path.join(benchmark_dir, "DEMO_MODE_WARNING.txt"))
 
     table_path = os.path.join(benchmark_dir, "benchmark_tables", "enrichment_all.tsv")
     benchmark_table = _safe_read_tsv(table_path)
@@ -1269,6 +1271,8 @@ def collect_benchmark_block(benchmark_dir):
         ]
 
     highlight_parts = []
+    if is_demo:
+        highlight_parts.append("DEMO MODE — PRE-RUN ONLY; NOT FINAL RESULTS")
     if not benchmark_table.empty:
         if "TF_display" in benchmark_table.columns:
             highlight_parts.append(f"TFs: {benchmark_table['TF_display'].nunique()}")
@@ -1278,17 +1282,21 @@ def collect_benchmark_block(benchmark_dir):
             highlight_parts.append(f"Windows: {benchmark_table['promoter_window_width'].nunique()}")
     highlight = ", ".join(highlight_parts)
 
-    if benchmark_table.empty and not images:
+    if benchmark_table.empty and not images and not is_demo:
         return None
 
     return new_block(
         "Benchmark",
-        "TF enrichment benchmark",
-        "TF Benchmark",
+        "TF enrichment benchmark (one measurement set only)" if is_demo else "TF enrichment benchmark",
+        "DEMO MODE — TF Benchmark" if is_demo else "TF Benchmark",
         highlight,
         bool(highlight),
         table=benchmark_table,
-        table_description="TF enrichment summary across promoter windows",
+        table_description=(
+            "PRE-RUN ONLY; do not use as final results. TF enrichment summary across promoter windows"
+            if is_demo
+            else "TF enrichment summary across promoter windows"
+        ),
         image=images,
         image_description=image_descs,
     )
@@ -1482,7 +1490,7 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
                         image = ['hashing_seqSpec_plots/seqSpec_check_plots.png'],
                         image_description= ['The frequency of each nucleotides along the Read 1 (Use to inspect the expected read parts with their expected signature )and Read 2 (Use to inspect the expected read parts with their expected signature)'])
 
-    benchmark_block = collect_benchmark_block(benchmark_dir)
+    benchmark_block = collect_benchmark_block(benchmark_dir, _as_bool(params.get("DEMO_MODE", False)))
 
     if qc_metrics_json:
         write_pipeline_qc_metrics_json(
