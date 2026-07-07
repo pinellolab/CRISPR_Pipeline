@@ -16,7 +16,10 @@
 A comprehensive pipeline for single-cell Perturb-Seq analysis that enables robust processing and analysis of CRISPR screening data at single-cell resolution.
 
 
-[input parameters and explanations] (https://pinellolab.github.io/CRISPR_Pipeline/) 
+## Documentation Links
+
+- [Input parameters and explanations](https://pinellolab.github.io/CRISPR_Pipeline/)
+- [Colab seqspec checker](https://colab.research.google.com/drive/1IfSU9Oxf3-JIuTt8oGfWjCqsiv6ff4LB#scrollTo=XMxGDEuBo1w9): Check whether your seqspec is extracting cell barcodes, UMIs, guides, hashes, and transcripts correctly.
 
 ## Prerequisites
 
