@@ -112,8 +112,9 @@ def _bh_adjust(pvalues):
     if not valid.any():
         return out
 
+    p_valid = p.loc[valid].clip(lower=0.0, upper=1.0)
     out.loc[p.loc[valid].index] = false_discovery_control(
-        p.loc[valid].to_numpy(dtype=float), method="bh"
+        p_valid.to_numpy(dtype=float), method="bh"
     )
     return out
 
