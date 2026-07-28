@@ -125,13 +125,19 @@ def annotate_intended_target_groups(
 
     if "guide_id" not in df.columns:
         df["guide_id"] = df.index.astype(str)
+    else:
+        df["guide_id"] = df["guide_id"].astype(object)
 
     if "intended_target_name" not in df.columns:
         targeting = _to_bool_series(df.get("targeting", pd.Series(index=df.index, data=False)))
         df["intended_target_name"] = np.where(targeting, df["guide_id"].astype(str), non_targeting_label)
+    else:
+        df["intended_target_name"] = df["intended_target_name"].astype(object)
 
     if "intended_target_chr" not in df.columns:
         df["intended_target_chr"] = pd.NA
+    else:
+        df["intended_target_chr"] = df["intended_target_chr"].astype(object)
     if "intended_target_start" not in df.columns:
         df["intended_target_start"] = pd.NA
     if "intended_target_end" not in df.columns:

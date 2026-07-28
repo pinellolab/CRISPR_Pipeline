@@ -46,7 +46,7 @@ def _add_perturbo_columns(df: pd.DataFrame) -> pd.DataFrame:
 def _finalize_perturbo_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     if "perturbo_fc_se" not in out.columns and "perturbo_p_value" in out.columns:
-        out["perturbo_fc_se"] = pd.NA
+        out["perturbo_fc_se"] = np.nan
     return out
 
 

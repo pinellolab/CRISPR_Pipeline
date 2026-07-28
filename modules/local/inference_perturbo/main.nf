@@ -18,20 +18,24 @@ process inference_perturbo {
     path "inference_mudata.h5mu", emit: inference_mudata
     path "perturbo_cis_per_element_output.tsv.gz", emit: per_element_output
     path "perturbo_cis_per_guide_output.tsv.gz", emit: per_guide_output
+    path "perturbo_v2_outputs", optional: true, emit: perturbo_v2_outputs
 
     script:
         """
-        # Run PerTurbo inference for per-element results
-        perturbo_inference.py ${mudata} perturbo_cis_per_element_output.tsv.gz --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers 0 --efficiency_mode scaled --inference_type element
-        
-        # Run PerTurbo inference for per-guide results  
-        perturbo_inference.py ${mudata} perturbo_cis_per_guide_output.tsv.gz --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers 0 --efficiency_mode scaled --inference_type guide
-        
-        # Add both results to the base mudata file
-        add_perturbo_results_to_mudata.py \\
-            --per_guide_tsv perturbo_cis_per_guide_output.tsv.gz \\
-            --per_element_tsv perturbo_cis_per_element_output.tsv.gz \\
-            --base_mudata ${mudata} \\
-            --output inference_mudata.h5mu
+        perturbo_v2_pipeline_adapter.py \\
+            --input ${mudata} \\
+            --per-element-tsv perturbo_cis_per_element_output.tsv.gz \\
+            --per-guide-tsv perturbo_cis_per_guide_output.tsv.gz \\
+            --output-mudata inference_mudata.h5mu \\
+            --v2-artifact-dir perturbo_v2_outputs \\
+            --device ${params.INFERENCE_PERTURBO_DEVICE} \\
+            --batch-size ${params.INFERENCE_PERTURBO_BATCH_SIZE} \\
+            --num-steps-control ${params.INFERENCE_PERTURBO_NUM_STEPS_CONTROL} \\
+            --num-steps-betas ${params.INFERENCE_PERTURBO_NUM_STEPS_BETAS} \\
+            --max-chunk-size ${params.INFERENCE_PERTURBO_MAX_CHUNK_SIZE} \\
+            --perturbation-chunk-size ${params.INFERENCE_PERTURBO_PERTURBATION_CHUNK_SIZE} \\
+            --size-factor-mode ${params.INFERENCE_PERTURBO_SIZE_FACTOR_MODE} \\
+            --likelihood ${params.INFERENCE_PERTURBO_LIKELIHOOD} \\
+            --prior ${params.INFERENCE_PERTURBO_PRIOR}
         """
 }
