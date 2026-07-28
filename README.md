@@ -175,8 +175,15 @@ The complete machine-readable QC output catalog is available as
 | `INFERENCE_target_guide_pairing_strategy` | `default` | `default`, `by_distance`, `predefined_pairs` | Controls how guide-target pairs are built before inference. `default` builds the standard cis pairs; `by_distance` uses genomic distance; `predefined_pairs` uses a user-provided table. |
 | `INFERENCE_predefined_pairs_to_test` | `null` | CSV path | Pair table required when `INFERENCE_target_guide_pairing_strategy = 'predefined_pairs'`. |
 | `INFERENCE_max_target_distance_bp` | `1000000` | Integer bp distance | Maximum guide-target genomic distance used for cis pair construction. |
-| `INFERENCE_PERTURBO_BATCH_SIZE` | `4096` | Integer `>= 1` | Batch size passed to PerTurbo inference in cis and trans runs. |
-| `INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK` | `8000` | Integer; `<= 0` disables chunking | Maximum genes per chunk for trans PerTurbo all-by-all inference. |
+| `INFERENCE_PERTURBO_DEVICE` | `gpu` | `gpu`, `cpu` | Device requested for PerTurbo v2 inference. |
+| `INFERENCE_PERTURBO_MAX_CHUNK_CELLS` | `50000` | Integer `>= 1` | Maximum cells sent to a PerTurbo v2 fit at once. This is the primary GPU-memory knob for cis and trans runs; PerTurbo minibatching is intentionally disabled by the pipeline. |
+| `INFERENCE_PERTURBO_PERTURBATION_CHUNK_SIZE` | `0` | Integer; `<= 0` disables perturbation chunking | Optional PerTurbo v2 perturbation chunk size for large all-by-all fits. |
+| `INFERENCE_PERTURBO_NUM_STEPS_CONTROL` | `2500` | Integer `>= 1` | SVI steps for the PerTurbo v2 control/baseline fit. |
+| `INFERENCE_PERTURBO_NUM_STEPS_BETAS` | `2500` | Integer `>= 1` | SVI steps for PerTurbo v2 perturbation-effect fits. |
+| `INFERENCE_PERTURBO_SAVE_MODEL_PARAMS` | `false` | Boolean | Save PerTurbo v2 fitted model bundles in addition to pipeline-compatible result tables. Off by default to keep pipeline outputs smaller. |
+| `INFERENCE_PERTURBO_SIZE_FACTOR_MODE` | `observed` | PerTurbo size-factor mode | Size-factor handling passed to PerTurbo v2. |
+| `INFERENCE_PERTURBO_LIKELIHOOD` | `negbin` | PerTurbo likelihood name | Likelihood family passed to PerTurbo v2. |
+| `INFERENCE_PERTURBO_PRIOR` | `normal` | PerTurbo prior name | Perturbation-effect prior passed to PerTurbo v2. |
 | `INFERENCE_SCEPTRE_side` | `both` | `both`, `left`, `right` | Alternative-hypothesis side passed to SCEPTRE inference. |
 | `INFERENCE_SCEPTRE_grna_integration_strategy` | `union` | SCEPTRE strategy string | Guide RNA integration strategy passed to SCEPTRE inference. |
 | `INFERENCE_SCEPTRE_resampling_approximation` | `skew_normal` | SCEPTRE approximation string | Resampling approximation passed to SCEPTRE inference. |
