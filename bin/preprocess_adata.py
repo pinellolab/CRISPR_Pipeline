@@ -118,6 +118,7 @@ def main(
     reference,
     barcode_filter,
     bc_replacement,
+    tapseq_mode,
 ):
     bc_replacement_ = bc_replacement.lower() in ["true", "1", "yes"]
     if bc_replacement_:
@@ -222,9 +223,17 @@ def main(
         sc.pp.filter_cells(adata_rna, min_genes=min_genes)
     else:
         print("Skipping min_genes filter because barcode_filter is enabled.")
-    sc.pp.filter_genes(
-        adata_rna, min_cells=10
-    )  # just to remove some basic amout of genes, this will be treated in during the mudata concat
+    if not 0 <= float(min_cells) < 1:
+        raise ValueError("Gene cell-support threshold must be a fraction in [0, 1).")
+    # Standard runs retain the historical 10-cell prefilter. TAP-seq mode
+    # preserves every observed gene here; its fractional threshold is applied
+    # once after MuData concatenation.
+    preprocess_min_cells = 1 if tapseq_mode else 10
+    print(
+        "Filtering genes detected in fewer than "
+        f"{preprocess_min_cells} retained cells (TAP-seq mode: {tapseq_mode})"
+    )
+    sc.pp.filter_genes(adata_rna, min_cells=preprocess_min_cells)
 
     # filter for percent mito
     pct_mito = pct_mito
@@ -252,7 +261,7 @@ if __name__ == "__main__":
         "--min_cells",
         type=float,
         default=0.05,
-        help="Minimum number of cells per gene.",
+        help="Fraction of retained cells required per gene; must be in [0, 1).",
     )
     parser.add_argument(
         "--pct_mito",
@@ -275,6 +284,14 @@ if __name__ == "__main__":
         default="false",
         help="Barcode replacement specification (true/false)",
     )
+    parser.add_argument(
+        "--tapseq-mode",
+        action="store_true",
+        help=(
+            "Preserve every gene detected in at least one cell during "
+            "preprocessing; apply the fractional filter after MuData concatenation."
+        ),
+    )
 
     args = parser.parse_args()
     main(
@@ -286,4 +303,5 @@ if __name__ == "__main__":
         args.reference,
         args.barcode_filter,
         args.bc_replacement,
+        args.tapseq_mode,
     )

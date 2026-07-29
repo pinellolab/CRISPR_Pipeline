@@ -11,6 +11,7 @@ process PreprocessAnnData {
     val pct_mito
     val reference
     val barcode_filter
+    val tapseq_qc_mode
 
     output:
     path "filtered_anndata.h5ad" , emit: filtered_anndata_rna
@@ -19,7 +20,11 @@ process PreprocessAnnData {
 
     script:
         """
-        preprocess_adata.py ${adata_rna} ${gname_rna} --min_genes ${min_genes} --min_cells ${min_cells} --pct_mito ${pct_mito} --reference ${reference} --barcode-filter ${barcode_filter} --bc_replacement ${params.replace_barcodes}
+        TAPSEQ_ARG=""
+        if [ "${tapseq_qc_mode}" = "true" ]; then
+            TAPSEQ_ARG="--tapseq-mode"
+        fi
+        preprocess_adata.py ${adata_rna} ${gname_rna} --min_genes ${min_genes} --min_cells ${min_cells} --pct_mito ${pct_mito} --reference ${reference} --barcode-filter ${barcode_filter} --bc_replacement ${params.replace_barcodes} \${TAPSEQ_ARG}
         mv concatenated_adata.h5ad rna_concatenated_adata.h5ad
         """
 

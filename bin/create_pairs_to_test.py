@@ -6,13 +6,27 @@ from gtfparse import read_gtf
 import muon as mu
 from intended_target_key_utils import annotate_intended_target_groups
 
+
+def normalize_chromosome(value):
+    """Return a chromosome key that is insensitive to a leading 'chr' prefix."""
+    if pd.isna(value):
+        return None
+    chromosome = str(value).strip()
+    if chromosome.lower().startswith("chr"):
+        chromosome = chromosome[3:]
+    return chromosome.upper()
+
+
 def main(limit, mudata_path, input_gtf):
     mudata = mu.read(mudata_path)
     guide_data = annotate_intended_target_groups(mudata.mod['guide'].var)
     
     # Load GTF
     df_gtf_refseq = read_gtf(input_gtf).to_pandas()
-    df_gtf_unique_gene_name = df_gtf_refseq.drop_duplicates('gene_name')
+    df_gtf_unique_gene_name = df_gtf_refseq.drop_duplicates('gene_name').copy()
+    df_gtf_unique_gene_name['chromosome_key'] = (
+        df_gtf_unique_gene_name['seqname'].map(normalize_chromosome)
+    )
     df_gtf_unique_gene_name.set_index('gene_name', inplace=True)
     
     final_candidates_list = []
@@ -50,7 +64,10 @@ def main(limit, mudata_path, input_gtf):
             final_candidates_list.append(gene_df)
         else:
             # Use distance-based filtering
-            temp_gtf = df_gtf_unique_gene_name.query(f'seqname == "{guide_chr}"').copy()
+            guide_chromosome_key = normalize_chromosome(guide_chr)
+            temp_gtf = df_gtf_unique_gene_name[
+                df_gtf_unique_gene_name['chromosome_key'] == guide_chromosome_key
+            ].copy()
             temp_gtf['distance_from_guide'] = np.abs(temp_gtf['start'] - guide_start)
             final_candidates = temp_gtf.query(f'distance_from_guide <= {limit}').copy()
             final_candidates['guide_id'] = guide_id
@@ -77,6 +94,25 @@ def main(limit, mudata_path, input_gtf):
             )
     
     final_candidates_df = pd.concat(final_candidates_list, ignore_index=True)
+    if final_candidates_df.empty:
+        guide_namespaces = sorted(
+            {
+                str(value)
+                for value in guide_data['guide_chr'].dropna().unique()
+            }
+        )
+        gtf_namespaces = sorted(
+            {
+                str(value)
+                for value in df_gtf_refseq['seqname'].dropna().unique()
+            }
+        )
+        raise ValueError(
+            "No guide-gene pairs were found. Check guide coordinates, the distance "
+            "limit, and genome-build compatibility. Chromosome prefixes are "
+            "normalized automatically. "
+            f"Guide chromosomes: {guide_namespaces}; GTF chromosomes: {gtf_namespaces}"
+        )
     final_candidates_df['gene_id'] = final_candidates_df['gene_id'].str.split('.').str[0]
     final_candidates_df = final_candidates_df.rename(columns={'gene_id': 'gene_name'})
     final_candidates_df = final_candidates_df[
