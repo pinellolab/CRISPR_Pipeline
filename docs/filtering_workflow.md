@@ -35,7 +35,7 @@ flowchart TD
         RK{"QC_barcode_filter"}
         RUMI["Knee or knee2 barcode filter<br/>keep cells above total RNA UMI threshold"]
         RGENE["Minimum genes per cell<br/>QC_min_genes_per_cell"]
-        RGB["Basic gene filter<br/>gene detected in at least 10 cells"]
+        RGB["Standard gene prefilter<br/>gene detected in at least 10 cells"]
         RMITO["Mitochondrial filter<br/>percent_mito less than QC_pct_mito"]
         RF["filtered_anndata.h5ad"]
 
@@ -196,6 +196,11 @@ and task objects under `gs://igvf-pertub-seq-pipeline-data/work`.
 - `mudata.h5mu` is one combined multimodal object containing all three batches.
   It is temporarily split by `batch` (`measurement_sets`) so guide assignment
   runs independently, then recombined as `concat_mudata.h5mu`.
-- `QC_min_cells_per_gene` is applied after guide assignment and batch
-  concatenation. In the current implementation, a gene must be detected in
-  strictly more than `QC_min_cells_per_gene * total_cells`.
+- `QC_min_cells_per_gene` is a fraction in `[0, 1)` and is applied after guide
+  assignment and batch concatenation. A gene must be detected in strictly more
+  than `QC_min_cells_per_gene * total_cells`; `0` retains every gene detected
+  in at least one cell.
+- `TAPSEQ_QC_MODE = true` removes the standard 10-cell preprocessing floor so
+  observed TAP-seq genes reach the final fractional filter. Pair it with a very
+  small fraction (for example `0.000001`) when all observed genes should be
+  retained.

@@ -1,23 +1,43 @@
 #!/usr/bin/env python
 import argparse
+import math
 import os
-import mudata as md
 
 
-
-def filter_genes_by_cells(mdata, min_cells_faction):
+def resolve_min_cells(n_obs, min_cells_fraction):
     """
-        Filter genes in the MuData object based on the minimum number of cells they must be expressed in.
+    Resolve a fractional gene-support threshold.
+
+    The threshold is fraction-only and retains the historical
+    strict-greater-than behavior. A zero fraction keeps every gene detected
+    in at least one cell.
     """
-    
-    index_filter = ((mdata['gene'].X >0).sum(0).A1 > int(mdata['gene'].n_obs * min_cells_faction)  ) #gene with more than 10k cells
-    mdata.mod['gene'] = mdata.mod['gene'][:, index_filter ]
-    return  mdata
+    min_cells_fraction = float(min_cells_fraction)
+    if not 0 <= min_cells_fraction < 1:
+        raise ValueError("Gene cell-support threshold must be a fraction in [0, 1).")
+    return max(1, math.floor(n_obs * min_cells_fraction) + 1)
+
+
+def filter_genes_by_cells(mdata, min_cells_fraction):
+    """
+    Filter genes by the minimum fraction of cells expressing them.
+    """
+    required_cells = resolve_min_cells(mdata['gene'].n_obs, min_cells_fraction)
+    detected_cells = (mdata['gene'].X > 0).sum(0).A1
+    index_filter = detected_cells >= required_cells
+    print(
+        f"Keeping {int(index_filter.sum())} of {len(index_filter)} genes "
+        f"detected in at least {required_cells} cells"
+    )
+    mdata.mod['gene'] = mdata.mod['gene'][:, index_filter]
+    return mdata
 
 def concat_mudatas(input_files, output_file, min_cells_fraction=0.05):
     """
     Concatenate multiple MuData files. If only one file is provided, it's copied to the output.
     """
+    import mudata as md
+
     files = sorted(input_files, key=lambda x: os.path.basename(x))
     if not files:
         print(f"No files found: {input_files}")
@@ -52,7 +72,17 @@ def main():
     parser = argparse.ArgumentParser(description="Concatenate MuData files")
     parser.add_argument("-i", "--input", dest="input", nargs="+", required=True, help="Input mudata files")
     parser.add_argument("-o", "--output", dest="output", required=True, help="Output file path")
-    parser.add_argument("-g", "--gene_filter", dest="gene_filter", type=float, default=0.05, help="Minimum number of cells a gene must be expressed in to be retained")
+    parser.add_argument(
+        "-g",
+        "--gene_filter",
+        dest="gene_filter",
+        type=float,
+        default=0.05,
+        help=(
+            "Fraction of retained cells required to keep a gene. Must be in "
+            "[0, 1); zero keeps every gene detected in at least one cell."
+        ),
+    )
     args = parser.parse_args()
 
     concat_mudatas(args.input, args.output, args.gene_filter)

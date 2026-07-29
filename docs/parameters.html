@@ -208,9 +208,17 @@
 </tr>
 <tr>
 <td><code>QC_min_cells_per_gene</code></td>
-<td>Minimum cell support required to keep a gene. <details><summary>Help</summary><small>Passed to preprocessing and to MuData guide-assignment aggregation. Values are typically interpreted as a fraction of cells.</small></details></td>
+<td>Minimum retained-cell fraction required to keep a gene. <details><summary>Help</summary><small>Must be in [0, 1). Zero retains every gene detected in at least one cell; use a small fraction for permissive TAP-seq retention.</small></details></td>
 <td><code>number</code></td>
 <td>0.05</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>TAPSEQ_QC_MODE</code></td>
+<td>Use TAP-seq gene-retention QC. <details><summary>Help</summary><small>When enabled, preprocessing removes only genes undetected in every retained cell instead of applying the standard 10-cell prefilter. Use a small QC_min_cells_per_gene fraction such as 0.000001 to retain all observed TAP-seq genes.</small></details></td>
+<td><code>boolean</code></td>
+<td>false</td>
 <td></td>
 <td></td>
 </tr>

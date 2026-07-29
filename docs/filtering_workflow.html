@@ -517,7 +517,7 @@ flowchart TD
       RC --> RK{"QC_barcode_filter"}
       RK -- "knee / knee2" --> RU["Total RNA UMI knee filter"]
       RK -- "none" --> RG["Minimum genes per cell"]
-      RU --> RB["Genes detected in at least 10 cells"]
+      RU --> RB["Standard mode: genes detected in at least 10 cells"]
       RG --> RB
       RB --> RM["Mitochondrial percentage filter"]
       RM --> RF["Filtered RNA AnnData"]
@@ -764,7 +764,7 @@ flowchart TD
     RAW["Concatenated RNA cells"] --> MODE{"Barcode mode"}
     MODE -- "knee / knee2" --> UMI["Cell filter: total RNA UMI"]
     MODE -- "none" --> MIN["Cell filter: minimum genes"]
-    UMI --> G10["Feature filter: gene in at least 10 cells"]
+    UMI --> G10["Standard mode: gene in at least 10 cells"]
     MIN --> G10
     G10 --> MITO["Cell filter: pct_counts_mt below threshold"]
     MITO --> RNAOK["RNA-QC cells"]

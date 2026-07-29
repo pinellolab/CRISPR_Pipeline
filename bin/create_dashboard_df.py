@@ -761,7 +761,7 @@ def _build_comprehensive_qc_report(
         ("Cell barcode filter", _tip(f"QC_barcode_filter = {barcode_filter}", "Cell filtering mode used during RNA preprocessing.", code=True), "Resolved params"),
         ("Min genes per cell", _tip(f"QC_min_genes_per_cell = {qc_params.get('min_genes')}", "Minimum detected genes per cell; skipped for knee/knee2.", code=True), "Resolved params"),
         ("Mito cutoff", _tip(f"QC_pct_mito = {qc_params.get('pct_mito')}", "Maximum mitochondrial percentage allowed.", code=True), "Resolved params"),
-        ("Min cells per gene", _tip(f"QC_min_cells_per_gene = {params.get('QC_min_cells_per_gene', 'N/A')}", "Minimum fraction of cells where a gene must be detected before inference.", code=True), "Resolved params"),
+        ("Min cells per gene", _tip(f"QC_min_cells_per_gene = {params.get('QC_min_cells_per_gene', 'N/A')}", "Minimum gene support before inference: a fraction in [0, 1); zero retains genes detected in at least one cell.", code=True), "Resolved params"),
         ("Scrublet", _tip(f"ENABLE_SCRUBLET = {params.get('ENABLE_SCRUBLET', False)}", "Whether Scrublet doublet removal was enabled.", code=True), "Resolved params"),
         ("Hashing", _tip(f"ENABLE_DATA_HASHING = {params.get('ENABLE_DATA_HASHING', False)}", "Whether hashing demultiplexing was enabled.", code=True), "Resolved params"),
         ("Inference mode", _tip(f"INFERENCE_method = {params.get('INFERENCE_method', 'N/A')}", "Configured inference method for cis/trans analysis.", code=True), "Resolved params"),

@@ -1,0 +1,1136 @@
+[
+  {
+    "flat_key": "mapping_json.n_targets",
+    "section": "mapping_json",
+    "metric": "n_targets",
+    "description": "Number of targets in the reference index.",
+    "unit": "targets",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.n_processed",
+    "section": "mapping_json",
+    "metric": "n_processed",
+    "description": "Total reads processed by kb count.",
+    "unit": "reads",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.n_pseudoaligned",
+    "section": "mapping_json",
+    "metric": "n_pseudoaligned",
+    "description": "Reads pseudoaligned by kb count.",
+    "unit": "reads",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.n_unique",
+    "section": "mapping_json",
+    "metric": "n_unique",
+    "description": "Reads uniquely pseudoaligned by kb count.",
+    "unit": "reads",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.p_pseudoaligned",
+    "section": "mapping_json",
+    "metric": "p_pseudoaligned",
+    "description": "Percentage of processed reads pseudoaligned.",
+    "unit": "percent",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.p_unique",
+    "section": "mapping_json",
+    "metric": "p_unique",
+    "description": "Percentage of processed reads uniquely pseudoaligned.",
+    "unit": "percent",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.numRecords",
+    "section": "mapping_json",
+    "metric": "numRecords",
+    "description": "Number of records inspected from the count matrix.",
+    "unit": "records",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.numReads",
+    "section": "mapping_json",
+    "metric": "numReads",
+    "description": "Number of reads represented in the inspected matrix.",
+    "unit": "reads",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.numBarcodes",
+    "section": "mapping_json",
+    "metric": "numBarcodes",
+    "description": "Detected barcodes before downstream cell filtering.",
+    "unit": "barcodes",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.numUMIs",
+    "section": "mapping_json",
+    "metric": "numUMIs",
+    "description": "Detected UMIs before downstream filtering.",
+    "unit": "UMIs",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.numBarcodeUMIs",
+    "section": "mapping_json",
+    "metric": "numBarcodeUMIs",
+    "description": "Barcode-UMI pairs detected before downstream filtering.",
+    "unit": "barcode_UMI_pairs",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.meanReadsPerBarcode",
+    "section": "mapping_json",
+    "metric": "meanReadsPerBarcode",
+    "description": "Mean reads per detected barcode.",
+    "unit": "reads_per_barcode",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.meanUMIsPerBarcode",
+    "section": "mapping_json",
+    "metric": "meanUMIsPerBarcode",
+    "description": "Mean UMIs per detected barcode.",
+    "unit": "UMIs_per_barcode",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.numBarcodesOnOnlist",
+    "section": "mapping_json",
+    "metric": "numBarcodesOnOnlist",
+    "description": "Detected barcodes that are present in the barcode on-list.",
+    "unit": "barcodes",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.numReadsOnOnlist",
+    "section": "mapping_json",
+    "metric": "numReadsOnOnlist",
+    "description": "Reads assigned to barcodes present in the barcode on-list.",
+    "unit": "reads",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.percentageBarcodesOnOnlist",
+    "section": "mapping_json",
+    "metric": "percentageBarcodesOnOnlist",
+    "description": "Fraction of detected barcodes present in the barcode on-list.",
+    "unit": "percent",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "mapping_json.percentageReadsOnOnlist",
+    "section": "mapping_json",
+    "metric": "percentageReadsOnOnlist",
+    "description": "Fraction of reads assigned to barcodes present in the barcode on-list.",
+    "unit": "percent",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "json_dir/{modality}-{measurement_set}-{inspect,run_info}.json"
+  },
+  {
+    "flat_key": "additional_qc_gene.batch",
+    "section": "additional_qc_gene",
+    "metric": "batch",
+    "description": "Batch label for this row; all means all final cells.",
+    "unit": null,
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.n_cells",
+    "section": "additional_qc_gene",
+    "metric": "n_cells",
+    "description": "Number of cells included in this row.",
+    "unit": "cells",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.umi_median",
+    "section": "additional_qc_gene",
+    "metric": "umi_median",
+    "description": "Median value across cells or guides. of total_gene_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.umi_mean",
+    "section": "additional_qc_gene",
+    "metric": "umi_mean",
+    "description": "Arithmetic mean across cells or guides. of total_gene_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.umi_std",
+    "section": "additional_qc_gene",
+    "metric": "umi_std",
+    "description": "Sample standard deviation across cells or guides. of total_gene_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.umi_min",
+    "section": "additional_qc_gene",
+    "metric": "umi_min",
+    "description": "Minimum observed value. of total_gene_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.umi_max",
+    "section": "additional_qc_gene",
+    "metric": "umi_max",
+    "description": "Maximum observed value. of total_gene_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.umi_q25",
+    "section": "additional_qc_gene",
+    "metric": "umi_q25",
+    "description": "Twenty-fifth percentile. of total_gene_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.umi_q75",
+    "section": "additional_qc_gene",
+    "metric": "umi_q75",
+    "description": "Seventy-fifth percentile. of total_gene_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.genes_median",
+    "section": "additional_qc_gene",
+    "metric": "genes_median",
+    "description": "Median value across cells or guides. of num_expressed_genes per cell.",
+    "unit": "genes",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.genes_mean",
+    "section": "additional_qc_gene",
+    "metric": "genes_mean",
+    "description": "Arithmetic mean across cells or guides. of num_expressed_genes per cell.",
+    "unit": "genes",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.genes_std",
+    "section": "additional_qc_gene",
+    "metric": "genes_std",
+    "description": "Sample standard deviation across cells or guides. of num_expressed_genes per cell.",
+    "unit": "genes",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.genes_min",
+    "section": "additional_qc_gene",
+    "metric": "genes_min",
+    "description": "Minimum observed value. of num_expressed_genes per cell.",
+    "unit": "genes",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.genes_max",
+    "section": "additional_qc_gene",
+    "metric": "genes_max",
+    "description": "Maximum observed value. of num_expressed_genes per cell.",
+    "unit": "genes",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.genes_q25",
+    "section": "additional_qc_gene",
+    "metric": "genes_q25",
+    "description": "Twenty-fifth percentile. of num_expressed_genes per cell.",
+    "unit": "genes",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.genes_q75",
+    "section": "additional_qc_gene",
+    "metric": "genes_q75",
+    "description": "Seventy-fifth percentile. of num_expressed_genes per cell.",
+    "unit": "genes",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.mito_median",
+    "section": "additional_qc_gene",
+    "metric": "mito_median",
+    "description": "Median value across cells or guides. of percent_mito per cell.",
+    "unit": "percent",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.mito_mean",
+    "section": "additional_qc_gene",
+    "metric": "mito_mean",
+    "description": "Arithmetic mean across cells or guides. of percent_mito per cell.",
+    "unit": "percent",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.mito_std",
+    "section": "additional_qc_gene",
+    "metric": "mito_std",
+    "description": "Sample standard deviation across cells or guides. of percent_mito per cell.",
+    "unit": "percent",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.mito_min",
+    "section": "additional_qc_gene",
+    "metric": "mito_min",
+    "description": "Minimum observed value. of percent_mito per cell.",
+    "unit": "percent",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.mito_max",
+    "section": "additional_qc_gene",
+    "metric": "mito_max",
+    "description": "Maximum observed value. of percent_mito per cell.",
+    "unit": "percent",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.mito_q25",
+    "section": "additional_qc_gene",
+    "metric": "mito_q25",
+    "description": "Twenty-fifth percentile. of percent_mito per cell.",
+    "unit": "percent",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_gene.mito_q75",
+    "section": "additional_qc_gene",
+    "metric": "mito_q75",
+    "description": "Seventy-fifth percentile. of percent_mito per cell.",
+    "unit": "percent",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/gene/gene_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.batch",
+    "section": "additional_qc_guide",
+    "metric": "batch",
+    "description": "Batch label for this row; all means all final cells.",
+    "unit": null,
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.n_cells",
+    "section": "additional_qc_guide",
+    "metric": "n_cells",
+    "description": "Number of cells included in this row.",
+    "unit": "cells",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.guide_umi_median",
+    "section": "additional_qc_guide",
+    "metric": "guide_umi_median",
+    "description": "Median value across cells or guides. of total_guide_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.guide_umi_mean",
+    "section": "additional_qc_guide",
+    "metric": "guide_umi_mean",
+    "description": "Arithmetic mean across cells or guides. of total_guide_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.guide_umi_std",
+    "section": "additional_qc_guide",
+    "metric": "guide_umi_std",
+    "description": "Sample standard deviation across cells or guides. of total_guide_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.guide_umi_min",
+    "section": "additional_qc_guide",
+    "metric": "guide_umi_min",
+    "description": "Minimum observed value. of total_guide_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.guide_umi_max",
+    "section": "additional_qc_guide",
+    "metric": "guide_umi_max",
+    "description": "Maximum observed value. of total_guide_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.guide_umi_q25",
+    "section": "additional_qc_guide",
+    "metric": "guide_umi_q25",
+    "description": "Twenty-fifth percentile. of total_guide_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.guide_umi_q75",
+    "section": "additional_qc_guide",
+    "metric": "guide_umi_q75",
+    "description": "Seventy-fifth percentile. of total_guide_umis per cell.",
+    "unit": "UMIs",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.guides_per_cell_mean",
+    "section": "additional_qc_guide",
+    "metric": "guides_per_cell_mean",
+    "description": "Mean number of assigned guides per cell.",
+    "unit": "guides_per_cell",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.guides_per_cell_std",
+    "section": "additional_qc_guide",
+    "metric": "guides_per_cell_std",
+    "description": "Standard deviation of assigned guides per cell.",
+    "unit": "guides_per_cell",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.guides_per_cell_min",
+    "section": "additional_qc_guide",
+    "metric": "guides_per_cell_min",
+    "description": "Minimum assigned guides per cell.",
+    "unit": "guides_per_cell",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.guides_per_cell_max",
+    "section": "additional_qc_guide",
+    "metric": "guides_per_cell_max",
+    "description": "Maximum assigned guides per cell.",
+    "unit": "guides_per_cell",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.guides_per_cell_median",
+    "section": "additional_qc_guide",
+    "metric": "guides_per_cell_median",
+    "description": "Median assigned guides per cell.",
+    "unit": "guides_per_cell",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.n_cells_with_guide",
+    "section": "additional_qc_guide",
+    "metric": "n_cells_with_guide",
+    "description": "Cells with at least one assigned guide.",
+    "unit": "cells",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.n_cells_exactly_1_guide",
+    "section": "additional_qc_guide",
+    "metric": "n_cells_exactly_1_guide",
+    "description": "Cells with exactly one assigned guide.",
+    "unit": "cells",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.frac_cells_with_guide",
+    "section": "additional_qc_guide",
+    "metric": "frac_cells_with_guide",
+    "description": "Fraction of cells with at least one assigned guide.",
+    "unit": "fraction",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.n_guides_total",
+    "section": "additional_qc_guide",
+    "metric": "n_guides_total",
+    "description": "Number of guides in the final guide modality.",
+    "unit": "guides",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.cells_per_guide_median",
+    "section": "additional_qc_guide",
+    "metric": "cells_per_guide_median",
+    "description": "Median value across cells or guides. of assigned cells per guide.",
+    "unit": "cells_per_guide",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.cells_per_guide_mean",
+    "section": "additional_qc_guide",
+    "metric": "cells_per_guide_mean",
+    "description": "Arithmetic mean across cells or guides. of assigned cells per guide.",
+    "unit": "cells_per_guide",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.cells_per_guide_std",
+    "section": "additional_qc_guide",
+    "metric": "cells_per_guide_std",
+    "description": "Sample standard deviation across cells or guides. of assigned cells per guide.",
+    "unit": "cells_per_guide",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.cells_per_guide_min",
+    "section": "additional_qc_guide",
+    "metric": "cells_per_guide_min",
+    "description": "Minimum observed value. of assigned cells per guide.",
+    "unit": "cells_per_guide",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.cells_per_guide_max",
+    "section": "additional_qc_guide",
+    "metric": "cells_per_guide_max",
+    "description": "Maximum observed value. of assigned cells per guide.",
+    "unit": "cells_per_guide",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.cells_per_guide_q25",
+    "section": "additional_qc_guide",
+    "metric": "cells_per_guide_q25",
+    "description": "Twenty-fifth percentile. of assigned cells per guide.",
+    "unit": "cells_per_guide",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.cells_per_guide_q75",
+    "section": "additional_qc_guide",
+    "metric": "cells_per_guide_q75",
+    "description": "Seventy-fifth percentile. of assigned cells per guide.",
+    "unit": "cells_per_guide",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.n_guides_total",
+    "section": "additional_qc_intended_target",
+    "metric": "n_guides_total",
+    "description": "Total intended-target rows before dropping missing results.",
+    "unit": "guides",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.n_guides_tested",
+    "section": "additional_qc_intended_target",
+    "metric": "n_guides_tested",
+    "description": "Guides with valid intended-target result values.",
+    "unit": "guides",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.fc_threshold",
+    "section": "additional_qc_intended_target",
+    "metric": "fc_threshold",
+    "description": "Fold-change threshold used to define strong knockdown.",
+    "unit": "fold_change",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.log2fc_threshold",
+    "section": "additional_qc_intended_target",
+    "metric": "log2fc_threshold",
+    "description": "Log2 fold-change threshold used to define strong knockdown.",
+    "unit": "log2_fold_change",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.pval_threshold",
+    "section": "additional_qc_intended_target",
+    "metric": "pval_threshold",
+    "description": "P-value threshold used for significance.",
+    "unit": "p_value",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.n_strong_knockdowns",
+    "section": "additional_qc_intended_target",
+    "metric": "n_strong_knockdowns",
+    "description": "Guides with intended-target log2FC below the strong-knockdown threshold.",
+    "unit": "guides",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.n_significant",
+    "section": "additional_qc_intended_target",
+    "metric": "n_significant",
+    "description": "Guides with intended-target p-value below the significance threshold.",
+    "unit": "guides",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.n_strong_and_significant",
+    "section": "additional_qc_intended_target",
+    "metric": "n_strong_and_significant",
+    "description": "Guides meeting both strong-knockdown and significance thresholds.",
+    "unit": "guides",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.frac_strong_knockdowns",
+    "section": "additional_qc_intended_target",
+    "metric": "frac_strong_knockdowns",
+    "description": "Fraction of tested guides with strong intended-target knockdown.",
+    "unit": "fraction",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.frac_significant",
+    "section": "additional_qc_intended_target",
+    "metric": "frac_significant",
+    "description": "Fraction of tested guides with significant intended-target effect.",
+    "unit": "fraction",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.frac_strong_and_significant",
+    "section": "additional_qc_intended_target",
+    "metric": "frac_strong_and_significant",
+    "description": "Fraction of tested guides meeting both strong and significant criteria.",
+    "unit": "fraction",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.median_log2fc",
+    "section": "additional_qc_intended_target",
+    "metric": "median_log2fc",
+    "description": "Median intended-target log2 fold-change.",
+    "unit": "log2_fold_change",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.mean_log2fc",
+    "section": "additional_qc_intended_target",
+    "metric": "mean_log2fc",
+    "description": "Mean intended-target log2 fold-change.",
+    "unit": "log2_fold_change",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.auroc",
+    "section": "additional_qc_intended_target",
+    "metric": "auroc",
+    "description": "Area under ROC curve for intended-target evaluation, when computable.",
+    "unit": "AUROC",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.auprc",
+    "section": "additional_qc_intended_target",
+    "metric": "auprc",
+    "description": "Area under precision-recall curve for intended-target evaluation, when computable.",
+    "unit": "AUPRC",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.n_eval_positives",
+    "section": "additional_qc_intended_target",
+    "metric": "n_eval_positives",
+    "description": "Positive examples used for AUROC/AUPRC evaluation.",
+    "unit": "examples",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_intended_target.n_eval_negatives",
+    "section": "additional_qc_intended_target",
+    "metric": "n_eval_negatives",
+    "description": "Negative examples used for AUROC/AUPRC evaluation.",
+    "unit": "examples",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.n_guides_tested",
+    "section": "additional_qc_trans",
+    "metric": "n_guides_tested",
+    "description": "Guides tested in the trans analysis.",
+    "unit": "guides",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.n_targeting_guides",
+    "section": "additional_qc_trans",
+    "metric": "n_targeting_guides",
+    "description": "Targeting guides tested in the trans analysis.",
+    "unit": "guides",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.n_non_targeting_guides",
+    "section": "additional_qc_trans",
+    "metric": "n_non_targeting_guides",
+    "description": "Non-targeting guides tested in the trans analysis.",
+    "unit": "guides",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.median_significant_per_guide_targeting",
+    "section": "additional_qc_trans",
+    "metric": "median_significant_per_guide_targeting",
+    "description": "Median significant trans effects per targeting guide.",
+    "unit": "tests_per_guide",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.mean_significant_per_guide_targeting",
+    "section": "additional_qc_trans",
+    "metric": "mean_significant_per_guide_targeting",
+    "description": "Mean significant trans effects per targeting guide.",
+    "unit": "tests_per_guide",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.median_significant_per_guide_nt",
+    "section": "additional_qc_trans",
+    "metric": "median_significant_per_guide_nt",
+    "description": "Median significant trans effects per non-targeting guide.",
+    "unit": "tests_per_guide",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.mean_significant_per_guide_nt",
+    "section": "additional_qc_trans",
+    "metric": "mean_significant_per_guide_nt",
+    "description": "Mean significant trans effects per non-targeting guide.",
+    "unit": "tests_per_guide",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.total_significant_tests",
+    "section": "additional_qc_trans",
+    "metric": "total_significant_tests",
+    "description": "Total significant trans tests across guides.",
+    "unit": "tests",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.median_genome_log2fc_targeting",
+    "section": "additional_qc_trans",
+    "metric": "median_genome_log2fc_targeting",
+    "description": "Median genome-wide log2FC for targeting guides.",
+    "unit": "log2_fold_change",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.median_genome_log2fc_nt",
+    "section": "additional_qc_trans",
+    "metric": "median_genome_log2fc_nt",
+    "description": "Median genome-wide log2FC for non-targeting guides.",
+    "unit": "log2_fold_change",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.fdr_method",
+    "section": "additional_qc_trans",
+    "metric": "fdr_method",
+    "description": "Multiple-testing correction method used for trans significance.",
+    "unit": null,
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.auroc",
+    "section": "additional_qc_trans",
+    "metric": "auroc",
+    "description": "Area under ROC curve for validated trans-link evaluation, when provided.",
+    "unit": "AUROC",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.auprc",
+    "section": "additional_qc_trans",
+    "metric": "auprc",
+    "description": "Area under precision-recall curve for validated trans-link evaluation, when provided.",
+    "unit": "AUPRC",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.n_validated_links",
+    "section": "additional_qc_trans",
+    "metric": "n_validated_links",
+    "description": "Validated trans links available for evaluation.",
+    "unit": "links",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.n_eval_positives",
+    "section": "additional_qc_trans",
+    "metric": "n_eval_positives",
+    "description": "Positive examples used for validated-link evaluation.",
+    "unit": "examples",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_trans.n_eval_negatives",
+    "section": "additional_qc_trans",
+    "metric": "n_eval_negatives",
+    "description": "Negative examples used for validated-link evaluation.",
+    "unit": "examples",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+  },
+  {
+    "flat_key": "dashboard_derived.raw_scRNA_barcodes_per_measurement_set",
+    "section": "dashboard_derived",
+    "metric": "raw_scRNA_barcodes_per_measurement_set",
+    "description": "Unfiltered scRNA barcode counts from kb inspect JSON files.",
+    "unit": "barcodes",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.raw_scRNA_barcodes_total",
+    "section": "dashboard_derived",
+    "metric": "raw_scRNA_barcodes_total",
+    "description": "Sum of unfiltered scRNA barcode counts across measurement sets.",
+    "unit": "barcodes",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.concatenated_scRNA_cells",
+    "section": "dashboard_derived",
+    "metric": "concatenated_scRNA_cells",
+    "description": "Cells in concatenated unfiltered scRNA AnnData before dashboard-attributed QC steps.",
+    "unit": "cells",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.barcode_filter_method",
+    "section": "dashboard_derived",
+    "metric": "barcode_filter_method",
+    "description": "Resolved QC_barcode_filter mode: none, knee, or knee2.",
+    "unit": null,
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.barcode_filter_total_gene_umis_min",
+    "section": "dashboard_derived",
+    "metric": "barcode_filter_total_gene_umis_min",
+    "description": "Minimum total_gene_umis retained by the selected knee-based barcode filter.",
+    "unit": "UMIs",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.barcode_filter_knee_rank",
+    "section": "dashboard_derived",
+    "metric": "barcode_filter_knee_rank",
+    "description": "Barcode rank selected by the knee or knee2 algorithm.",
+    "unit": "rank",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.cells_after_barcode_filter",
+    "section": "dashboard_derived",
+    "metric": "cells_after_barcode_filter",
+    "description": "Cells retained after RNA barcode filtering.",
+    "unit": "cells",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.cells_after_mito_filter",
+    "section": "dashboard_derived",
+    "metric": "cells_after_mito_filter",
+    "description": "Cells retained after mitochondrial percentage filtering.",
+    "unit": "cells",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.rna_guide_intersection_cells",
+    "section": "dashboard_derived",
+    "metric": "rna_guide_intersection_cells",
+    "description": "Cells present in both filtered RNA and guide AnnData objects.",
+    "unit": "cells",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.guide_unfiltered_intersection_cells",
+    "section": "dashboard_derived",
+    "metric": "guide_unfiltered_intersection_cells",
+    "description": "Unfiltered guide barcodes that intersect unfiltered scRNA barcodes.",
+    "unit": "cells",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.guide_unfiltered_intersection_fraction",
+    "section": "dashboard_derived",
+    "metric": "guide_unfiltered_intersection_fraction",
+    "description": "Fraction of unfiltered guide barcodes that intersect unfiltered scRNA barcodes.",
+    "unit": "fraction",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.final_mudata_cells",
+    "section": "dashboard_derived",
+    "metric": "final_mudata_cells",
+    "description": "Final observations in the emitted MuData object.",
+    "unit": "cells",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.final_gene_features",
+    "section": "dashboard_derived",
+    "metric": "final_gene_features",
+    "description": "Gene features in the final MuData gene modality.",
+    "unit": "genes",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.final_guide_features",
+    "section": "dashboard_derived",
+    "metric": "final_guide_features",
+    "description": "Guide features in the final MuData guide modality.",
+    "unit": "guides",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.final_gene_mean_umis_per_cell",
+    "section": "dashboard_derived",
+    "metric": "final_gene_mean_umis_per_cell",
+    "description": "Mean total gene UMI counts per final cell.",
+    "unit": "UMIs_per_cell",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.total_sgrna_assignment_values",
+    "section": "dashboard_derived",
+    "metric": "total_sgrna_assignment_values",
+    "description": "Sum of guide assignment values across all cells and guides.",
+    "unit": "assignment_values",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.median_sgrna_assignment_per_guide",
+    "section": "dashboard_derived",
+    "metric": "median_sgrna_assignment_per_guide",
+    "description": "Median summed guide assignment value per guide.",
+    "unit": "assignment_values_per_guide",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.mean_guides_per_cell_final",
+    "section": "dashboard_derived",
+    "metric": "mean_guides_per_cell_final",
+    "description": "Mean guide count per final cell from the guide modality matrix.",
+    "unit": "guides_per_cell",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.mean_cells_per_guide_final",
+    "section": "dashboard_derived",
+    "metric": "mean_cells_per_guide_final",
+    "description": "Mean cell count per guide from the guide modality matrix.",
+    "unit": "cells_per_guide",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.final_cells_total_gene_umis_lt_100",
+    "section": "dashboard_derived",
+    "metric": "final_cells_total_gene_umis_lt_100",
+    "description": "Final cells with total_gene_umis below 100; diagnostic only unless configured as a filter.",
+    "unit": "cells",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.final_cells_total_gene_umis_lt_500",
+    "section": "dashboard_derived",
+    "metric": "final_cells_total_gene_umis_lt_500",
+    "description": "Final cells with total_gene_umis below 500; diagnostic only unless configured as a filter.",
+    "unit": "cells",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.final_cells_no_gene_count_gt_1",
+    "section": "dashboard_derived",
+    "metric": "final_cells_no_gene_count_gt_1",
+    "description": "Final cells with no gene whose count is greater than 1; diagnostic only.",
+    "unit": "cells",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.median_detected_genes_final_cells",
+    "section": "dashboard_derived",
+    "metric": "median_detected_genes_final_cells",
+    "description": "Median number of detected genes per final cell.",
+    "unit": "genes",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.hashing_intersection_cells",
+    "section": "dashboard_derived",
+    "metric": "hashing_intersection_cells",
+    "description": "Cells retained in both filtered RNA and hashing AnnData, when hashing is enabled.",
+    "unit": "cells",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.hashing_demux_singlets",
+    "section": "dashboard_derived",
+    "metric": "hashing_demux_singlets",
+    "description": "Cells retained by hashing demultiplexing, when hashing is enabled.",
+    "unit": "cells",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.hashing_negative_cells",
+    "section": "dashboard_derived",
+    "metric": "hashing_negative_cells",
+    "description": "Cells identified as negative for all hashtags before singlet filtering, when hashing is enabled.",
+    "unit": "cells",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.hashing_negative_fraction",
+    "section": "dashboard_derived",
+    "metric": "hashing_negative_fraction",
+    "description": "Fraction of hashing-filtered cells identified as negative for all hashtags, when hashing is enabled.",
+    "unit": "fraction",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  },
+  {
+    "flat_key": "dashboard_derived.hashing_singlet_fraction",
+    "section": "dashboard_derived",
+    "metric": "hashing_singlet_fraction",
+    "description": "Fraction of hashing-filtered cells retained as singlet positives, when hashing is enabled.",
+    "unit": "fraction",
+    "row_level": "measurement-set or run-level",
+    "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
+  }
+]
