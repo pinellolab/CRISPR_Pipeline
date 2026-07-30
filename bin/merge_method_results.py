@@ -251,7 +251,7 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     # Load base mudata for structure
     base_mdata = mu.read_h5mu(base_mudata_path)
 
-    merged_guide_df = format_guide_output(merged_guide_df)
+    merged_guide_df = format_guide_output(merged_guide_df, base_mdata)
     merged_element_df = format_element_output(merged_element_df, base_mdata)
     
     # Store merged results in mudata

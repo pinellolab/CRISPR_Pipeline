@@ -170,7 +170,7 @@ The complete machine-readable QC output catalog is available as
 
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
-| `INFERENCE_method` | `default` | `default`, `sceptre`, `perturbo`, `sceptre,perturbo` | Selects inference workflow. `default` runs cis SCEPTRE, cis PerTurbo, trans PerTurbo, and writes merged cis/trans outputs. |
+| `INFERENCE_method` | `default` | `default`, `sceptre`, `perturbo`, `sceptre,perturbo` | Selects inference workflow. `default` runs local SCEPTRE, local PerTurbo, global PerTurbo, and writes merged local/global outputs. |
 | `INFERENCE_input_mudata` | `null` | MuData `.h5mu` path | Required only for `-entry INFERENCE_FROM_MUDATA`, where inference is rerun from an existing post-guide-assignment MuData file. |
 | `INFERENCE_target_guide_pairing_strategy` | `default` | `default`, `by_distance`, `predefined_pairs` | Controls how guide-target pairs are built before inference. `default` builds the standard cis pairs; `by_distance` uses genomic distance; `predefined_pairs` uses a user-provided table. |
 | `INFERENCE_predefined_pairs_to_test` | `null` | CSV path | Pair table required when `INFERENCE_target_guide_pairing_strategy = 'predefined_pairs'`. |
@@ -321,7 +321,7 @@ containers {
 
 All paths below are relative to the directory supplied with `--outdir`.
 
-Final inference artifacts are written once, under `pipeline_outputs/`. The dashboard directory is visualization-only and does not contain duplicate copies of `inference_mudata.h5mu` or the cis/trans TSV outputs.
+Final inference artifacts are written once, under `pipeline_outputs/`. The dashboard directory is visualization-only and does not contain duplicate copies of `inference_mudata.h5mu` or the local/global analysis TSV outputs.
 
 ### Final inference outputs
 
@@ -330,24 +330,26 @@ Within `pipeline_outputs/`, you will find:
 | File | Description |
 |---|---|
 | `inference_mudata.h5mu` | Final MuData object containing processed modalities and inference results. |
-| `cis_per_element_output.tsv.gz` | Cis element-level inference results. |
-| `cis_per_guide_output.tsv.gz` | Cis guide-level inference results. |
-| `trans_per_element_output.tsv.gz` | Trans element-level inference results. |
-| `trans_per_guide_output.tsv.gz` | Trans guide-level inference results. |
-| `catalog_per_element_output.tsv.gz` | Catalog-formatted per-element table merging cis SCEPTRE and trans PerTurbo results. |
+| [`local_analysis_per_element_output.tsv.gz`](https://docs.google.com/spreadsheets/d/1qbXLjDIc5rUJRgl_HhuA68HRxC3Jp5sISr9iqTgyqAM/edit#gid=213615974) | Element-level inference restricted to the configured local target-pairing strategy. |
+| [`local_analysis_per_guide_output.tsv.gz`](https://docs.google.com/spreadsheets/d/1qbXLjDIc5rUJRgl_HhuA68HRxC3Jp5sISr9iqTgyqAM/edit#gid=1700000001) | Guide-level inference restricted to the configured local target-pairing strategy. |
+| [`global_analysis_per_element_output.tsv.gz`](https://docs.google.com/spreadsheets/d/1qbXLjDIc5rUJRgl_HhuA68HRxC3Jp5sISr9iqTgyqAM/edit#gid=864095861) | Genome-wide, all-by-all element-level PerTurbo inference. |
+| [`global_analysis_per_guide_output.tsv.gz`](https://docs.google.com/spreadsheets/d/1qbXLjDIc5rUJRgl_HhuA68HRxC3Jp5sISr9iqTgyqAM/edit#gid=1700000002) | Genome-wide, all-by-all guide-level PerTurbo inference. |
+| [`catalog_per_element_output.tsv.gz`](https://docs.google.com/spreadsheets/d/1qbXLjDIc5rUJRgl_HhuA68HRxC3Jp5sISr9iqTgyqAM/edit#gid=1841723215) | Catalog-formatted per-element table merging local SCEPTRE and global PerTurbo results. |
+| [`catalog_per_guide_output.tsv.gz`](https://docs.google.com/spreadsheets/d/1qbXLjDIc5rUJRgl_HhuA68HRxC3Jp5sISr9iqTgyqAM/edit#gid=1700000003) | Catalog-formatted per-guide table merging local SCEPTRE, global PerTurbo, and guide metadata. |
 
 All result tables are tab-separated and gzip-compressed.
+The linked filenames open the live developer-facing field contract for that file.
 
-### Cis analysis
+### Local analysis
 
-The cis outputs report guide-gene or target-element-gene tests restricted to the configured cis pairing strategy.
+The local-analysis outputs report guide-gene or target-element-gene tests restricted to the configured target-pairing strategy.
 
 | File | Description |
 |---|---|
-| `cis_per_guide_output.tsv.gz` | Inference results for cis guide-gene pairs with guides tested independently. |
-| `cis_per_element_output.tsv.gz` | Inference results for cis element-gene pairs with guides grouped by intended target fields. |
+| `local_analysis_per_guide_output.tsv.gz` | Local-analysis guide-gene pairs with guides tested independently. |
+| `local_analysis_per_element_output.tsv.gz` | Local-analysis element-gene pairs with guides grouped by intended target fields. |
 
-#### `cis_per_guide_output.tsv.gz`
+#### `local_analysis_per_guide_output.tsv.gz`
 
 | Column | Description |
 |---|---|
@@ -358,15 +360,27 @@ The cis outputs report guide-gene or target-element-gene tests restricted to the
 | `sceptre_q_value` | BH-adjusted SCEPTRE p-value. |
 | `sceptre_fc_se` | SCEPTRE fold-change standard error. |
 | `sceptre_negLog10p` | SCEPTRE significance score: `-log10(max(sceptre_p_value, 1e-300))`. |
-| `sceptre_log10_p_value` | Backward-compatible alias of `sceptre_negLog10p`. |
 | `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
-| `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this cis output table. |
+| `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this local-analysis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
-| `perturbo_log10_p_value` | Backward-compatible alias of `perturbo_negLog10p`. |
+| `guide_sequence` | Guide spacer sequence from guide metadata. |
+| `guide_type` | Guide type from guide metadata. |
+| `targeting` | Whether the guide is annotated as targeting. |
+| `guide_chr` | Guide genomic chromosome. |
+| `guide_start` | Guide genomic start coordinate. |
+| `guide_end` | Guide genomic end coordinate. |
+| `guide_strand` | Guide genomic strand. |
+| `pam` | Protospacer-adjacent motif annotation. |
+| `intended_target_name` | Intended target element or gene name. |
+| `intended_target_chr` | Intended target chromosome. |
+| `intended_target_start` | Intended target start coordinate. |
+| `intended_target_end` | Intended target end coordinate. |
+| `gene_name` | Symbol of the tested gene when available. |
+| `nPerturbedCells` | Number of unique cells assigned this guide. |
 
-#### `cis_per_element_output.tsv.gz`
+#### `local_analysis_per_element_output.tsv.gz`
 
 | Column | Description |
 |---|---|
@@ -380,13 +394,11 @@ The cis outputs report guide-gene or target-element-gene tests restricted to the
 | `sceptre_q_value` | BH-adjusted SCEPTRE p-value. |
 | `sceptre_fc_se` | SCEPTRE fold-change standard error. |
 | `sceptre_negLog10p` | SCEPTRE significance score: `-log10(max(sceptre_p_value, 1e-300))`. |
-| `sceptre_log10_p_value` | Backward-compatible alias of `sceptre_negLog10p`. |
 | `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
-| `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this cis output table. |
+| `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this local-analysis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
-| `perturbo_log10_p_value` | Backward-compatible alias of `perturbo_negLog10p`. |
 | `element_id` | Element identifier (equal to `element_name` in this pipeline). |
 | `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
 | `element_chr` | Element chromosome. |
@@ -394,22 +406,23 @@ The cis outputs report guide-gene or target-element-gene tests restricted to the
 | `element_end` | Element end coordinate. |
 | `element_name` | Element name mapped from `intended_target_name`. |
 | `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
+| `num_guides` | Number of unique guides aggregated into the element result. |
 | `gene_name` | Gene symbol from local gene metadata when available. |
 | `nPerturbedCells` | Number of unique cells assigned at least one guide for the element. |
 
 `intended_target_name` for non-targeting controls is bucketed as `non-targeting|N` (for example, `non-targeting|1`).
 SCEPTRE outputs contain discovery-analysis results only (calibration-check rows are not exported).
 
-### Trans analysis
+### Global analysis
 
-The trans outputs report PerTurbo all-by-all trans tests.
+The global-analysis outputs report genome-wide, all-by-all PerTurbo tests.
 
 | File | Description |
 |---|---|
-| `trans_per_guide_output.tsv.gz` | PerTurbo inference results for all guide-gene pairs, with guides tested independently. |
-| `trans_per_element_output.tsv.gz` | PerTurbo inference results for all element-gene pairs, grouped by intended target fields. |
+| `global_analysis_per_guide_output.tsv.gz` | PerTurbo inference results for all guide-gene pairs, with guides tested independently. |
+| `global_analysis_per_element_output.tsv.gz` | PerTurbo inference results for all element-gene pairs, grouped by intended target fields. |
 
-#### `trans_per_guide_output.tsv.gz`
+#### `global_analysis_per_guide_output.tsv.gz`
 
 | Column | Description |
 |---|---|
@@ -417,12 +430,25 @@ The trans outputs report PerTurbo all-by-all trans tests.
 | `guide_id` | Guide identifier (guide name). |
 | `perturbo_log2_fc` | PerTurbo effect size (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
-| `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this trans output table. |
+| `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this global-analysis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
-| `perturbo_log10_p_value` | Backward-compatible alias of `perturbo_negLog10p`. |
+| `guide_sequence` | Guide spacer sequence from guide metadata. |
+| `guide_type` | Guide type from guide metadata. |
+| `targeting` | Whether the guide is annotated as targeting. |
+| `guide_chr` | Guide genomic chromosome. |
+| `guide_start` | Guide genomic start coordinate. |
+| `guide_end` | Guide genomic end coordinate. |
+| `guide_strand` | Guide genomic strand. |
+| `pam` | Protospacer-adjacent motif annotation. |
+| `intended_target_name` | Intended target element or gene name. |
+| `intended_target_chr` | Intended target chromosome. |
+| `intended_target_start` | Intended target start coordinate. |
+| `intended_target_end` | Intended target end coordinate. |
+| `gene_name` | Symbol of the tested gene when available. |
+| `nPerturbedCells` | Number of unique cells assigned this guide. |
 
-#### `trans_per_element_output.tsv.gz`
+#### `global_analysis_per_element_output.tsv.gz`
 
 | Column | Description |
 |---|---|
@@ -433,10 +459,9 @@ The trans outputs report PerTurbo all-by-all trans tests.
 | `intended_target_end` | Intended target end coordinate. |
 | `perturbo_log2_fc` | PerTurbo effect size (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability of differential expression |
-| `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this trans output table. |
+| `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this global-analysis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
-| `perturbo_log10_p_value` | Backward-compatible alias of `perturbo_negLog10p`. |
 | `element_id` | Element identifier (equal to `element_name` in this pipeline). |
 | `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
 | `element_chr` | Element chromosome. |
@@ -444,6 +469,7 @@ The trans outputs report PerTurbo all-by-all trans tests.
 | `element_end` | Element end coordinate. |
 | `element_name` | Element name mapped from `intended_target_name`. |
 | `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
+| `num_guides` | Number of unique guides aggregated into the element result. |
 | `gene_name` | Gene symbol from local gene metadata when available. |
 | `nPerturbedCells` | Number of unique cells assigned at least one guide for the element. |
 
@@ -451,18 +477,16 @@ The trans outputs report PerTurbo all-by-all trans tests.
 
 | Column | Description |
 |---|---|
-| `sceptre_log2_fc` | SCEPTRE effect size estimate from cis per-element results. |
-| `sceptre_p_value` | SCEPTRE p-value from cis per-element results. |
-| `sceptre_q_value` | BH-adjusted SCEPTRE p-value from cis per-element results. |
-| `sceptre_fc_se` | SCEPTRE fold-change standard error from cis per-element results. |
+| `sceptre_log2_fc` | SCEPTRE effect size estimate from local-analysis per-element results. |
+| `sceptre_p_value` | SCEPTRE p-value from local-analysis per-element results. |
+| `sceptre_q_value` | BH-adjusted SCEPTRE p-value from local-analysis per-element results. |
+| `sceptre_fc_se` | SCEPTRE fold-change standard error from local-analysis per-element results. |
 | `sceptre_negLog10p` | Catalog-facing SCEPTRE significance score: `-log10(max(sceptre_p_value, 1e-300))`. Prefer this for catalog/export consumers that should avoid extremely small raw p-values. |
-| `sceptre_log10_p_value` | Backward-compatible alias of `sceptre_negLog10p`. |
-| `perturbo_log2_fc` | PerTurbo effect size estimate from trans per-element results. |
-| `perturbo_p_value` | PerTurbo p-value from trans per-element results. |
-| `perturbo_q_value` | BH-adjusted PerTurbo p-value from trans per-element results. |
-| `perturbo_fc_se` | PerTurbo posterior standard error from trans per-element results. |
+| `perturbo_log2_fc` | PerTurbo effect size estimate from global-analysis per-element results. |
+| `perturbo_p_value` | PerTurbo p-value from global-analysis per-element results. |
+| `perturbo_q_value` | BH-adjusted PerTurbo p-value from global-analysis per-element results. |
+| `perturbo_fc_se` | PerTurbo posterior standard error from global-analysis per-element results. |
 | `perturbo_negLog10p` | Catalog-facing PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. Prefer this for catalog/export consumers that should avoid extremely small raw p-values. |
-| `perturbo_log10_p_value` | Backward-compatible alias of `perturbo_negLog10p`. |
 | `element_id` | Element identifier (equal to `element_name` in this pipeline). |
 | `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
 | `element_chr` | Element chromosome. |
@@ -470,9 +494,35 @@ The trans outputs report PerTurbo all-by-all trans tests.
 | `element_end` | Element end coordinate. |
 | `element_name` | Element name mapped from `intended_target_name`. |
 | `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
+| `num_guides` | Number of unique guides aggregated into the element result. |
 | `gene_name` | Gene symbol from local gene metadata when available. |
 | `gene_id` | ENSEMBL gene ID. |
 | `nPerturbedCells` | Number of unique cells assigned at least one guide for the element. |
+
+#### `catalog_per_guide_output.tsv.gz`
+
+This catalog view has one row per `(guide_id, gene_id)` pair. Its 26 columns are the 10 nonredundant SCEPTRE/PerTurbo metric columns documented in the per-element catalog above, followed by:
+
+The complete catalog can be reconstructed from the regular local/global per-guide TSVs: take SCEPTRE columns from the local table, PerTurbo columns from the global table, outer-join on `(guide_id, gene_id)`, and retain the guide/gene annotation columns now included in both inputs.
+
+| Column | Description |
+|---|---|
+| `guide_id` | Guide identifier. |
+| `guide_sequence` | Guide spacer sequence from `guide.var['spacer']` (or an equivalent sequence field). |
+| `guide_type` | Guide type from `guide.var['type']`. |
+| `targeting` | Whether the guide is annotated as targeting. |
+| `guide_chr` | Guide genomic chromosome. |
+| `guide_start` | Guide genomic start coordinate. |
+| `guide_end` | Guide genomic end coordinate. |
+| `guide_strand` | Guide genomic strand. |
+| `pam` | Protospacer-adjacent motif annotation. |
+| `intended_target_name` | Intended target element or gene name. |
+| `intended_target_chr` | Intended target chromosome. |
+| `intended_target_start` | Intended target start coordinate. |
+| `intended_target_end` | Intended target end coordinate. |
+| `gene_name` | Symbol of the tested gene when available. |
+| `gene_id` | ENSEMBL ID of the tested gene. |
+| `nPerturbedCells` | Number of unique cells assigned this guide. |
 
 For details, see our [documentation](https://docs.google.com/document/d/1Z1SOlekIE5uGyXW41XxnszxaYdSw0wdAOUVzfy3fj3M/edit?tab=t.0#heading=h.ctbx1w9hj619).
 
@@ -480,7 +530,7 @@ For details, see our [documentation](https://docs.google.com/document/d/1Z1SOlek
 
 Within `pipeline_dashboard/`, you will find the interactive dashboard and supporting visualization files. A compressed copy of this directory is also written to the top level of `--outdir` as `pipeline_dashboard.tar.gz`.
 
-The dashboard directory and archive intentionally do not include `inference_mudata.h5mu`, `cis_per_element_output.tsv.gz`, `cis_per_guide_output.tsv.gz`, `trans_per_element_output.tsv.gz`, `trans_per_guide_output.tsv.gz`, or `catalog_per_element_output.tsv.gz`; use the copies in `pipeline_outputs/` as the single source of final analysis outputs.
+The dashboard directory and archive intentionally do not include `inference_mudata.h5mu`, `local_analysis_per_element_output.tsv.gz`, `local_analysis_per_guide_output.tsv.gz`, `global_analysis_per_element_output.tsv.gz`, `global_analysis_per_guide_output.tsv.gz`, `catalog_per_element_output.tsv.gz`, or `catalog_per_guide_output.tsv.gz`; use the copies in `pipeline_outputs/` as the single source of final analysis outputs.
 
 The pipeline produces several figures:
 
@@ -685,7 +735,7 @@ This dataset comes from a large-scale CRISPR screen study published in Cell ([Ga
 
 ### Expected Outputs
 The pipeline generates these outputs upon completion:
-- `pipeline_outputs`: Contains the final MuData file and cis/trans result tables
+- `pipeline_outputs`: Contains the final MuData file and local/global analysis result tables
 - `pipeline_dashboard`: Houses interactive visualization reports and supporting assets only
 - `pipeline_dashboard.tar.gz`: Compressed archive of `pipeline_dashboard`
 

@@ -6,14 +6,14 @@ This document describes the output produced by the pipeline.
 
 All paths are relative to the directory supplied with `--outdir`.
 
-The final inference artifacts are written once, under `pipeline_outputs/`. The dashboard directory contains only visualization files and supporting assets; it does not include duplicate copies of the final MuData or cis/trans TSV outputs.
+The final inference artifacts are written once, under `pipeline_outputs/`. The dashboard directory contains only visualization files and supporting assets; it does not include duplicate copies of the final MuData or local/global analysis TSV outputs.
 
 ## Pipeline overview
 
 The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes data using the following steps:
 
 - [Pipeline information](#pipeline-information) - Report metrics generated during the workflow execution
-- [Final inference outputs](#final-inference-outputs) - MuData and cis/trans result tables
+- [Final inference outputs](#final-inference-outputs) - MuData and local/global analysis result tables
 - [Pipeline dashboard](#pipeline-dashboard) - Interactive HTML dashboard and plots
 
 ### Final inference outputs
@@ -23,22 +23,28 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
 
 - `pipeline_outputs/`
   - `inference_mudata.h5mu`: Final MuData object containing processed modalities and inference results.
-  - `cis_per_element_output.tsv.gz`: Cis element-level inference results.
-  - `cis_per_guide_output.tsv.gz`: Cis guide-level inference results.
-  - `trans_per_element_output.tsv.gz`: Trans element-level inference results.
-  - `trans_per_guide_output.tsv.gz`: Trans guide-level inference results.
-  - `catalog_per_element_output.tsv.gz`: Catalog-formatted per-element table that merges cis SCEPTRE and trans PerTurbo metrics.
+  - [`local_analysis_per_element_output.tsv.gz`](https://docs.google.com/spreadsheets/d/1qbXLjDIc5rUJRgl_HhuA68HRxC3Jp5sISr9iqTgyqAM/edit#gid=213615974): Local-analysis element-level inference results.
+  - [`local_analysis_per_guide_output.tsv.gz`](https://docs.google.com/spreadsheets/d/1qbXLjDIc5rUJRgl_HhuA68HRxC3Jp5sISr9iqTgyqAM/edit#gid=1700000001): Local-analysis guide-level inference results.
+  - [`global_analysis_per_element_output.tsv.gz`](https://docs.google.com/spreadsheets/d/1qbXLjDIc5rUJRgl_HhuA68HRxC3Jp5sISr9iqTgyqAM/edit#gid=864095861): Global-analysis element-level inference results.
+  - [`global_analysis_per_guide_output.tsv.gz`](https://docs.google.com/spreadsheets/d/1qbXLjDIc5rUJRgl_HhuA68HRxC3Jp5sISr9iqTgyqAM/edit#gid=1700000002): Global-analysis guide-level inference results.
+  - [`catalog_per_element_output.tsv.gz`](https://docs.google.com/spreadsheets/d/1qbXLjDIc5rUJRgl_HhuA68HRxC3Jp5sISr9iqTgyqAM/edit#gid=1841723215): Catalog-formatted per-element table that merges local SCEPTRE and global PerTurbo metrics.
+  - [`catalog_per_guide_output.tsv.gz`](https://docs.google.com/spreadsheets/d/1qbXLjDIc5rUJRgl_HhuA68HRxC3Jp5sISr9iqTgyqAM/edit#gid=1700000003): Catalog-formatted per-guide table that merges local SCEPTRE, global PerTurbo, and guide metadata.
 
 </details>
 
-The cis tables contain guide-gene or target-element-gene tests restricted to the configured cis pairing strategy. The trans tables contain all-by-all PerTurbo trans tests. Element-level tables aggregate guides by intended target fields: `intended_target_name`, `intended_target_chr`, `intended_target_start`, and `intended_target_end`.
+The local-analysis tables contain guide-gene or target-element-gene tests restricted to the configured pairing strategy. The global-analysis tables contain all-by-all PerTurbo tests. Element-level tables aggregate guides by intended target fields: `intended_target_name`, `intended_target_chr`, `intended_target_start`, and `intended_target_end`.
 
-The original cis/trans result TSVs include raw p-values, BH-adjusted q-values when applicable, and `*_negLog10p` / `*_log10_p_value` aliases. Element-level TSVs also include the catalog-facing element annotations: `element_id`, `element_type`, `element_chr`, `element_start`, `element_end`, `element_name`, `guide_ids`, `gene_name`, and `nPerturbedCells`.
+The local/global analysis TSVs include raw p-values, BH-adjusted q-values when applicable, and the nonredundant `*_negLog10p` significance transform. Element-level TSVs also include the catalog-facing element annotations: `element_id`, `element_type`, `element_chr`, `element_start`, `element_end`, `element_name`, `guide_ids`, `num_guides`, `gene_name`, and `nPerturbedCells`. Per-guide TSVs include guide sequence, type, targeting status, guide and intended-target coordinates, PAM/strand, tested-gene symbol, and per-guide perturbed-cell count.
 
 `catalog_per_element_output.tsv.gz` is an additive, per-element catalog view with one row per `(element, gene)` pair and the following columns:
-`sceptre_log2_fc`, `sceptre_p_value`, `sceptre_q_value`, `sceptre_fc_se`, `sceptre_negLog10p`, `sceptre_log10_p_value`, `perturbo_log2_fc`, `perturbo_p_value`, `perturbo_q_value`, `perturbo_fc_se`, `perturbo_negLog10p`, `perturbo_log10_p_value`,
+`sceptre_log2_fc`, `sceptre_p_value`, `sceptre_q_value`, `sceptre_fc_se`, `sceptre_negLog10p`, `perturbo_log2_fc`, `perturbo_p_value`, `perturbo_q_value`, `perturbo_fc_se`, `perturbo_negLog10p`,
 `element_id`, `element_type`, `element_chr`, `element_start`, `element_end`, `element_name`,
-`guide_ids`, `gene_name`, `gene_id`, and `nPerturbedCells`.
+`guide_ids`, `num_guides`, `gene_name`, `gene_id`, and `nPerturbedCells`.
+
+`catalog_per_guide_output.tsv.gz` is the corresponding per-guide catalog view with one row per `(guide_id, gene_id)` pair. It contains the same 10 nonredundant SCEPTRE/PerTurbo metric columns plus:
+`guide_id`, `guide_sequence`, `guide_type`, `targeting`, `guide_chr`, `guide_start`, `guide_end`, `guide_strand`, `pam`, `intended_target_name`, `intended_target_chr`, `intended_target_start`, `intended_target_end`, `gene_name`, `gene_id`, and `nPerturbedCells`.
+
+Both catalog schemas are reconstructible from the regular analysis TSVs without opening MuData. For per-element data, outer-join the local SCEPTRE and global PerTurbo columns on `gene_id` plus the intended-target fields. For per-guide data, outer-join them on `(gene_id, guide_id)`; both input tables carry the complete catalog annotation columns.
 
 ### Pipeline dashboard
 
@@ -57,7 +63,7 @@ The original cis/trans result TSVs include raw p-values, BH-adjusted q-values wh
 
 </details>
 
-`pipeline_dashboard/` intentionally does not contain `inference_mudata.h5mu`, `cis_per_element_output.tsv.gz`, `cis_per_guide_output.tsv.gz`, `trans_per_element_output.tsv.gz`, `trans_per_guide_output.tsv.gz`, or `catalog_per_element_output.tsv.gz`. Use the copies in `pipeline_outputs/` as the single source of final analysis outputs.
+`pipeline_dashboard/` intentionally does not contain `inference_mudata.h5mu`, `local_analysis_per_element_output.tsv.gz`, `local_analysis_per_guide_output.tsv.gz`, `global_analysis_per_element_output.tsv.gz`, `global_analysis_per_guide_output.tsv.gz`, `catalog_per_element_output.tsv.gz`, or `catalog_per_guide_output.tsv.gz`. Use the copies in `pipeline_outputs/` as the single source of final analysis outputs.
 
 ### Pipeline information
 

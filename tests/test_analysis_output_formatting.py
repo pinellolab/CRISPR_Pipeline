@@ -22,11 +22,11 @@ def test_add_neg_log10_columns_for_method_specific_pvalues():
     formatted = add_neg_log10_columns(results)
 
     assert np.isclose(formatted.loc[0, "sceptre_negLog10p"], 2.0)
-    assert formatted.loc[0, "sceptre_log10_p_value"] == formatted.loc[0, "sceptre_negLog10p"]
     assert pd.isna(formatted.loc[1, "sceptre_negLog10p"])
     assert np.isclose(formatted.loc[0, "perturbo_negLog10p"], -np.log10(0.2))
     assert formatted.loc[1, "perturbo_negLog10p"] == 300.0
-    assert formatted.loc[1, "perturbo_log10_p_value"] == 300.0
+    assert "sceptre_log10_p_value" not in formatted.columns
+    assert "perturbo_log10_p_value" not in formatted.columns
 
 
 def test_make_h5mu_safe_dataframe_converts_nullable_strings_to_object():
