@@ -118,6 +118,42 @@ To further assist in reproducbility, you can use share and re-use [parameter fil
 If you wish to share such profile (such as upload as supplementary material for academic publications), make sure to NOT include cluster specific paths to files, nor institutional specific profiles.
 :::
 
+### Run provenance agent
+
+For local checkouts and copied pipeline source trees, prepare provenance
+immediately before launching Nextflow:
+
+```bash
+python bin/run_provenance_agent.py prepare \
+  --pipeline-repo /path/to/CRISPR_Pipeline \
+  --source-dir /path/to/source/actually/executed \
+  --output-dir /path/to/results/pipeline_info \
+  --run-name my_run \
+  --artifact config=/path/to/resources.config \
+  --artifact params=/path/to/params.json \
+  --artifact samplesheet=/path/to/samplesheet.local.csv \
+  --artifact guide_metadata=/path/to/guide_metadata.tsv
+
+python bin/run_provenance_agent.py check \
+  --pipeline-repo /path/to/CRISPR_Pipeline \
+  --metadata /path/to/results/pipeline_info/repository_provenance.json
+```
+
+The `prepare` command compares every executing Git-tracked file with the
+requested commit, hashes the launch artifacts, checks the current remote branch
+head when available, and writes JSON, TSV, a per-file SHA-256 manifest, and
+`provenance.generated.config`. Pass the generated config after other custom
+configs:
+
+```bash
+nextflow -c resources.config -c results/pipeline_info/provenance.generated.config \
+  run main.nf -params-file params.json -resume
+```
+
+The `check` command exits nonzero if the source or any recorded launch artifact
+changed after preparation. Use `--expected-commit <hash>` for a deliberately
+pinned older source snapshot.
+
 ## Core Nextflow arguments
 
 :::note
