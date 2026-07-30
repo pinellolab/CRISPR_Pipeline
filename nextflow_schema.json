@@ -314,6 +314,34 @@
                     "minimum": 1,
                     "description": "Batch size passed to PerTurbo inference for cis and trans runs."
                 },
+                "INFERENCE_PERTURBO_PRECOMPUTED_PER_ELEMENT": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "format": "file-path",
+                    "default": null,
+                    "description": "Optional completed cis PerTurbo per-element result table."
+                },
+                "INFERENCE_PERTURBO_PRECOMPUTED_PER_GUIDE": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "format": "file-path",
+                    "default": null,
+                    "description": "Optional completed cis PerTurbo per-guide result table."
+                },
+                "INFERENCE_PERTURBO_PRECOMPUTED_MUDATA": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "format": "file-path",
+                    "default": null,
+                    "description": "Optional completed cis PerTurbo MuData output.",
+                    "help_text": "Set all three cis precomputed paths together to recover completed cis inference without rerunning it."
+                },
                 "INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK": {
                     "type": "integer",
                     "default": 8000,
