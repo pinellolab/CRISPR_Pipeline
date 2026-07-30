@@ -10,7 +10,7 @@ from analysis_output_formatting import (
     format_guide_output,
     make_h5mu_safe_dataframe,
 )
-from result_table_io import read_result_table
+from result_table_io import read_result_table, result_suffix, write_result_table
 
 
 def _bh_adjust(pvalues: pd.Series) -> pd.Series:
@@ -51,7 +51,15 @@ def _finalize_perturbo_columns(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def merge_cis_trans_results(cis_per_guide_path, cis_per_element_path, trans_per_guide_path, trans_per_element_path, base_mudata_path, output_path):
+def merge_cis_trans_results(
+    cis_per_guide_path,
+    cis_per_element_path,
+    trans_per_guide_path,
+    trans_per_element_path,
+    base_mudata_path,
+    output_path,
+    results_format="tsv.gz",
+):
     """
     Merge cis and trans results from TSV files, separating results into cis/trans specific fields.
     
@@ -102,12 +110,13 @@ def merge_cis_trans_results(cis_per_guide_path, cis_per_element_path, trans_per_
     print(f"Writing merged MuData to {output_path}...")
     base_mdata.write(output_path, compression="gzip")
     
-    # Write compressed TSV files with final output names
-    print("Writing compressed TSV files...")
-    cis_per_guide.to_csv("cis_per_guide_output.tsv.gz", sep='\t', index=False, compression='gzip')
-    cis_per_element.to_csv("cis_per_element_output.tsv.gz", sep='\t', index=False, compression='gzip')
-    trans_per_guide.to_csv("trans_per_guide_output.tsv.gz", sep='\t', index=False, compression='gzip')
-    trans_per_element.to_csv("trans_per_element_output.tsv.gz", sep='\t', index=False, compression='gzip')
+    # Preserve Parquet through the final merge when selected.
+    suffix = result_suffix(results_format)
+    print(f"Writing final result tables as {results_format}...")
+    write_result_table(cis_per_guide, f"cis_per_guide_output{suffix}")
+    write_result_table(cis_per_element, f"cis_per_element_output{suffix}")
+    write_result_table(trans_per_guide, f"trans_per_guide_output{suffix}")
+    write_result_table(trans_per_element, f"trans_per_element_output{suffix}")
     
     print("Successfully merged cis and trans results!")
     print(f"Output contains:")
@@ -126,6 +135,12 @@ def main():
     parser.add_argument('--trans_per_element', required=True, help='Path to trans per_element_output.tsv')
     parser.add_argument('--base_mudata', required=True, help='Path to base mudata file for structure')
     parser.add_argument('--output', required=True, help='Output path for merged MuData file')
+    parser.add_argument(
+        '--results_format',
+        default='tsv.gz',
+        choices=('tsv.gz', 'parquet'),
+        help='Serialization for final cis/trans result tables',
+    )
     
     args = parser.parse_args()
     
@@ -135,7 +150,8 @@ def main():
         args.trans_per_guide,
         args.trans_per_element,
         args.base_mudata,
-        args.output
+        args.output,
+        results_format=args.results_format,
     )
 
 if __name__ == "__main__":

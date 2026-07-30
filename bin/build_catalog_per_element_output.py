@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import false_discovery_control
 from scipy import sparse
+from result_table_io import read_result_table, write_result_table
 
 ELEMENT_COLUMNS = [
     "intended_target_name",
@@ -372,12 +373,12 @@ def build_catalog_per_element_output(
     output_path: str,
     pvalue_floor: float = P_VALUE_FLOOR,
 ) -> pd.DataFrame:
-    cis = pd.read_csv(cis_per_element_path, sep="\t")
-    trans = pd.read_csv(trans_per_element_path, sep="\t")
+    cis = read_result_table(cis_per_element_path)
+    trans = read_result_table(trans_per_element_path)
     mdata = mu.read_h5mu(mudata_path)
 
     catalog = create_catalog_per_element(cis, trans, mdata, pvalue_floor=pvalue_floor)
-    catalog.to_csv(output_path, sep="\t", index=False, compression="gzip")
+    write_result_table(catalog, output_path)
     return catalog
 
 
@@ -397,7 +398,7 @@ def main():
     parser.add_argument(
         "--output",
         default="catalog_per_element_output.tsv.gz",
-        help="Output path for catalog table (gzipped TSV)",
+        help="Output path for catalog table (.tsv[.gz] or .parquet)",
     )
     parser.add_argument(
         "--pvalue_floor",

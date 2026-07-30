@@ -180,7 +180,7 @@ The complete machine-readable QC output catalog is available as
 | `INFERENCE_PERTURBO_PRECOMPUTED_PER_GUIDE` | `null` | TSV path | Optional completed cis per-guide table. Set with both other cis precomputed paths for recovery. |
 | `INFERENCE_PERTURBO_PRECOMPUTED_MUDATA` | `null` | H5Mu path | Optional completed cis MuData. Set all three cis precomputed paths to skip cis recomputation. |
 | `INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK` | `8000` | Integer; `<= 0` disables chunking | Maximum genes per chunk for trans PerTurbo all-by-all inference. |
-| `INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT` | `tsv.gz` | `tsv.gz`, `parquet` | Serialization used for trans PerTurbo result tables and chunk intermediates. `parquet` requires `pyarrow` in the PerTurbo environment and greatly reduces result-writing time. |
+| `INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT` | `tsv.gz` | `tsv.gz`, `parquet` | Serialization used for trans PerTurbo chunk intermediates and final cis/trans/catalog result tables. `parquet` requires `pyarrow` and greatly reduces result-table I/O time. |
 | `INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_ELEMENT` | `null` | Result-table path | Optional completed trans per-element table. Set together with the per-guide path to recover without rerunning PerTurbo. |
 | `INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_GUIDE` | `null` | Result-table path | Optional completed trans per-guide table. Its suffix must match `INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT`. |
 | `INFERENCE_PERTURBO_TRANS_PRECOMPUTED_MUDATA` | `null` | H5Mu path | Optional completed trans MuData. Use with both precomputed result tables to avoid repeating H5Mu serialization during recovery. |

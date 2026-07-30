@@ -15,12 +15,13 @@ process publishFiles {
         path trans_per_guide_results
 
     output:
-        path "cis_per_element_output.tsv.gz"
-        path "cis_per_guide_output.tsv.gz"
-        path "trans_per_element_output.tsv.gz"
-        path "trans_per_guide_output.tsv.gz"
+        path "cis_per_element_output.*"
+        path "cis_per_guide_output.*"
+        path "trans_per_element_output.*"
+        path "trans_per_guide_output.*"
 
     script:
+    def results_ext = params.INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT == 'parquet' ? 'parquet' : 'tsv.gz'
     """
         # Check all files exist
         for file in "${cis_per_element_results}" "${cis_per_guide_results}" "${trans_per_element_results}" "${trans_per_guide_results}"; do
@@ -32,10 +33,10 @@ process publishFiles {
         done
 
         # Copy to create actual files from symlinks
-        cp "${cis_per_element_results}" cis_per_element_output.tsv.gz
-        cp "${cis_per_guide_results}" cis_per_guide_output.tsv.gz
-        cp "${trans_per_element_results}" trans_per_element_output.tsv.gz
-        cp "${trans_per_guide_results}" trans_per_guide_output.tsv.gz
+        cp "${cis_per_element_results}" cis_per_element_output.${results_ext}
+        cp "${cis_per_guide_results}" cis_per_guide_output.${results_ext}
+        cp "${trans_per_element_results}" trans_per_element_output.${results_ext}
+        cp "${trans_per_guide_results}" trans_per_guide_output.${results_ext}
 
         echo "All files copied and ready for publishing"
     """
