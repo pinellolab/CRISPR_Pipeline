@@ -10,6 +10,7 @@ from analysis_output_formatting import (
     format_guide_output,
     make_h5mu_safe_dataframe,
 )
+from result_table_io import read_result_table
 
 
 def _bh_adjust(pvalues: pd.Series) -> pd.Series:
@@ -64,11 +65,10 @@ def merge_cis_trans_results(cis_per_guide_path, cis_per_element_path, trans_per_
     """
     print("Loading input files...")
     
-    # Load TSV files
-    cis_per_guide = pd.read_csv(cis_per_guide_path, sep='\t')
-    cis_per_element = pd.read_csv(cis_per_element_path, sep='\t')
-    trans_per_guide = pd.read_csv(trans_per_guide_path, sep='\t')
-    trans_per_element = pd.read_csv(trans_per_element_path, sep='\t')
+    cis_per_guide = read_result_table(cis_per_guide_path)
+    cis_per_element = read_result_table(cis_per_element_path)
+    trans_per_guide = read_result_table(trans_per_guide_path)
+    trans_per_element = read_result_table(trans_per_element_path)
 
     cis_per_guide = _finalize_perturbo_columns(_add_perturbo_columns(cis_per_guide))
     cis_per_element = _finalize_perturbo_columns(_add_perturbo_columns(cis_per_element))

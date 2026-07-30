@@ -96,14 +96,15 @@ def add_neg_log10_columns(
 
 
 def make_h5mu_safe_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert pandas extension string columns before storing tables in MuData.uns."""
+    """Make string-like columns homogeneous before storing tables in MuData.uns."""
     out = df.copy()
     for col in out.columns:
         series = out[col]
         if pd.api.types.is_string_dtype(series.dtype) or pd.api.types.is_object_dtype(
             series.dtype
         ):
-            out[col] = series.astype(object).where(series.notna(), None)
+            normalized = series.astype("string")
+            out[col] = normalized.fillna(MISSING_TOKEN).astype(object)
     return out
 
 

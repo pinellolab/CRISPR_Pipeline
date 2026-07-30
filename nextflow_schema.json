@@ -320,6 +320,36 @@
                     "description": "Maximum genes per chunk for trans PerTurbo all-by-all inference.",
                     "help_text": "Values greater than 0 cap each balanced trans gene chunk. Values less than or equal to 0 disable trans gene chunking in the PerTurbo chunked runner."
                 },
+                "INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT": {
+                    "type": "string",
+                    "default": "tsv.gz",
+                    "enum": [
+                        "tsv.gz",
+                        "parquet"
+                    ],
+                    "description": "Serialization format for trans PerTurbo result tables and chunk intermediates.",
+                    "help_text": "Use parquet for substantially faster result-table reads and writes. The PerTurbo execution environment must provide pyarrow."
+                },
+                "INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_ELEMENT": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "format": "file-path",
+                    "default": null,
+                    "description": "Optional precomputed trans PerTurbo per-element result table.",
+                    "help_text": "Set together with INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_GUIDE to recover a completed inference without rerunning the model. Its suffix must match INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT."
+                },
+                "INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_GUIDE": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "format": "file-path",
+                    "default": null,
+                    "description": "Optional precomputed trans PerTurbo per-guide result table.",
+                    "help_text": "Set together with INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_ELEMENT to recover a completed inference without rerunning the model. Its suffix must match INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT."
+                },
                 "INFERENCE_SCEPTRE_side": {
                     "type": "string",
                     "default": "both",

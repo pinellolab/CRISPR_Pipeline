@@ -11,6 +11,7 @@ from intended_target_key_utils import (
     enrich_pairs_with_target_metadata,
     get_target_lookup,
 )
+from result_table_io import write_result_table
 
 
 def _bh_adjust(pvalues: pd.Series) -> pd.Series:
@@ -297,12 +298,9 @@ def run_perturbo(
     #     inplace=True,
     # )
 
-    # Write results table to TSV (required)
+    # Write results table in the format selected by the output suffix.
     print("Writing results to ", results_tsv_fp)
-    if results_tsv_fp.endswith(".gz"):
-        test_results.to_csv(results_tsv_fp, index=False, sep="\t", compression="gzip")
-    else:
-        test_results.to_csv(results_tsv_fp, index=False, sep="\t")
+    write_result_table(test_results, results_tsv_fp)
 
     # Optionally write the full MuData if an output path was provided
     if mdata_output_fp:
@@ -318,7 +316,7 @@ def main():
     parser.add_argument(
         "results_tsv_fp",
         type=str,
-        help="Output TSV file path for mdata.uns['test_results'] (required)",
+        help="Output .tsv[.gz] or .parquet path for PerTurbo results",
     )
     parser.add_argument(
         "--mdata_output_fp",

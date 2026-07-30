@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Run PerTurbo inference on balanced gene chunks and concatenate TSV outputs.
+Run PerTurbo inference on balanced gene chunks and concatenate result tables.
 """
 
 import argparse
@@ -18,6 +18,12 @@ from perturbo_inference import (
     _add_perturbo_q_value,
     resolve_efficiency_mode,
     resolve_num_workers,
+)
+from result_table_io import (
+    detect_result_format,
+    read_result_table,
+    result_suffix,
+    write_result_table,
 )
 
 
@@ -100,15 +106,12 @@ def run_command(cmd):
 
 
 def combine_chunk_results(result_files, output_path):
-    dataframes = [pd.read_csv(result_file, sep="\t") for result_file in result_files]
+    dataframes = [read_result_table(result_file) for result_file in result_files]
     combined = pd.concat(dataframes, ignore_index=True) if dataframes else pd.DataFrame()
     if "p_value" in combined.columns:
         combined = _add_perturbo_q_value(combined)
 
-    if output_path.endswith(".gz"):
-        combined.to_csv(output_path, index=False, sep="\t", compression="gzip")
-    else:
-        combined.to_csv(output_path, index=False, sep="\t")
+    write_result_table(combined, output_path)
 
     return combined
 
@@ -144,6 +147,8 @@ def run_perturbo_chunked(
 
     script_dir = Path(__file__).resolve().parent
     perturbo_script = script_dir / "perturbo_inference.py"
+    output_format = detect_result_format(results_tsv_fp)
+    chunk_result_suffix = result_suffix(output_format)
 
     n_genes = get_gene_count(mdata_input_fp, gene_modality_name)
     print(f"Starting chunked PerTurbo inference on {mdata_input_fp}...")
@@ -200,7 +205,7 @@ def run_perturbo_chunked(
 
         result_files = []
         for chunk_index, chunk_file in enumerate(chunk_files, start=1):
-            chunk_result = str(Path(chunk_file).with_suffix(".tsv.gz"))
+            chunk_result = str(Path(chunk_file).with_suffix("")) + chunk_result_suffix
             print(
                 f"Starting chunk {chunk_index}/{total_chunks}: {Path(chunk_file).name}"
             )
@@ -254,7 +259,7 @@ def main():
     parser.add_argument(
         "results_tsv_fp",
         type=str,
-        help="Output TSV file path for concatenated PerTurbo results",
+        help="Output .tsv[.gz] or .parquet path for concatenated PerTurbo results",
     )
     parser.add_argument(
         "--mdata_output_fp",

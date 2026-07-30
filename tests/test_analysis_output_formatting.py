@@ -41,4 +41,4 @@ def test_make_h5mu_safe_dataframe_converts_nullable_strings_to_object():
 
     assert safe["intended_target_name"].dtype == object
     assert safe.loc[0, "intended_target_name"] == "target1"
-    assert safe.loc[1, "intended_target_name"] is None
+    assert safe.loc[1, "intended_target_name"] == ""

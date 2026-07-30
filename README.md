@@ -177,6 +177,9 @@ The complete machine-readable QC output catalog is available as
 | `INFERENCE_max_target_distance_bp` | `1000000` | Integer bp distance | Maximum guide-target genomic distance used for cis pair construction. |
 | `INFERENCE_PERTURBO_BATCH_SIZE` | `4096` | Integer `>= 1` | Batch size passed to PerTurbo inference in cis and trans runs. |
 | `INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK` | `8000` | Integer; `<= 0` disables chunking | Maximum genes per chunk for trans PerTurbo all-by-all inference. |
+| `INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT` | `tsv.gz` | `tsv.gz`, `parquet` | Serialization used for trans PerTurbo result tables and chunk intermediates. `parquet` requires `pyarrow` in the PerTurbo environment and greatly reduces result-writing time. |
+| `INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_ELEMENT` | `null` | Result-table path | Optional completed trans per-element table. Set together with the per-guide path to recover without rerunning PerTurbo. |
+| `INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_GUIDE` | `null` | Result-table path | Optional completed trans per-guide table. Its suffix must match `INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT`. |
 | `INFERENCE_SCEPTRE_side` | `both` | `both`, `left`, `right` | Alternative-hypothesis side passed to SCEPTRE inference. |
 | `INFERENCE_SCEPTRE_grna_integration_strategy` | `union` | SCEPTRE strategy string | Guide RNA integration strategy passed to SCEPTRE inference. |
 | `INFERENCE_SCEPTRE_resampling_approximation` | `skew_normal` | SCEPTRE approximation string | Resampling approximation passed to SCEPTRE inference. |

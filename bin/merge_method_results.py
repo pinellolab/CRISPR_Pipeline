@@ -10,6 +10,7 @@ from analysis_output_formatting import (
     format_guide_output,
     make_h5mu_safe_dataframe,
 )
+from result_table_io import read_result_table
 
 
 ELEMENT_BASE_KEYS = ["gene_id", "intended_target_name"]
@@ -124,16 +125,16 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     print("Loading input files...")
     
     # Load SCEPTRE results
-    sceptre_guide_df = pd.read_csv(sceptre_per_guide, sep='\t')
-    sceptre_element_df = pd.read_csv(sceptre_per_element, sep='\t')
+    sceptre_guide_df = read_result_table(sceptre_per_guide)
+    sceptre_element_df = read_result_table(sceptre_per_element)
     
     # Rename SCEPTRE columns to indicate method
     sceptre_guide_df = _add_sceptre_columns(sceptre_guide_df)
     sceptre_element_df = _add_sceptre_columns(sceptre_element_df)
     
     # Load PerTurbo results
-    perturbo_guide_df = pd.read_csv(perturbo_per_guide, sep='\t')
-    perturbo_element_df = pd.read_csv(perturbo_per_element, sep='\t')
+    perturbo_guide_df = read_result_table(perturbo_per_guide)
+    perturbo_element_df = read_result_table(perturbo_per_element)
     
     # Rename PerTurbo columns to indicate method
     perturbo_guide_df = _add_perturbo_columns(perturbo_guide_df)
