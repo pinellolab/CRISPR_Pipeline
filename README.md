@@ -180,6 +180,7 @@ The complete machine-readable QC output catalog is available as
 | `INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT` | `tsv.gz` | `tsv.gz`, `parquet` | Serialization used for trans PerTurbo result tables and chunk intermediates. `parquet` requires `pyarrow` in the PerTurbo environment and greatly reduces result-writing time. |
 | `INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_ELEMENT` | `null` | Result-table path | Optional completed trans per-element table. Set together with the per-guide path to recover without rerunning PerTurbo. |
 | `INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_GUIDE` | `null` | Result-table path | Optional completed trans per-guide table. Its suffix must match `INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT`. |
+| `INFERENCE_PERTURBO_TRANS_PRECOMPUTED_MUDATA` | `null` | H5Mu path | Optional completed trans MuData. Use with both precomputed result tables to avoid repeating H5Mu serialization during recovery. |
 | `INFERENCE_SCEPTRE_side` | `both` | `both`, `left`, `right` | Alternative-hypothesis side passed to SCEPTRE inference. |
 | `INFERENCE_SCEPTRE_grna_integration_strategy` | `union` | SCEPTRE strategy string | Guide RNA integration strategy passed to SCEPTRE inference. |
 | `INFERENCE_SCEPTRE_resampling_approximation` | `skew_normal` | SCEPTRE approximation string | Resampling approximation passed to SCEPTRE inference. |

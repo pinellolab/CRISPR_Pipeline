@@ -350,6 +350,16 @@
                     "description": "Optional precomputed trans PerTurbo per-guide result table.",
                     "help_text": "Set together with INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_ELEMENT to recover a completed inference without rerunning the model. Its suffix must match INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT."
                 },
+                "INFERENCE_PERTURBO_TRANS_PRECOMPUTED_MUDATA": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "format": "file-path",
+                    "default": null,
+                    "description": "Optional completed trans PerTurbo MuData output.",
+                    "help_text": "Use with both precomputed result tables to recover an already serialized trans inference without repeating the expensive H5Mu write."
+                },
                 "INFERENCE_SCEPTRE_side": {
                     "type": "string",
                     "default": "both",
