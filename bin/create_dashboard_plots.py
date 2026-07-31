@@ -8,6 +8,8 @@ import os
 import muon as mu
 import numpy as np
 
+from dashboard_matrix_utils import guide_frequencies
+
 def plot_umi_threshold(mudata, save_dir):
     plt.figure(figsize=(10, 6))
     plt.rcParams['font.size'] = 12
@@ -123,15 +125,14 @@ def plot_sgRNA_frequencies(mudata, save_dir):
     print ('guide assigment')
     print(mudata.mod['guide'].layers['guide_assignment'].shape)
 
-    print ('should be sparse matrix')
-    df_guide_assignment = pd.DataFrame.sparse.from_spmatrix(guide_assignment_matrix, index=cell_ids, columns=guide_ids)
-
     plt.figure(figsize=(20, 6))
     plt.rcParams['font.size'] = 12
 
-    sgRNA_frequencies = df_guide_assignment.sum(axis=0)
-    df_sgRNA_frequencies = sgRNA_frequencies.reset_index()
-    df_sgRNA_frequencies.columns = ['sgRNA', 'Frequency']
+    sgRNA_frequencies = guide_frequencies(guide_assignment_matrix)
+    df_sgRNA_frequencies = pd.DataFrame({
+        'sgRNA': guide_ids,
+        'Frequency': sgRNA_frequencies,
+    })
     df_sgRNA_frequencies = df_sgRNA_frequencies.sort_values(by='Frequency', ascending=True)
 
     colors = sns.color_palette("Spectral", len(df_sgRNA_frequencies))
