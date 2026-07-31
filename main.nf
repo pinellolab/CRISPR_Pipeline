@@ -92,30 +92,37 @@ workflow INFERENCE_FROM_MUDATA {
 workflow {
 
     main:
-    //
-    // Run initialisation tasks
-    //
-    PIPELINE_INITIALISATION (
-        params.version,
-        params.validate_params,
-        params.monochrome_logs,
-        args,
-        params.outdir,
-        params.input, //updated_samplesheet
-        params.DEMO_MODE,
-        params.ENABLE_DATA_HASHING
-    )
-
-    PIPELINE_INITIALISATION.out.samplesheet.view { meta, fastqs ->
-        "Sample: ${meta.id}, Single-end: ${meta.single_end}, Files: ${fastqs}"
+    // A supplied MuData bypasses FASTQ mapping and guide assignment, allowing
+    // reproducible inference recovery from an already validated dataset.
+    if (params.INFERENCE_input_mudata) {
+        INFERENCE_FROM_MUDATA()
     }
+    else {
+        //
+        // Run initialisation tasks
+        //
+        PIPELINE_INITIALISATION (
+            params.version,
+            params.validate_params,
+            params.monochrome_logs,
+            args,
+            params.outdir,
+            params.input, //updated_samplesheet
+            params.DEMO_MODE,
+            params.ENABLE_DATA_HASHING
+        )
 
-    //
-    // WORKFLOW: Run main workflow
-    //
-    NFCORE_CRISPR (
-        PIPELINE_INITIALISATION.out.samplesheet
-    )
+        PIPELINE_INITIALISATION.out.samplesheet.view { meta, fastqs ->
+            "Sample: ${meta.id}, Single-end: ${meta.single_end}, Files: ${fastqs}"
+        }
+
+        //
+        // WORKFLOW: Run main workflow
+        //
+        NFCORE_CRISPR (
+            PIPELINE_INITIALISATION.out.samplesheet
+        )
+    }
 
     // SUBWORKFLOW: Run completion tasks
     //
