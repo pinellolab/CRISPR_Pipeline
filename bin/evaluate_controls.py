@@ -64,7 +64,7 @@ def perform_binary_evaluation(label_controls, infered_significance_col, outdir, 
         plt.tight_layout()
 
         # Save
-        savefig(os.path.join(outdir, "trans_perturbo_precision_recall_roc.png"))
+        savefig(os.path.join(outdir, "global_analysis_perturbo_precision_recall_roc.png"))
         plt.show()
 
 
@@ -115,14 +115,14 @@ def plot_volcano(
     plt.tight_layout()
 
     # Save
-    savefig(os.path.join(outdir, "trans_perturbo_volcano_plot.png"))
+    savefig(os.path.join(outdir, "global_analysis_perturbo_volcano_plot.png"))
     plt.show()
 
 
 def run_evaluation_controls(md_read, outdir):
     os.makedirs(outdir, exist_ok=True)
 
-    col_used = 'trans_per_guide_results'
+    col_used = 'global_analysis_per_guide_results'
     fc_col, p_col = select_inference_columns(md_read.uns[col_used])
     #converting to avoid non boolean values
     col = md_read['guide'].var['targeting']
@@ -236,7 +236,7 @@ def run_evaluation_controls(md_read, outdir):
     plt.title(f"Direct targets vs random control guides \n {using_random_sample}")
     plt.tight_layout()
 
-    savefig(os.path.join(outdir, "trans_perturbo_barplot_direct_vs_control.png"))
+    savefig(os.path.join(outdir, "global_analysis_perturbo_barplot_direct_vs_control.png"))
     plt.show()
 
 

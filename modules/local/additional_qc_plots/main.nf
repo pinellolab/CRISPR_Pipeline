@@ -12,7 +12,7 @@ process additional_qc_plots {
         export MPLCONFIGDIR="./tmp/mplconfigdir"
         mkdir -p \${MPLCONFIGDIR}
 
-        mkdir -p additional_qc/gene additional_qc/guide additional_qc/intended_target additional_qc/trans
+        mkdir -p additional_qc/gene additional_qc/guide additional_qc/intended_target additional_qc/global_analysis
 
         mapping_gene.py \\
             --input ${mudata} \\
@@ -36,12 +36,13 @@ process additional_qc_plots {
 
             trans.py \\
                 --input ${mudata} \\
-                --outdir additional_qc/trans \\
+                --outdir additional_qc/global_analysis \\
                 --results-key auto \\
                 --log2fc-col auto \\
-                --pvalue-col auto
+                --pvalue-col auto \\
+                --prefix global_analysis
         else
-            echo "No inference results found in mudata.uns; skipping intended_target/trans QC."
+            echo "No inference results found in mudata.uns; skipping local/global analysis QC."
         fi
         """
 }

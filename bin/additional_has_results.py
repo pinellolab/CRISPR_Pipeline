@@ -7,6 +7,8 @@ import argparse
 import mudata
 
 RESULT_KEYS = {
+    "global_analysis_per_guide_results",
+    "local_analysis_per_guide_results",
     "trans_per_guide_results",
     "per_guide_results",
     "cis_per_guide_results",

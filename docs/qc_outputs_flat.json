@@ -738,148 +738,148 @@
     "source_artifact": "additional_qc/intended_target/intended_target_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.n_guides_tested",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.n_guides_tested",
+    "section": "additional_qc_global_analysis",
     "metric": "n_guides_tested",
     "description": "Guides tested in the trans analysis.",
     "unit": "guides",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.n_targeting_guides",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.n_targeting_guides",
+    "section": "additional_qc_global_analysis",
     "metric": "n_targeting_guides",
     "description": "Targeting guides tested in the trans analysis.",
     "unit": "guides",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.n_non_targeting_guides",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.n_non_targeting_guides",
+    "section": "additional_qc_global_analysis",
     "metric": "n_non_targeting_guides",
     "description": "Non-targeting guides tested in the trans analysis.",
     "unit": "guides",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.median_significant_per_guide_targeting",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.median_significant_per_guide_targeting",
+    "section": "additional_qc_global_analysis",
     "metric": "median_significant_per_guide_targeting",
     "description": "Median significant trans effects per targeting guide.",
     "unit": "tests_per_guide",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.mean_significant_per_guide_targeting",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.mean_significant_per_guide_targeting",
+    "section": "additional_qc_global_analysis",
     "metric": "mean_significant_per_guide_targeting",
     "description": "Mean significant trans effects per targeting guide.",
     "unit": "tests_per_guide",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.median_significant_per_guide_nt",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.median_significant_per_guide_nt",
+    "section": "additional_qc_global_analysis",
     "metric": "median_significant_per_guide_nt",
     "description": "Median significant trans effects per non-targeting guide.",
     "unit": "tests_per_guide",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.mean_significant_per_guide_nt",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.mean_significant_per_guide_nt",
+    "section": "additional_qc_global_analysis",
     "metric": "mean_significant_per_guide_nt",
     "description": "Mean significant trans effects per non-targeting guide.",
     "unit": "tests_per_guide",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.total_significant_tests",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.total_significant_tests",
+    "section": "additional_qc_global_analysis",
     "metric": "total_significant_tests",
     "description": "Total significant trans tests across guides.",
     "unit": "tests",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.median_genome_log2fc_targeting",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.median_genome_log2fc_targeting",
+    "section": "additional_qc_global_analysis",
     "metric": "median_genome_log2fc_targeting",
     "description": "Median genome-wide log2FC for targeting guides.",
     "unit": "log2_fold_change",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.median_genome_log2fc_nt",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.median_genome_log2fc_nt",
+    "section": "additional_qc_global_analysis",
     "metric": "median_genome_log2fc_nt",
     "description": "Median genome-wide log2FC for non-targeting guides.",
     "unit": "log2_fold_change",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.fdr_method",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.fdr_method",
+    "section": "additional_qc_global_analysis",
     "metric": "fdr_method",
     "description": "Multiple-testing correction method used for trans significance.",
     "unit": null,
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.auroc",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.auroc",
+    "section": "additional_qc_global_analysis",
     "metric": "auroc",
     "description": "Area under ROC curve for validated trans-link evaluation, when provided.",
     "unit": "AUROC",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.auprc",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.auprc",
+    "section": "additional_qc_global_analysis",
     "metric": "auprc",
     "description": "Area under precision-recall curve for validated trans-link evaluation, when provided.",
     "unit": "AUPRC",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.n_validated_links",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.n_validated_links",
+    "section": "additional_qc_global_analysis",
     "metric": "n_validated_links",
     "description": "Validated trans links available for evaluation.",
     "unit": "links",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.n_eval_positives",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.n_eval_positives",
+    "section": "additional_qc_global_analysis",
     "metric": "n_eval_positives",
     "description": "Positive examples used for validated-link evaluation.",
     "unit": "examples",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
-    "flat_key": "additional_qc_trans.n_eval_negatives",
-    "section": "additional_qc_trans",
+    "flat_key": "additional_qc_global_analysis.n_eval_negatives",
+    "section": "additional_qc_global_analysis",
     "metric": "n_eval_negatives",
     "description": "Negative examples used for validated-link evaluation.",
     "unit": "examples",
     "row_level": "run-level",
-    "source_artifact": "additional_qc/trans/trans_metrics.tsv"
+    "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
   },
   {
     "flat_key": "dashboard_derived.raw_scRNA_barcodes_per_measurement_set",

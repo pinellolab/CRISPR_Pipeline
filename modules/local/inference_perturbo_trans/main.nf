@@ -17,8 +17,8 @@ process inference_perturbo_trans {
 
     output:
     path "inference_mudata.h5mu", emit: inference_mudata
-    path "perturbo_trans_per_element_output.*", emit: per_element_output
-    path "perturbo_trans_per_guide_output.*", emit: per_guide_output
+    path "perturbo_global_analysis_per_element_output.*", emit: per_element_output
+    path "perturbo_global_analysis_per_guide_output.*", emit: per_guide_output
 
     script:
         def results_ext = params.INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT == 'parquet' ? 'parquet' : 'tsv.gz'
@@ -38,15 +38,15 @@ process inference_perturbo_trans {
             }
         }
         def result_commands = precomputed_element ? """
-        echo "Using precomputed trans PerTurbo results"
-        cp -f '${precomputed_element}' perturbo_trans_per_element_output.${results_ext}
-        cp -f '${precomputed_guide}' perturbo_trans_per_guide_output.${results_ext}
+        echo "Using precomputed global-analysis PerTurbo results"
+        cp -f '${precomputed_element}' perturbo_global_analysis_per_element_output.${results_ext}
+        cp -f '${precomputed_guide}' perturbo_global_analysis_per_guide_output.${results_ext}
         """ : """
         # Run PerTurbo inference for per-element results
-        perturbo_inference_chunked.py ${mudata} perturbo_trans_per_element_output.${results_ext} --chunk_size ${params.INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK} --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers 0 --efficiency_mode scaled --inference_type element --test_all_pairs
-        
-        # Run PerTurbo inference for per-guide results  
-        perturbo_inference_chunked.py ${mudata} perturbo_trans_per_guide_output.${results_ext} --chunk_size ${params.INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK} --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers 0 --efficiency_mode scaled --inference_type guide --test_all_pairs
+        perturbo_inference_chunked.py ${mudata} perturbo_global_analysis_per_element_output.${results_ext} --chunk_size ${params.INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK} --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers 0 --efficiency_mode scaled --inference_type element --test_all_pairs
+
+        # Run PerTurbo inference for per-guide results
+        perturbo_inference_chunked.py ${mudata} perturbo_global_analysis_per_guide_output.${results_ext} --chunk_size ${params.INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK} --batch_size ${params.INFERENCE_PERTURBO_BATCH_SIZE} --num_workers 0 --efficiency_mode scaled --inference_type guide --test_all_pairs
         """
         def mudata_command = precomputed_mudata ? """
         echo "Using precomputed trans PerTurbo MuData"
@@ -54,8 +54,8 @@ process inference_perturbo_trans {
         """ : """
         # Add both results to the base mudata file
         add_perturbo_results_to_mudata.py \\
-            --per_guide_results perturbo_trans_per_guide_output.${results_ext} \\
-            --per_element_results perturbo_trans_per_element_output.${results_ext} \\
+            --per_guide_results perturbo_global_analysis_per_guide_output.${results_ext} \\
+            --per_element_results perturbo_global_analysis_per_element_output.${results_ext} \\
             --base_mudata ${mudata} \\
             --output inference_mudata.h5mu
         """

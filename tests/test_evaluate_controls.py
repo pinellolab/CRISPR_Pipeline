@@ -32,7 +32,7 @@ def test_control_evaluation_skips_cleanly_without_negative_controls(tmp_path):
     )
     guide = ad.AnnData(X=np.ones((1, 1)), obs=obs.copy(), var=guide_var)
     mdata = mu.MuData({"gene": gene, "guide": guide})
-    mdata.uns["trans_per_guide_results"] = pd.DataFrame(
+    mdata.uns["global_analysis_per_guide_results"] = pd.DataFrame(
         {
             "guide_id": ["guide1"],
             "gene_id": ["GENE1"],
