@@ -52,3 +52,16 @@ def test_concat_restores_source_only_element_id_annotation():
     restored = CONCAT_MODULE.preserve_source_guide_metadata(combined, source)
 
     assert restored["element_id"].tolist() == ["source_pair_1", "source_pair_1"]
+
+
+def test_concat_does_not_coerce_existing_annotation_dtype():
+    source = pd.DataFrame(
+        {"targeting": [True, False], "element_id": ["a", "b"]},
+        index=["g1", "g2"],
+    )
+    combined = pd.DataFrame({"targeting": [True, False]}, index=["g1", "g2"])
+
+    restored = CONCAT_MODULE.preserve_source_guide_metadata(combined, source)
+
+    assert str(restored["targeting"].dtype) == "bool"
+    assert restored["element_id"].tolist() == ["a", "b"]

@@ -41,23 +41,15 @@ def preserve_source_guide_metadata(combined_guide_var, source_guide_var):
     ``mudata.concat`` only guarantees the shared annotation schema. Library
     metadata such as an explicit ``element_id`` can therefore disappear even
     when every input has it. Those identifiers encode real paired constructs
-    in dual-guide assays, so retain every source column and only fill values
-    absent from the combined object.
+    in dual-guide assays, so restore source-only columns without coercing the
+    dtypes of annotations already handled by MuData.
     """
     combined = combined_guide_var.copy()
     source = source_guide_var.reindex(combined.index)
 
     for column in source.columns:
-        source_values = source[column]
         if column not in combined.columns:
-            combined[column] = source_values
-            continue
-
-        # Convert categoricals to object before filling: their category sets
-        # can differ across batches even when the underlying labels agree.
-        current_values = combined[column].astype(object)
-        reference_values = source_values.astype(object)
-        combined[column] = current_values.where(current_values.notna(), reference_values)
+            combined[column] = source[column]
 
     return combined
 
