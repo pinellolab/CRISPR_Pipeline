@@ -4,6 +4,7 @@ import argparse
 import pandas as pd
 import muon as mu
 
+from analysis_output_formatting import make_h5mu_safe_dataframe
 from intended_target_key_utils import (
     annotate_intended_target_groups,
     enrich_pairs_with_target_metadata,
@@ -29,6 +30,17 @@ def _normalize_pairs_schema(df: pd.DataFrame) -> pd.DataFrame:
     out["guide_id"] = out["guide_id"].astype(str)
     out["gene_name"] = out["gene_name"].astype(str)
     return out
+
+
+def _pairs_to_h5mu_dict(df: pd.DataFrame) -> dict:
+    """Return a MuData.uns-safe representation of the pairs table.
+
+    AnnData serializes object columns as variable-length string arrays. A
+    chromosome column containing values such as ``"chr8"``, ``8``, and missing
+    values becomes an object array that h5py cannot write unless every value is
+    normalized to a string first.
+    """
+    return make_h5mu_safe_dataframe(df).to_dict(orient="list")
 
 
 def main(guide_inference, mudata_path, subset_for_cis=False):
@@ -71,7 +83,7 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
     subset = enrich_pairs_with_target_metadata(subset, mudata.mod["guide"].var)
     print(f"Subset contains {len(subset)} rows after filtering and metadata enrichment.")
 
-    mudata.uns["pairs_to_test"] = subset.to_dict(orient="list")
+    mudata.uns["pairs_to_test"] = _pairs_to_h5mu_dict(subset)
 
     key_mapping = {
         "gene_name": "gene_id",
