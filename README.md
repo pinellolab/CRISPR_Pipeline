@@ -21,6 +21,17 @@ A comprehensive pipeline for single-cell Perturb-Seq analysis that enables robus
 - [Input parameters and explanations](https://pinellolab.github.io/CRISPR_Pipeline/)
 - [Colab seqspec checker](https://colab.research.google.com/drive/1IfSU9Oxf3-JIuTt8oGfWjCqsiv6ff4LB#scrollTo=XMxGDEuBo1w9): Check whether your seqspec is extracting cell barcodes, UMIs, guides, hashes, and transcripts correctly.
 
+### Run provenance
+
+Every completed run writes `pipeline_info/pipeline_manifest.config`. Its
+`manifest` block records the repository URL, branch, full Git commit and short
+manifest version; header comments also preserve the exact `pipeline_command`,
+`nextflow_version`, run name, completion time, and final success state. This
+completion artifact complements
+`pipeline_info/nextflow.config`, which is the resolved configuration copied at
+launch. For source-tree and input-artifact checksums, use the optional
+`bin/run_provenance_agent.py` integration documented in `docs/usage.md`.
+
 ## Prerequisites
 
 Nextflow and Singularity must be installed before running the pipeline:
