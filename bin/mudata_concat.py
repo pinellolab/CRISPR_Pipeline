@@ -3,6 +3,8 @@ import argparse
 import math
 import os
 
+import pandas as pd
+
 
 def resolve_min_cells(n_obs, min_cells_fraction):
     """
@@ -32,6 +34,33 @@ def filter_genes_by_cells(mdata, min_cells_fraction):
     mdata.mod['gene'] = mdata.mod['gene'][:, index_filter]
     return mdata
 
+
+def preserve_source_guide_metadata(combined_guide_var, source_guide_var):
+    """Restore source-only guide annotations after MuData concatenation.
+
+    ``mudata.concat`` only guarantees the shared annotation schema. Library
+    metadata such as an explicit ``element_id`` can therefore disappear even
+    when every input has it. Those identifiers encode real paired constructs
+    in dual-guide assays, so retain every source column and only fill values
+    absent from the combined object.
+    """
+    combined = combined_guide_var.copy()
+    source = source_guide_var.reindex(combined.index)
+
+    for column in source.columns:
+        source_values = source[column]
+        if column not in combined.columns:
+            combined[column] = source_values
+            continue
+
+        # Convert categoricals to object before filling: their category sets
+        # can differ across batches even when the underlying labels agree.
+        current_values = combined[column].astype(object)
+        reference_values = source_values.astype(object)
+        combined[column] = current_values.where(current_values.notna(), reference_values)
+
+    return combined
+
 def concat_mudatas(input_files, output_file, min_cells_fraction=0.05):
     """
     Concatenate multiple MuData files. If only one file is provided, it's copied to the output.
@@ -56,7 +85,15 @@ def concat_mudatas(input_files, output_file, min_cells_fraction=0.05):
 
     # Handle multiple files case
     print("Concatenating all MuData objects...")
-    combined_mdata = md.concat([md.read(ff) for ff in files], merge='first', uns_merge='first', join='outer')
+    mudatas = [md.read(ff) for ff in files]
+    combined_mdata = md.concat(mudatas, merge='first', uns_merge='first', join='outer')
+
+    # Keep assay/library annotations such as element_id. Collapse later uses
+    # them to keep the two guides of an explicit control construct together.
+    combined_mdata.mod['guide'].var = preserve_source_guide_metadata(
+        combined_mdata.mod['guide'].var,
+        mudatas[0].mod['guide'].var,
+    )
 
 
     print ('filtering genes')

@@ -117,8 +117,9 @@ def annotate_intended_target_groups(
     Rules:
       - targeting guides: key = name+chr+start+end when all coordinates exist,
         else name-only fallback key.
-      - control guides: grouped as non-targeting|N where group size equals median
-        guides-per-targeting-element, with deterministic ordering by guide_id.
+      - control guides: preserve explicit source ``element_id`` groups when
+        supplied; otherwise group as non-targeting|N using the median number of
+        guides per targeting element and deterministic guide-ID ordering.
       - no guide may remain assigned to exact 'non-targeting'.
     """
     df = guide_var.copy()
@@ -147,25 +148,47 @@ def annotate_intended_target_groups(
     n_controls = int(control_mask.sum())
 
     if n_controls > 0:
-        median_size = _median_guides_per_targeting_element(df, control_mask)
+        # A dual-guide library can provide the real control pairing through
+        # element_id. Re-bucketing those guides by lexical guide ID destroys
+        # that pairing and makes DUAL_GUIDE collapse discard the control cells.
+        explicit_control_groups = pd.Series(index=df.index, dtype="string")
+        if "element_id" in df.columns:
+            explicit_control_groups.loc[control_mask] = (
+                df.loc[control_mask, "element_id"].map(_string_or_na).astype("string")
+            )
 
-        control_idx_sorted = (
-            df.loc[control_mask, "guide_id"]
-            .astype(str)
-            .sort_values(kind="stable")
-            .index
-        )
-        group_numbers = np.arange(n_controls) // median_size + 1
+        explicit_idx = explicit_control_groups[explicit_control_groups.notna()].index
+        next_group_number = 1
+        if len(explicit_idx) > 0:
+            group_ids = sorted(explicit_control_groups.loc[explicit_idx].unique().tolist())
+            group_number_by_id = {group_id: index + 1 for index, group_id in enumerate(group_ids)}
+            group_numbers = explicit_control_groups.loc[explicit_idx].map(group_number_by_id).astype("Int64")
+            control_names = group_numbers.map(lambda group: f"{non_targeting_label}|{group}")
 
-        control_names = [f"{non_targeting_label}|{group}" for group in group_numbers]
-        control_chrom = [non_targeting_label] * n_controls
-        control_start = pd.Series(group_numbers, index=control_idx_sorted, dtype="Int64")
-        control_end = pd.Series(group_numbers, index=control_idx_sorted, dtype="Int64")
+            df.loc[explicit_idx, "intended_target_name"] = control_names
+            df.loc[explicit_idx, "intended_target_chr"] = non_targeting_label
+            df.loc[explicit_idx, "intended_target_start"] = group_numbers
+            df.loc[explicit_idx, "intended_target_end"] = group_numbers
+            next_group_number = len(group_ids) + 1
 
-        df.loc[control_idx_sorted, "intended_target_name"] = control_names
-        df.loc[control_idx_sorted, "intended_target_chr"] = control_chrom
-        df.loc[control_idx_sorted, "intended_target_start"] = control_start
-        df.loc[control_idx_sorted, "intended_target_end"] = control_end
+        fallback_mask = control_mask & explicit_control_groups.isna()
+        n_fallback_controls = int(fallback_mask.sum())
+        if n_fallback_controls > 0:
+            median_size = _median_guides_per_targeting_element(df, control_mask)
+            fallback_idx_sorted = (
+                df.loc[fallback_mask, "guide_id"]
+                .astype(str)
+                .sort_values(kind="stable")
+                .index
+            )
+            group_numbers = np.arange(n_fallback_controls) // median_size + next_group_number
+            control_names = [f"{non_targeting_label}|{group}" for group in group_numbers]
+            control_starts = pd.Series(group_numbers, index=fallback_idx_sorted, dtype="Int64")
+
+            df.loc[fallback_idx_sorted, "intended_target_name"] = control_names
+            df.loc[fallback_idx_sorted, "intended_target_chr"] = non_targeting_label
+            df.loc[fallback_idx_sorted, "intended_target_start"] = control_starts
+            df.loc[fallback_idx_sorted, "intended_target_end"] = control_starts
 
     if (df["intended_target_name"] == non_targeting_label).any():
         raise ValueError(

@@ -11,11 +11,11 @@ process mudata_concat {
 
     script:
     """
-        mudata_concat.py -i ${mudata_input} -o concat_mudata.h5mu -g ${fraction_cells}
+        python ${projectDir}/bin/mudata_concat.py -i ${mudata_input} -o concat_mudata.h5mu -g ${fraction_cells}
 
         if [ "${dual_guide}" = "true" ]; then
             echo "Dual guide mode enabled, processing accordingly."
-            collapse_guides.py concat_mudata.h5mu  concat_mudata_collapsed.h5mu
+            python ${projectDir}/bin/collapse_guides.py concat_mudata.h5mu concat_mudata_collapsed.h5mu
             mv concat_mudata_collapsed.h5mu concat_mudata.h5mu
 
         else
@@ -23,7 +23,6 @@ process mudata_concat {
         fi
     """
 }
-
 
 
 

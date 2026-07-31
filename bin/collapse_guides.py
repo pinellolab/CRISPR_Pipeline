@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 from scipy.sparse import issparse
 from scipy.sparse import issparse, csr_matrix
+from intended_target_key_utils import annotate_intended_target_groups
 
 
 def collapse_guides(
@@ -30,6 +31,12 @@ def collapse_guides(
     """
     mdata = md.read(mdata_input_fp)
     guide_adata = mdata["guide"]
+
+    # Restore canonical element grouping immediately before dual-guide filtering.
+    # This is essential for libraries that record the real non-targeting guide
+    # pairs in element_id: an earlier generic control bucketing pass can split
+    # those pairs and make every control cell look like a multi-element cell.
+    guide_adata.var = annotate_intended_target_groups(guide_adata.var)
 
     # Get guides per cell from guide assignment layer
     guides_per_cell = mdata["guide"].layers["guide_assignment"].sum(axis=1)
