@@ -2,7 +2,6 @@
 process mappingHashing {
 
     cache 'lenient'
-    debug true
     stageOutMode 'copy'
 
     input:

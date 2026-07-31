@@ -1,7 +1,6 @@
 process mappingGuide {
     tag "$meta.measurement_sets"
     cache 'lenient'
-    debug true
     stageOutMode 'copy'
 
     input:

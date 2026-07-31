@@ -1,5 +1,4 @@
 process createGuideRef {
-    debug true
 
     input:
     path guide_metadata

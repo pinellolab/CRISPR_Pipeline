@@ -1,6 +1,5 @@
 process mudata_concat {
     cache 'lenient'
-    debug true
 
     input:
         path (mudata_input, name: "?/*")

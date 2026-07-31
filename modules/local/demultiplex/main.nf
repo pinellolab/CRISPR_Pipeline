@@ -2,7 +2,6 @@
 process demultiplex{
 
     cache 'lenient'
-    debug true
 
     input:
     path adata_path

@@ -1,7 +1,6 @@
 
 process skipGenomeDownload {
     cache 'lenient'
-    debug true
 
     input:
     path genome_local_path

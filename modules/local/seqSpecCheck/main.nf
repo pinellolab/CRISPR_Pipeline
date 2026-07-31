@@ -1,6 +1,5 @@
 process seqSpecCheck {
     cache 'lenient'
-    debug true
     
     input:
     tuple val(meta), path(reads)

@@ -1,6 +1,5 @@
 process prepare_assignment {
     cache 'lenient'
-    debug true
 
     input:
         path mudata_input

@@ -2,7 +2,6 @@
 process hashing_concat{
 
     cache 'lenient'
-    debug true
 
     input:
     path hashing_demux_anndata

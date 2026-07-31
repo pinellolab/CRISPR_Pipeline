@@ -1,7 +1,6 @@
 
 process skipGTFDownload {
     cache 'lenient'
-    debug true
 
     input:
     path gtf_local_path

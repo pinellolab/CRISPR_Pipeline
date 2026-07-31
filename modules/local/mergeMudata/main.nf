@@ -1,6 +1,5 @@
 process mergeMudata {
     cache 'lenient'
-    debug true
     publishDir path: {
         def out = params.outdir?.toString() ?: './pipeline_outputs'
         out = out.replaceAll('/$','')

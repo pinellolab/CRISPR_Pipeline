@@ -1,7 +1,6 @@
 
 process CreateMuData {
     cache 'lenient'
-    debug true
 
     input:
 
