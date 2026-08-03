@@ -117,8 +117,8 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     Args:
         sceptre_per_guide: Path to SCEPTRE per_guide_output.tsv
         sceptre_per_element: Path to SCEPTRE per_element_output.tsv  
-        perturbo_per_guide: Path to PerTurbo per_guide_output.tsv
-        perturbo_per_element: Path to PerTurbo per_element_output.tsv
+        perturbo_per_guide: Path to PerTurbo per_guide_output.parquet
+        perturbo_per_element: Path to PerTurbo per_element_output.parquet
         base_mudata_path: Path to base mudata file for structure
     """
     print("Loading input files...")
@@ -131,9 +131,9 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     sceptre_guide_df = _add_sceptre_columns(sceptre_guide_df)
     sceptre_element_df = _add_sceptre_columns(sceptre_element_df)
     
-    # Load PerTurbo results
-    perturbo_guide_df = pd.read_csv(perturbo_per_guide, sep='\t')
-    perturbo_element_df = pd.read_csv(perturbo_per_element, sep='\t')
+    # Load PerTurbo results (written as Parquet by perturbo_v2_pipeline_adapter.py)
+    perturbo_guide_df = pd.read_parquet(perturbo_per_guide)
+    perturbo_element_df = pd.read_parquet(perturbo_per_element)
     
     # Rename PerTurbo columns to indicate method
     perturbo_guide_df = _add_perturbo_columns(perturbo_guide_df)

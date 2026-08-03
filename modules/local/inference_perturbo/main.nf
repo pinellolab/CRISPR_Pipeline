@@ -16,8 +16,8 @@ process inference_perturbo {
     
     output:
     path "inference_mudata.h5mu", emit: inference_mudata
-    path "perturbo_cis_per_element_output.tsv.gz", emit: per_element_output
-    path "perturbo_cis_per_guide_output.tsv.gz", emit: per_guide_output
+    path "perturbo_cis_per_element_output.parquet", emit: per_element_output
+    path "perturbo_cis_per_guide_output.parquet", emit: per_guide_output
     path "perturbo_v2_outputs", optional: true, emit: perturbo_v2_outputs
 
     script:
@@ -25,8 +25,8 @@ process inference_perturbo {
         """
         perturbo_v2_pipeline_adapter.py \\
             --input ${mudata} \\
-            --per-element-tsv perturbo_cis_per_element_output.tsv.gz \\
-            --per-guide-tsv perturbo_cis_per_guide_output.tsv.gz \\
+            --per-element-output perturbo_cis_per_element_output.parquet \\
+            --per-guide-output perturbo_cis_per_guide_output.parquet \\
             --output-mudata inference_mudata.h5mu \\
             --v2-artifact-dir perturbo_v2_outputs \\
             --device ${params.INFERENCE_PERTURBO_DEVICE} \\

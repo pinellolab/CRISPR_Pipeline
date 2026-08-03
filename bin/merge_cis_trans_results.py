@@ -57,18 +57,19 @@ def merge_cis_trans_results(cis_per_guide_path, cis_per_element_path, trans_per_
     Args:
         cis_per_guide_path: Path to cis per_guide_output.tsv
         cis_per_element_path: Path to cis per_element_output.tsv
-        trans_per_guide_path: Path to trans per_guide_output.tsv
-        trans_per_element_path: Path to trans per_element_output.tsv
+        trans_per_guide_path: Path to trans per_guide_output.parquet
+        trans_per_element_path: Path to trans per_element_output.parquet
         base_mudata_path: Path to base mudata file for structure
         output_path: Output path for merged MuData
     """
     print("Loading input files...")
     
-    # Load TSV files
+    # cis_* come from mergedResults as TSV; trans_* come straight from
+    # perturbo_v2_pipeline_adapter.py, written as Parquet.
     cis_per_guide = pd.read_csv(cis_per_guide_path, sep='\t')
     cis_per_element = pd.read_csv(cis_per_element_path, sep='\t')
-    trans_per_guide = pd.read_csv(trans_per_guide_path, sep='\t')
-    trans_per_element = pd.read_csv(trans_per_element_path, sep='\t')
+    trans_per_guide = pd.read_parquet(trans_per_guide_path)
+    trans_per_element = pd.read_parquet(trans_per_element_path)
 
     cis_per_guide = _finalize_perturbo_columns(_add_perturbo_columns(cis_per_guide))
     cis_per_element = _finalize_perturbo_columns(_add_perturbo_columns(cis_per_element))
@@ -122,8 +123,8 @@ def main():
     parser = argparse.ArgumentParser(description='Merge cis and trans results from TSV files')
     parser.add_argument('--cis_per_guide', required=True, help='Path to cis per_guide_output.tsv')
     parser.add_argument('--cis_per_element', required=True, help='Path to cis per_element_output.tsv')
-    parser.add_argument('--trans_per_guide', required=True, help='Path to trans per_guide_output.tsv')
-    parser.add_argument('--trans_per_element', required=True, help='Path to trans per_element_output.tsv')
+    parser.add_argument('--trans_per_guide', required=True, help='Path to trans per_guide_output.parquet')
+    parser.add_argument('--trans_per_element', required=True, help='Path to trans per_element_output.parquet')
     parser.add_argument('--base_mudata', required=True, help='Path to base mudata file for structure')
     parser.add_argument('--output', required=True, help='Output path for merged MuData file')
     

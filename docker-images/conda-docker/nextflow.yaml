@@ -7,6 +7,7 @@ dependencies:
   - aria2
   - numpy  
   - pandas>=2.1.0,<3
+  - pyarrow
   - pip
   - anndata
   - gmm-demux
