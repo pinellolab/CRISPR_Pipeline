@@ -4,6 +4,7 @@ import perturbo
 import mudata as md
 import numpy as np
 import pandas as pd
+import rich.pretty  # scvi-tools accesses this submodule through the rich package
 import scvi
 from scipy.stats import false_discovery_control
 from intended_target_key_utils import (
