@@ -187,14 +187,8 @@ The complete machine-readable QC output catalog is available as
 | `INFERENCE_predefined_pairs_to_test` | `null` | CSV path | Pair table required when `INFERENCE_target_guide_pairing_strategy = 'predefined_pairs'`. |
 | `INFERENCE_max_target_distance_bp` | `1000000` | Integer bp distance | Maximum guide-target genomic distance used for cis pair construction. |
 | `INFERENCE_PERTURBO_BATCH_SIZE` | `4096` | Integer `>= 1` | Batch size passed to PerTurbo inference in cis and trans runs. |
-| `INFERENCE_PERTURBO_PRECOMPUTED_PER_ELEMENT` | `null` | TSV path | Optional completed cis per-element table. Set with both other cis precomputed paths for recovery. |
-| `INFERENCE_PERTURBO_PRECOMPUTED_PER_GUIDE` | `null` | TSV path | Optional completed cis per-guide table. Set with both other cis precomputed paths for recovery. |
-| `INFERENCE_PERTURBO_PRECOMPUTED_MUDATA` | `null` | H5Mu path | Optional completed cis MuData. Set all three cis precomputed paths to skip cis recomputation. |
 | `INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK` | `8000` | Integer; `<= 0` disables chunking | Maximum genes per chunk for trans PerTurbo all-by-all inference. |
 | `INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT` | `tsv.gz` | `tsv.gz`, `parquet` | Serialization used for trans PerTurbo chunk intermediates and final cis/trans/catalog result tables. `parquet` requires `pyarrow` and greatly reduces result-table I/O time. |
-| `INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_ELEMENT` | `null` | Result-table path | Optional completed trans per-element table. Set together with the per-guide path to recover without rerunning PerTurbo. |
-| `INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_GUIDE` | `null` | Result-table path | Optional completed trans per-guide table. Its suffix must match `INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT`. |
-| `INFERENCE_PERTURBO_TRANS_PRECOMPUTED_MUDATA` | `null` | H5Mu path | Optional completed trans MuData. Use with both precomputed result tables to avoid repeating H5Mu serialization during recovery. |
 | `INFERENCE_SCEPTRE_side` | `both` | `both`, `left`, `right` | Alternative-hypothesis side passed to SCEPTRE inference. |
 | `INFERENCE_SCEPTRE_grna_integration_strategy` | `union` | SCEPTRE strategy string | Guide RNA integration strategy passed to SCEPTRE inference. |
 | `INFERENCE_SCEPTRE_resampling_approximation` | `skew_normal` | SCEPTRE approximation string | Resampling approximation passed to SCEPTRE inference. |

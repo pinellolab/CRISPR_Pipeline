@@ -314,34 +314,6 @@
                     "minimum": 1,
                     "description": "Batch size passed to PerTurbo inference for cis and trans runs."
                 },
-                "INFERENCE_PERTURBO_PRECOMPUTED_PER_ELEMENT": {
-                    "type": [
-                        "string",
-                        "null"
-                    ],
-                    "format": "file-path",
-                    "default": null,
-                    "description": "Optional completed cis PerTurbo per-element result table."
-                },
-                "INFERENCE_PERTURBO_PRECOMPUTED_PER_GUIDE": {
-                    "type": [
-                        "string",
-                        "null"
-                    ],
-                    "format": "file-path",
-                    "default": null,
-                    "description": "Optional completed cis PerTurbo per-guide result table."
-                },
-                "INFERENCE_PERTURBO_PRECOMPUTED_MUDATA": {
-                    "type": [
-                        "string",
-                        "null"
-                    ],
-                    "format": "file-path",
-                    "default": null,
-                    "description": "Optional completed cis PerTurbo MuData output.",
-                    "help_text": "Set all three cis precomputed paths together to recover completed cis inference without rerunning it."
-                },
                 "INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK": {
                     "type": "integer",
                     "default": 8000,
@@ -357,36 +329,6 @@
                     ],
                     "description": "Serialization format for trans PerTurbo result tables and chunk intermediates.",
                     "help_text": "Use parquet for substantially faster result-table reads and writes. The PerTurbo execution environment must provide pyarrow."
-                },
-                "INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_ELEMENT": {
-                    "type": [
-                        "string",
-                        "null"
-                    ],
-                    "format": "file-path",
-                    "default": null,
-                    "description": "Optional precomputed trans PerTurbo per-element result table.",
-                    "help_text": "Set together with INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_GUIDE to recover a completed inference without rerunning the model. Its suffix must match INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT."
-                },
-                "INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_GUIDE": {
-                    "type": [
-                        "string",
-                        "null"
-                    ],
-                    "format": "file-path",
-                    "default": null,
-                    "description": "Optional precomputed trans PerTurbo per-guide result table.",
-                    "help_text": "Set together with INFERENCE_PERTURBO_TRANS_PRECOMPUTED_PER_ELEMENT to recover a completed inference without rerunning the model. Its suffix must match INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT."
-                },
-                "INFERENCE_PERTURBO_TRANS_PRECOMPUTED_MUDATA": {
-                    "type": [
-                        "string",
-                        "null"
-                    ],
-                    "format": "file-path",
-                    "default": null,
-                    "description": "Optional completed trans PerTurbo MuData output.",
-                    "help_text": "Use with both precomputed result tables to recover an already serialized trans inference without repeating the expensive H5Mu write."
                 },
                 "INFERENCE_SCEPTRE_side": {
                     "type": "string",
