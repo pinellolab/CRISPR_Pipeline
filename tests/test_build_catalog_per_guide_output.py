@@ -40,6 +40,7 @@ def _make_test_mudata():
         },
         index=["g2", "g1"],
     )
+    guide_var.index.name = "guide_id"
     guide = ad.AnnData(X=np.ones((3, 2)), obs=obs.copy(), var=guide_var)
     guide.layers["guide_assignment"] = sparse.csr_matrix(
         np.array([[1, 0], [0, 1], [0, 1]], dtype=float)

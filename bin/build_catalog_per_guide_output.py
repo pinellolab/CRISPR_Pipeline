@@ -107,7 +107,11 @@ def _build_guide_metadata(guide) -> pd.DataFrame:
         "intended_target_start": ["intended_target_start"],
         "intended_target_end": ["intended_target_end"],
     }
-    metadata = pd.DataFrame({"guide_id": guide_var["guide_id"]})
+    # Do not carry the AnnData var index into the merge table. In canonical
+    # MuData files the index itself may also be named ``guide_id``; retaining
+    # that index makes pandas treat the merge key as both an index level and a
+    # column label.
+    metadata = pd.DataFrame({"guide_id": guide_var["guide_id"].to_numpy()})
     for output_col, candidates in alias_map.items():
         source_col = _first_existing_column_optional(guide_var, candidates)
         metadata[output_col] = (
