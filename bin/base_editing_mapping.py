@@ -9,6 +9,8 @@ import subprocess # Use subprocess for shell commands
 import anndata
 import numpy as np
 
+from count_matrix_utils import describe_matrix, to_sparse_counts
+
 
 def extract_fasta_sequences(string_value):
   string_decripted = np.array(string_value.split(' ')).reshape(-1,2)
@@ -74,8 +76,14 @@ def series_to_anndata(count_series: pd.Series, args) -> anndata.AnnData:
     # Convert Series to DataFrame with cells as rows, protospacers as columns
     df = count_series.unstack(level='protospacer').fillna(0)
 
+    # Guide-UMI counts are overwhelmingly zero (a cell rarely has reads for
+    # more than a few protospacers); build sparse at the narrowest dtype the
+    # data actually needs instead of a dense float64 DataFrame.
+    guide_counts = to_sparse_counts(df)
+    print(describe_matrix(guide_counts, "base-editing guide counts"))
+
     # Create AnnData
-    adata = anndata.AnnData(X=df.values, obs=pd.DataFrame(index=df.index), var=pd.DataFrame(index=df.columns))
+    adata = anndata.AnnData(X=guide_counts, obs=pd.DataFrame(index=df.index), var=pd.DataFrame(index=df.columns))
 
     # ``unstack`` orders columns by protospacer, which is not guaranteed to match
     # the source metadata row order. Map by sequence so counts cannot be assigned
