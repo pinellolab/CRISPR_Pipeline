@@ -58,7 +58,7 @@ def merge_local_global_results(
     global_analysis_per_element_path,
     base_mudata_path,
     output_path,
-    results_format="tsv.gz",
+    results_format="parquet",
 ):
     """Merge local- and global-analysis result tables into the final MuData."""
     print("Loading input files...")
@@ -121,7 +121,7 @@ def main():
     parser.add_argument(
         "--results_format",
         choices=["tsv.gz", "parquet"],
-        default="tsv.gz",
+        default="parquet",
         help="Format for the four merged result tables.",
     )
     args = parser.parse_args()

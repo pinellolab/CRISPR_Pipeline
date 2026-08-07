@@ -363,7 +363,7 @@
                 },
                 "INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT": {
                     "type": "string",
-                    "default": "tsv.gz",
+                    "default": "parquet",
                     "enum": [
                         "tsv.gz",
                         "parquet"
