@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from barcode_keys import qualify_barcodes
+from count_matrix_utils import describe_matrix, to_sparse_counts
 
 
 def extract_batch_num(filename):
@@ -158,17 +159,21 @@ def main():
             layer in adata.layers
             for layer in ["mature", "nascent", "ambiguous"]
         ):
-            adata.X = adata.X.astype(np.float32)
+            # kb-python's nac workflow EM-distributes ambiguous reads across
+            # mature/nascent, so these can be genuinely fractional (e.g. 0.5)
+            # -- never force them to an integer dtype. Sum in float32 so
+            # combining three sparse/dense layers can't silently lose
+            # precision to an unexpected int upcast; to_sparse_counts below
+            # decides the final on-disk dtype from the actual values, not an
+            # assumption about which workflow produced them.
             adata.X = (
                 adata.layers["mature"].astype(np.float32)
                 + adata.layers["nascent"].astype(np.float32)
                 + adata.layers["ambiguous"].astype(np.float32)
             )
-            adata.layers["mature"] = adata.layers["mature"].astype(np.float32)
-            adata.layers["nascent"] = adata.layers["nascent"].astype(np.float32)
-            adata.layers["ambiguous"] = adata.layers["ambiguous"].astype(
-                np.float32
-            )
+            adata.layers["mature"] = to_sparse_counts(adata.layers["mature"])
+            adata.layers["nascent"] = to_sparse_counts(adata.layers["nascent"])
+            adata.layers["ambiguous"] = to_sparse_counts(adata.layers["ambiguous"])
             print(
                 "Nascent (nac) workflow detected: combining mature, nascent, and ambiguous counts into .X"
             )
@@ -181,6 +186,12 @@ def main():
                 adata.X.data = np.round(adata.X.data)
             else:
                 adata.X = np.round(adata.X)
+
+        # Only whole-valued (or already-integer) matrices get narrowed --
+        # e.g. mm=False leaves the nac-combined .X genuinely fractional, and
+        # it correctly stays float here.
+        adata.X = to_sparse_counts(adata.X)
+        print(describe_matrix(adata.X, f"{os.path.basename(file_path)} .X"))
 
         if idx == 0 and adata.var_names.name is not None:
             var_index_name = adata.var_names.name

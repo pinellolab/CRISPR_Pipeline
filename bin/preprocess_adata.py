@@ -191,8 +191,10 @@ def main(
         ("RPS", "RPL")
     )
 
-    # Calculate QC metrics
-    adata_rna.X = adata_rna.X.astype(np.float32)
+    # Calculate QC metrics. scanpy computes these fine directly on integer
+    # (uint16/int32) or float dtypes -- no need to force .X to float32 first,
+    # which would permanently double the on-disk size of the raw count
+    # matrix for the sole benefit of this one QC call.
     sc.pp.calculate_qc_metrics(
         adata_rna, qc_vars=["mt", "ribo"], inplace=True, log1p=True
     )

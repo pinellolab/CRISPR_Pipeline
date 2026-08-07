@@ -2,16 +2,21 @@
 import mudata as mu
 import argparse
 from scipy.io import mmread
-from scipy.sparse import csr_matrix
 import numpy as np
+
+from count_matrix_utils import describe_matrix, to_sparse_counts
 
 def add_guide_assignment(mudata_path, guide_assignment_mtx):
     # Load MuData object
     mudata = mu.read_h5mu(mudata_path)
-    
+
     sparse_matrix = mmread(guide_assignment_mtx).T
-    sparse_matrix_csr = csr_matrix(sparse_matrix)  # Convert to CSR format
-    
+    # Matrix Market "real" headers make mmread return float64 even for the
+    # 0/1 assignment calls this file holds; store CSR at the narrowest dtype
+    # that fits the data instead (uint16 in practice).
+    sparse_matrix_csr = to_sparse_counts(sparse_matrix)
+    print(describe_matrix(sparse_matrix_csr, "guide_assignment"))
+
     # Add to mudata
     mudata.mod['guide'].layers['guide_assignment'] = sparse_matrix_csr
     

@@ -5,7 +5,7 @@ import mudata as md
 import pandas as pd
 import numpy as np
 from scipy.sparse import issparse
-from scipy.sparse import issparse, csr_matrix
+from count_matrix_utils import describe_matrix, to_sparse_counts
 from intended_target_key_utils import annotate_intended_target_groups
 
 
@@ -124,14 +124,20 @@ def collapse_guides(
         )
     )
 
-    # Create new guide matrix with collapsed guides
-    #guide_dummies = pd.get_dummies(cell_guide_deduped["guide_id"], sparse=False)
-    guide_dummies = pd.get_dummies(cell_guide_deduped["guide_id"], dtype=int)
-    print(
-        f"Value type: {type(guide_dummies.values)}, {guide_dummies.values.dtype}, {issparse(guide_dummies.values)}"
+    # Create new guide matrix with collapsed guides. One-hot by construction
+    # (exactly one nonzero per row), so build it sparse from the start rather
+    # than materializing a dense int64 DataFrame first -- for a real-size
+    # cell x guide-combo matrix that's the difference between single-digit
+    # MB and multiple GB.
+    guide_dummies_df = pd.get_dummies(
+        cell_guide_deduped["guide_id"], dtype=np.uint16, sparse=True
     )
+    guide_dummies_index = guide_dummies_df.index
+    guide_dummies_columns = guide_dummies_df.columns
+    guide_dummies = to_sparse_counts(guide_dummies_df)
+    print(describe_matrix(guide_dummies, "collapsed guide_dummies"))
     print(
-        f"Collapsed {len(bc_var_df)} guide assignments into {len(guide_dummies.columns)} unique guide combinations"
+        f"Collapsed {len(bc_var_df)} guide assignments into {len(guide_dummies_columns)} unique guide combinations"
     )
 
     #var_new = cell_guide_deduped.groupby("guide_id").first()
@@ -139,15 +145,15 @@ def collapse_guides(
     cell_guide_deduped.groupby("guide_id").first().reset_index()
     .set_index("guide_id")  # so guide_id is both index and column
     )
-    
+
     var_new["guide_id"] = var_new.index
 
 
     # Create new AnnData object for collapsed guides
     collapsed_guide_adata = md.AnnData(
         guide_dummies,
-        obs=mdata["guide"].obs.loc[guide_dummies.index],
-        var=var_new.loc[guide_dummies.columns],
+        obs=mdata["guide"].obs.loc[guide_dummies_index],
+        var=var_new.loc[guide_dummies_columns],
     )
 
 
