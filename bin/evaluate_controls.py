@@ -64,7 +64,7 @@ def perform_binary_evaluation(label_controls, infered_significance_col, outdir, 
         plt.tight_layout()
 
         # Save
-        savefig(os.path.join(outdir, "trans_perturbo_precision_recall_roc.png"))
+        savefig(os.path.join(outdir, "global_analysis_perturbo_precision_recall_roc.png"))
         plt.show()
 
 
@@ -115,14 +115,14 @@ def plot_volcano(
     plt.tight_layout()
 
     # Save
-    savefig(os.path.join(outdir, "trans_perturbo_volcano_plot.png"))
+    savefig(os.path.join(outdir, "global_analysis_perturbo_volcano_plot.png"))
     plt.show()
 
 
 def run_evaluation_controls(md_read, outdir):
     os.makedirs(outdir, exist_ok=True)
 
-    col_used = 'trans_per_guide_results'
+    col_used = 'global_analysis_per_guide_results'
     fc_col, p_col = select_inference_columns(md_read.uns[col_used])
     #converting to avoid non boolean values
     col = md_read['guide'].var['targeting']
@@ -152,11 +152,16 @@ def run_evaluation_controls(md_read, outdir):
     print (f"all targets: {all_targets.shape[0]}")
     non_target_controls = selecting_to_plot.query("targeting_genes == False")
     using_random_sample = ''
-    if   non_target_controls[non_target_controls.apply(lambda x: x['gene_id'] in all_targets.values, axis=1)].shape[0] > 0:
+    matching_non_target_controls = non_target_controls[
+        non_target_controls.apply(
+            lambda x: x['gene_id'] in all_targets.values,
+            axis=1,
+        )
+    ]
+    if matching_non_target_controls.shape[0] > 0:
 
-        non_target_controls = non_target_controls[
-                non_target_controls.apply(lambda x: x['gene_id'] in all_targets.values, axis=1)]
-    else:
+        non_target_controls = matching_non_target_controls
+    elif non_target_controls.shape[0] > 0:
 
         print ("No non-targeting control guides found for evaluation that were tested against the intended targets.")
         print ('Using random sample of non-targeting guides for evaluation instead.')
@@ -178,9 +183,36 @@ def run_evaluation_controls(md_read, outdir):
 
     table_to_test_cis['direct_target'] = 1
     print (f"Number of targeting guides for direct targets: {table_to_test_cis.shape[0]}")
+    if non_target_controls.empty:
+        reason = (
+            "Controls evaluation skipped: no non-targeting guides are present "
+            "in the inference results, so AUROC/AUPRC and matched-control plots "
+            "cannot be calculated."
+        )
+        print(reason)
+        with open(
+            os.path.join(outdir, "controls_evaluation_skipped.txt"),
+            "w",
+            encoding="utf-8",
+        ) as handle:
+            handle.write(reason + "\n")
+            handle.write(f"targeting_direct_target_rows={table_to_test_cis.shape[0]}\n")
+            handle.write("non_targeting_control_rows=0\n")
+        return
+
+    sample_with_replacement = non_target_controls.shape[0] < table_to_test_cis.shape[0]
+    if sample_with_replacement:
+        print(
+            "Fewer non-targeting controls than direct-target rows; "
+            "sampling controls with replacement."
+        )
     table_to_fdr = pd.concat([
         table_to_test_cis,
-        non_target_controls.sample(n=table_to_test_cis.shape[0], random_state=42)
+        non_target_controls.sample(
+            n=table_to_test_cis.shape[0],
+            random_state=42,
+            replace=sample_with_replacement,
+        )
     ]).copy()
     table_to_fdr["log2_fc"] = table_to_fdr[fc_col]
     table_to_fdr["p_value"] = table_to_fdr[p_col]
@@ -204,7 +236,7 @@ def run_evaluation_controls(md_read, outdir):
     plt.title(f"Direct targets vs random control guides \n {using_random_sample}")
     plt.tight_layout()
 
-    savefig(os.path.join(outdir, "trans_perturbo_barplot_direct_vs_control.png"))
+    savefig(os.path.join(outdir, "global_analysis_perturbo_barplot_direct_vs_control.png"))
     plt.show()
 
 

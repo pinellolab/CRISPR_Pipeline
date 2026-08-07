@@ -17,17 +17,18 @@ process inference_perturbo_trans {
 
     output:
     path "inference_mudata.h5mu", emit: inference_mudata
-    path "perturbo_trans_per_element_output.parquet", emit: per_element_output
-    path "perturbo_trans_per_guide_output.parquet", emit: per_guide_output
+    path "perturbo_global_analysis_per_element_output.*", emit: per_element_output
+    path "perturbo_global_analysis_per_guide_output.*", emit: per_guide_output
     path "perturbo_v2_outputs", optional: true, emit: perturbo_v2_outputs
 
     script:
         def save_model_params_arg = params.INFERENCE_PERTURBO_SAVE_MODEL_PARAMS ? '--save-model-params' : '--no-save-model-params'
+        def results_ext = params.INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT == 'parquet' ? 'parquet' : 'tsv.gz'
         """
         perturbo_v2_pipeline_adapter.py \\
             --input ${mudata} \\
-            --per-element-output perturbo_trans_per_element_output.parquet \\
-            --per-guide-output perturbo_trans_per_guide_output.parquet \\
+            --per-element-output perturbo_global_analysis_per_element_output.${results_ext} \\
+            --per-guide-output perturbo_global_analysis_per_guide_output.${results_ext} \\
             --output-mudata inference_mudata.h5mu \\
             --v2-artifact-dir perturbo_v2_outputs \\
             --test-all-pairs \\

@@ -549,7 +549,7 @@ def _build_comprehensive_qc_report(
     intended_row, _intended_metrics = _read_qc_metric_row(
         additional_qc_dir, "intended_target", "intended_target_metrics.tsv"
     )
-    trans_row, _trans_metrics = _read_qc_metric_row(additional_qc_dir, "trans", "trans_metrics.tsv")
+    trans_row, _trans_metrics = _read_qc_metric_row(additional_qc_dir, "global_analysis", "global_analysis_metrics.tsv")
 
     threshold = (filter_info or {}).get("threshold")
     knee_rank = (filter_info or {}).get("knee_rank")
@@ -624,9 +624,9 @@ def _build_comprehensive_qc_report(
             "warn" if barcode_filter in {"knee", "knee2"} else "good",
         ),
         _qc_kpi(
-            "Significant trans tests",
+            "Significant global-analysis tests",
             _display(significant_trans, digits=0),
-            "From additional_qc/trans/trans_metrics.tsv when inference results exist.",
+            "From additional_qc/global_analysis/global_analysis_metrics.tsv when inference results exist.",
             "info",
         ),
     ]
@@ -750,7 +750,7 @@ def _build_comprehensive_qc_report(
         ("Min cells per gene", _tip(f"QC_min_cells_per_gene = {params.get('QC_min_cells_per_gene', 'N/A')}", "Minimum gene support before inference: a fraction in [0, 1); zero retains genes detected in at least one cell.", code=True), "Resolved params"),
         ("Scrublet", _tip(f"ENABLE_SCRUBLET = {params.get('ENABLE_SCRUBLET', False)}", "Whether Scrublet doublet removal was enabled.", code=True), "Resolved params"),
         ("Hashing", _tip(f"ENABLE_DATA_HASHING = {params.get('ENABLE_DATA_HASHING', False)}", "Whether hashing demultiplexing was enabled.", code=True), "Resolved params"),
-        ("Inference mode", _tip(f"INFERENCE_method = {params.get('INFERENCE_method', 'N/A')}", "Configured inference method for cis/trans analysis.", code=True), "Resolved params"),
+        ("Inference mode", _tip(f"INFERENCE_method = {params.get('INFERENCE_method', 'N/A')}", "Configured inference method for local/global analysis.", code=True), "Resolved params"),
     ]
     parameter_html = "".join(
         f"<tr><td>{html.escape(name)}</td><td>{value}</td><td>{html.escape(source)}</td></tr>"
@@ -803,14 +803,14 @@ def _build_comprehensive_qc_report(
             "additional_qc/intended_target/intended_target_metrics.tsv",
         ),
         (
-            "Trans QC",
+            "Global analysis QC",
             (
                 f"{_display(trans_row.get('n_guides_tested'), digits=0)} guides tested; "
-                f"{_display(trans_row.get('total_significant_tests'), digits=0)} significant trans tests."
+                f"{_display(trans_row.get('total_significant_tests'), digits=0)} significant global-analysis tests."
                 if trans_row is not None
-                else "No trans QC metrics found."
+                else "No global-analysis QC metrics found."
             ),
-            "additional_qc/trans/trans_metrics.tsv",
+            "additional_qc/global_analysis/global_analysis_metrics.tsv",
         ),
         (
             "Benchmark",
@@ -827,7 +827,7 @@ def _build_comprehensive_qc_report(
         ("RNA preprocessing", "knee_plot_scRNA.png, scatterplot_scrna.png, violinplot_scrna.png, RNA threshold barplots."),
         ("Guide QC", "guide_knee_plot.png, guide histograms, guides per cell, cells per guide, guide UMI threshold plots."),
         ("Hashing QC", "Hashing SeqSpec plots, hashing demux UMAPs, HTO cell counts, and hashing barcode intersections when enabled."),
-        ("Inference QC", "Intended-target plots, trans distribution, volcano, PR/ROC, and direct-vs-control outputs when available."),
+        ("Inference QC", "Local-target plots, global-analysis distributions, volcano, PR/ROC, and direct-vs-control outputs when available."),
     ]
     asset_html = "".join(
         '<div class="qc-asset">'
@@ -1007,9 +1007,9 @@ def collect_additional_qc_blocks(additional_qc_dir):
             )
         )
 
-    # Trans QC
-    trans_dir = os.path.join(additional_qc_dir, "trans")
-    trans_metrics = _safe_read_tsv(os.path.join(trans_dir, "trans_metrics.tsv"))
+    # Global-analysis QC
+    trans_dir = os.path.join(additional_qc_dir, "global_analysis")
+    trans_metrics = _safe_read_tsv(os.path.join(trans_dir, "global_analysis_metrics.tsv"))
     trans_row = _get_all_row(trans_metrics)
     trans_highlight = ""
     if trans_row is not None:
@@ -1026,21 +1026,21 @@ def collect_additional_qc_blocks(additional_qc_dir):
     trans_images, trans_descs = _collect_images(
         trans_dir,
         [
-            ("trans_volcano.png", "Volcano plot of trans effects."),
-            ("trans_per_guide_distribution.png", "Distribution of trans effects per guide."),
-            ("trans_roc_pr_curves.png", "ROC/PR curves for validated trans links."),
+            ("global_analysis_volcano.png", "Volcano plot of global-analysis effects."),
+            ("global_analysis_per_guide_distribution.png", "Distribution of global-analysis effects per guide."),
+            ("global_analysis_roc_pr_curves.png", "ROC/PR curves for validated global-analysis links."),
         ],
     )
     if not trans_metrics.empty or trans_images:
         blocks.append(
             new_block(
                 "Inference",
-                "Trans-regulatory QC",
-                "Trans QC",
+                "Global analysis QC",
+                "Global analysis",
                 trans_highlight,
                 bool(trans_highlight),
                 table=trans_metrics,
-                table_description="Trans-regulatory QC metrics",
+                table_description="Global-analysis QC metrics",
                 image=trans_images,
                 image_description=trans_descs,
             )
@@ -1122,12 +1122,11 @@ def create_json_df(json_dir):
 
 
 def create_inference_blocks(mudata, use_default=False):
-    """Create inference blocks for either single test_results or separate cis/trans results"""
+    """Create inference blocks for either one result set or local/global results."""
     inference_blocks = []
 
     if use_default:
-        # Process both cis and trans results
-        for analysis_type in ['cis', 'trans']:
+        for analysis_type in ["local_analysis", "global_analysis"]:
             results_key = f"{analysis_type}_per_guide_results"
 
             if results_key in mudata.uns:
@@ -1136,7 +1135,7 @@ def create_inference_blocks(mudata, use_default=False):
 
                 pvalue_candidates = (
                     ["sceptre_p_value", "p_value", "perturbo_p_value"]
-                    if analysis_type == "cis"
+                    if analysis_type == "local_analysis"
                     else ["perturbo_p_value", "p_value", "sceptre_p_value"]
                 )
                 pvalue_col = next(
@@ -1155,17 +1154,18 @@ def create_inference_blocks(mudata, use_default=False):
 
 
 
-                gi_highlight = f"Top lowest pvalues  {str(n)} tested sgRNA-gene pairs ({analysis_type}): {inference_table.shape[0]}"
+                analysis_label = analysis_type.replace("_", " ").title()
+                gi_highlight = f"Top {str(n)} lowest-p-value tested sgRNA-gene pairs ({analysis_label}): {inference_table.shape[0]}"
 
-                gi_df = new_block('Inference', f'{analysis_type.capitalize()} Analysis', 'Guide Inference', gi_highlight, True, inference_table,
-                        table_description=f'{analysis_type.capitalize()} inference table (gene, guide, target name, lfc2, p-value, pair-type)')
+                gi_df = new_block('Inference', analysis_label, 'Guide Inference', gi_highlight, True, inference_table,
+                        table_description=f'{analysis_label} inference table (gene, guide, target name, log2FC, p-value, pair type)')
                 inference_blocks.append(gi_df)
             else:
                 print(f"Warning: {results_key} not found in mudata.uns")
     else:
         # Process single test_results
-        if 'cis_per_guide_results' in mudata.uns:
-            inference_table = pd.DataFrame({k: v for k, v in mudata.uns['cis_per_guide_results'].items()})
+        if 'local_analysis_per_guide_results' in mudata.uns:
+            inference_table = pd.DataFrame({k: v for k, v in mudata.uns['local_analysis_per_guide_results'].items()})
             
             gi_highlight = f"Total tested sgRNA-gene pairs: {inference_table.shape[0]}"
 
@@ -1173,7 +1173,7 @@ def create_inference_blocks(mudata, use_default=False):
                     table_description='Inference table (gene, guide, target name, lfc2, p-value, pair-type)')
             inference_blocks.append(gi_df)
         else:
-            print("Warning: cis_per_guide_results not found in mudata.uns")
+            print("Warning: local_analysis_per_guide_results not found in mudata.uns")
 
     return inference_blocks
 
@@ -1191,12 +1191,11 @@ def collect_evaluation_plots(use_default=False):
     
 
     if use_default:
-        # Look for cis and trans specific plots
         plot_configs = [
-            ('cis_sceptre', 'Cis Sceptre'),
-            ('cis_perturbo', 'Cis Perturbo'),
-            ('trans_sceptre', 'Trans Sceptre'),
-            ('trans_perturbo', 'Trans Perturbo')
+            ('local_analysis_sceptre', 'Local analysis SCEPTRE'),
+            ('local_analysis_perturbo', 'Local analysis PerTurbo'),
+            ('global_analysis_sceptre', 'Global analysis SCEPTRE'),
+            ('global_analysis_perturbo', 'Global analysis PerTurbo')
         ]
 
         for plot_prefix, plot_desc in plot_configs:
@@ -1409,7 +1408,7 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
                     image = ['figures/guides_per_cell_histogram.png', 'figures/cells_per_guide_histogram.png', 'figures/guides_UMI_thresholds.png'],
                     image_description=['Histogram of guides per cell.', 'Histogram of cells per guide.', 'Simulating the final number of cells with assigned guides using different minimal number thresholds (at least one guide > threshold value). (Use it to inspect how many cells would have assigned guides. This can be used to check if the final number of cells with guides fit with your expected number of cells)'])
 
-    ### Create guide inference blocks (handles both single and cis/trans)
+    ### Create guide inference blocks (handles single or local/global results)
     inference_blocks = create_inference_blocks(mudata, use_default)
 
     ### Create guide assignment df
@@ -1533,7 +1532,7 @@ def main():
     parser.add_argument('--additional_qc_dir', default=None, help='Path to Additional QC output directory')
     parser.add_argument('--benchmark_dir', default=None, help='Path to benchmark output directory (optional)')
     parser.add_argument('--default', action="store_true",
-                      help="Process mudata with cis_per_guide_results and trans_per_guide_results instead of single test_results")
+                      help="Process MuData with local- and global-analysis result keys instead of one result set")
     parser.add_argument('--qc_metrics_json', default=None, help='Write run-level QC metric descriptions and observed values to JSON')
     parser.add_argument('--output', type=str, default='all_df.pkl', help='Path to output pickle file')
 

@@ -12,7 +12,7 @@ NOTE: We use trans results (not cis) because:
   - For AUROC/AUPRC evaluation, we need non-targeting guide results as negative controls
 
 Data structures used:
-  - mdata.uns["trans_per_guide_results"]: DataFrame with trans test results
+  - mdata.uns["global_analysis_per_guide_results"]: DataFrame with global-analysis results
       Columns: guide_id, gene_id, sceptre_log2_fc, sceptre_p_value,
                perturbo_log2_fc, perturbo_p_value, ...
   - guide.var: Per-guide metadata
@@ -21,7 +21,7 @@ Data structures used:
   - gene.X or gene.layers[layer]: Gene expression matrix
 
 Processing steps:
-  1. Load trans_per_guide_results from mdata.uns
+  1. Load global_analysis_per_guide_results from mdata.uns
   2. Map intended_target_name from guide.var into results via guide_id
   3. Filter to "intended target" tests where gene_id == intended_target_name
   5. Compute knockdown metrics (strong knockdowns, significant tests)
@@ -141,7 +141,7 @@ def build_guide_meta(
 # ---------------------------------------------------------------------
 def load_inference_results(
     mdata: MuData,
-    results_key: str = "trans_per_guide_results",
+    results_key: str = "global_analysis_per_guide_results",
 ) -> pd.DataFrame:
     """
     Load perturbation inference results from MuData.uns.
@@ -152,7 +152,7 @@ def load_inference_results(
         MuData object.
     results_key : str
         Key in mdata.uns containing results DataFrame.
-        Default is "trans_per_guide_results" which includes all guide-gene pairs.
+        Default is "global_analysis_per_guide_results", which includes all guide-gene pairs.
 
     Returns
     -------
@@ -191,6 +191,8 @@ def resolve_results_key(mdata: MuData, results_key: str) -> str:
 
     # Prefer trans results, then generic per-guide results
     candidates = [
+        "global_analysis_per_guide_results",
+        "local_analysis_per_guide_results",
         "trans_per_guide_results",
         "per_guide_results",
         "cis_per_guide_results",
@@ -679,7 +681,7 @@ def run_intended_target_qc(
     input_path: str,
     outdir: str,
     guide_mod_key: str = "guide",
-    results_key: str = "trans_per_guide_results",
+    results_key: str = "global_analysis_per_guide_results",
     log2fc_col: str = "log2_fc",
     pvalue_col: str = "p_value",
     fc_threshold: float = 0.4,
@@ -699,8 +701,8 @@ def run_intended_target_qc(
     guide_mod_key : str
         Modality key for guide data.
     results_key : str
-        Key in mdata.uns for trans results (default: 'trans_per_guide_results').
-        We use trans results because they include all guide-gene pairs, including
+        Key in mdata.uns for global-analysis results.
+        We use global results because they include all guide-gene pairs, including
         non-targeting guides which are needed for AUROC/AUPRC evaluation.
     log2fc_col : str
         Column name for log2 fold change in results.
@@ -846,8 +848,8 @@ def parse_args() -> argparse.Namespace:
         help="Modality key for guide data (default: 'guide')."
     )
     parser.add_argument(
-        "--results-key", default="trans_per_guide_results",
-        help="Key in mdata.uns for results (default: 'trans_per_guide_results'). "
+        "--results-key", default="global_analysis_per_guide_results",
+        help="Key in mdata.uns for global-analysis results. "
              "Use 'auto' to pick the best available key."
     )
     parser.add_argument(

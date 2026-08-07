@@ -8,14 +8,14 @@ direct target. Optionally evaluates recovery of validated trans regulatory
 relationships using AUROC/AUPRC.
 
 Data structures used:
-  - mdata.uns["trans_per_guide_results"]: DataFrame with trans test results
+  - mdata.uns["global_analysis_per_guide_results"]: DataFrame with global-analysis results
       Columns: guide_id, gene_id, log2_fc, p_value
   - guide.var: Per-guide metadata
       Key columns: guide_id, intended_target_name, targeting
       Optional: gene_name (required for validated link evaluation)
 
 Processing steps:
-  1. Load trans_per_guide_results from mdata.uns
+  1. Load global_analysis_per_guide_results from mdata.uns
   2. Compute per-guide trans metrics (n_significant, median_log2fc, etc.)
   3. Compute overall summary metrics by guide type
   4. If validated_links provided:
@@ -304,7 +304,7 @@ def apply_fdr_correction(
 # ---------------------------------------------------------------------
 def load_inference_results(
     mdata: MuData,
-    results_key: str = "trans_per_guide_results",
+    results_key: str = "global_analysis_per_guide_results",
 ) -> pd.DataFrame:
     """
     Load perturbation inference results from MuData.uns.
@@ -352,6 +352,8 @@ def resolve_results_key(mdata: MuData, results_key: str) -> str:
         )
 
     candidates = [
+        "global_analysis_per_guide_results",
+        "local_analysis_per_guide_results",
         "trans_per_guide_results",
         "per_guide_results",
         "cis_per_guide_results",
@@ -360,7 +362,7 @@ def resolve_results_key(mdata: MuData, results_key: str) -> str:
     ]
     for key in candidates:
         if key in available:
-            logger.info(f"Using results key '{key}' for trans QC")
+            logger.info(f"Using results key '{key}' for global-analysis QC")
             return key
 
     raise ValueError(
@@ -715,7 +717,7 @@ def plot_roc_pr_curves(
     auroc: float,
     auprc: float,
     outdir: str,
-    prefix: str = "trans",
+    prefix: str = "global_analysis",
 ) -> None:
     """
     Plot ROC and Precision-Recall curves side by side.
@@ -967,14 +969,14 @@ def run_trans_qc(
     outdir: str,
     validated_links_path: Optional[str] = None,
     guide_mod_key: str = "guide",
-    results_key: str = "trans_per_guide_results",
+    results_key: str = "global_analysis_per_guide_results",
     log2fc_col: str = "log2_fc",
     pvalue_col: str = "p_value",
     pval_threshold: float = 0.05,
     fdr_method: str = "fdr_bh",
     non_targeting_name: str = "non-targeting",
     n_background: int = 10000,
-    prefix: str = "trans",
+    prefix: str = "global_analysis",
 ) -> None:
     """
     Run trans-regulatory inference QC.
@@ -1234,8 +1236,8 @@ def parse_args() -> argparse.Namespace:
         help="Modality key for guide data (default: 'guide')."
     )
     parser.add_argument(
-        "--results-key", default="trans_per_guide_results",
-        help="Key in mdata.uns for trans results (default: 'trans_per_guide_results'). Use 'auto' to detect."
+        "--results-key", default="global_analysis_per_guide_results",
+        help="Key in mdata.uns for global-analysis results. Use 'auto' to detect."
     )
     parser.add_argument(
         "--log2fc-col", default="log2_fc",
@@ -1267,8 +1269,8 @@ def parse_args() -> argparse.Namespace:
         help="Number of background points for volcano plot (default: 10000)."
     )
     parser.add_argument(
-        "--prefix", default="trans",
-        help="Prefix for output filenames (default: 'trans')."
+        "--prefix", default="global_analysis",
+        help="Prefix for output filenames (default: 'global_analysis')."
     )
     return parser.parse_args()
 

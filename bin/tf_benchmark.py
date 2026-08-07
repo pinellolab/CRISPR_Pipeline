@@ -40,9 +40,9 @@ ENSEMBL_GENE_NAME_MAP = {
 
 
 def _load_results(mdata):
-    results = mdata.uns.get("trans_per_element_results")
+    results = mdata.uns.get("global_analysis_per_element_results")
     if results is None:
-        raise ValueError("Missing trans_per_element_results in MuData.uns")
+        raise ValueError("Missing global_analysis_per_element_results in MuData.uns")
 
     if not isinstance(results, pd.DataFrame):
         results = pd.DataFrame(results)
@@ -50,7 +50,7 @@ def _load_results(mdata):
     results = normalize_tf_benchmark_results(results.drop_duplicates())
     if "intended_target_name" not in results.columns:
         if "guide_id" not in results.columns:
-            raise ValueError("Missing guide_id in trans_per_element_results.")
+            raise ValueError("Missing guide_id in global_analysis_per_element_results.")
         if "guide" not in mdata.mod:
             raise ValueError("Missing guide modality in MuData.")
         guide_to_target = mdata["guide"].var.get("intended_target_name")
@@ -137,7 +137,7 @@ def generate_tf_benchmark(
         ]
     )
     mapping_df.to_csv(os.path.join(tables_dir, "tf_peak_mapping.tsv"), sep="\t", index=False)
-    results.to_csv(os.path.join(tables_dir, "trans_per_element_results_used.tsv"), sep="\t", index=False)
+    results.to_csv(os.path.join(tables_dir, "global_analysis_per_element_results_used.tsv"), sep="\t", index=False)
 
     promoter_windows = [500, 1000, 2500, 5000, 10000]
 

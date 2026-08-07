@@ -22,6 +22,7 @@ from intended_target_key_utils import (
     enrich_pairs_with_target_metadata,
     get_target_lookup,
 )
+from result_table_io import write_result_table
 
 
 GENE_MODALITY = "gene"
@@ -343,8 +344,8 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
         element_df = convert_element_effects(element_effects, prepared, test_all_pairs=args.test_all_pairs)
         guide_df = convert_guide_effects(guide_effects, guide_name_map, prepared, test_all_pairs=args.test_all_pairs)
 
-        element_df.to_parquet(args.per_element_output, index=False)
-        guide_df.to_parquet(args.per_guide_output, index=False)
+        write_result_table(element_df, args.per_element_output)
+        write_result_table(guide_df, args.per_guide_output)
 
         mdata = md.read_h5mu(args.input)
         mdata.uns["per_element_results"] = make_h5mu_safe_dataframe(element_df)
@@ -367,8 +368,8 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--input", required=True, help="Input CRISPR_Pipeline MuData file")
-    parser.add_argument("--per-element-output", required=True, help="Output per-element table (Parquet)")
-    parser.add_argument("--per-guide-output", required=True, help="Output per-guide table (Parquet)")
+    parser.add_argument("--per-element-output", required=True, help="Output per-element table (.tsv.gz or .parquet, by extension)")
+    parser.add_argument("--per-guide-output", required=True, help="Output per-guide table (.tsv.gz or .parquet, by extension)")
     parser.add_argument("--output-mudata", required=True, help="Output MuData with result tables in .uns")
     parser.add_argument("--v2-artifact-dir", default=None, help="Optional directory for raw PerTurbo v2 artifacts")
     parser.add_argument("--test-all-pairs", action="store_true", help="Do not filter output to mdata.uns['pairs_to_test']")

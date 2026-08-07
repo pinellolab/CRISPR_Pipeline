@@ -10,6 +10,7 @@ from analysis_output_formatting import (
     format_guide_output,
     make_h5mu_safe_dataframe,
 )
+from result_table_io import read_result_table
 
 
 ELEMENT_BASE_KEYS = ["gene_id", "intended_target_name"]
@@ -117,23 +118,23 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     Args:
         sceptre_per_guide: Path to SCEPTRE per_guide_output.tsv
         sceptre_per_element: Path to SCEPTRE per_element_output.tsv  
-        perturbo_per_guide: Path to PerTurbo per_guide_output.parquet
-        perturbo_per_element: Path to PerTurbo per_element_output.parquet
+        perturbo_per_guide: Path to PerTurbo per_guide_output (.tsv.gz or .parquet)
+        perturbo_per_element: Path to PerTurbo per_element_output (.tsv.gz or .parquet)
         base_mudata_path: Path to base mudata file for structure
     """
     print("Loading input files...")
     
     # Load SCEPTRE results
-    sceptre_guide_df = pd.read_csv(sceptre_per_guide, sep='\t')
-    sceptre_element_df = pd.read_csv(sceptre_per_element, sep='\t')
+    sceptre_guide_df = read_result_table(sceptre_per_guide)
+    sceptre_element_df = read_result_table(sceptre_per_element)
     
     # Rename SCEPTRE columns to indicate method
     sceptre_guide_df = _add_sceptre_columns(sceptre_guide_df)
     sceptre_element_df = _add_sceptre_columns(sceptre_element_df)
     
-    # Load PerTurbo results (written as Parquet by perturbo_v2_pipeline_adapter.py)
-    perturbo_guide_df = pd.read_parquet(perturbo_per_guide)
-    perturbo_element_df = pd.read_parquet(perturbo_per_element)
+    # Load PerTurbo results
+    perturbo_guide_df = read_result_table(perturbo_per_guide)
+    perturbo_element_df = read_result_table(perturbo_per_element)
     
     # Rename PerTurbo columns to indicate method
     perturbo_guide_df = _add_perturbo_columns(perturbo_guide_df)
@@ -251,7 +252,7 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     # Load base mudata for structure
     base_mdata = mu.read_h5mu(base_mudata_path)
 
-    merged_guide_df = format_guide_output(merged_guide_df)
+    merged_guide_df = format_guide_output(merged_guide_df, base_mdata)
     merged_element_df = format_element_output(merged_element_df, base_mdata)
     
     # Store merged results in mudata
@@ -271,8 +272,8 @@ def main():
     parser = argparse.ArgumentParser(description='Merge SCEPTRE and PerTurbo results')
     parser.add_argument('--sceptre_per_guide', required=True, help='Path to SCEPTRE per_guide_output.tsv')
     parser.add_argument('--sceptre_per_element', required=True, help='Path to SCEPTRE per_element_output.tsv')
-    parser.add_argument('--perturbo_per_guide', required=True, help='Path to PerTurbo per_guide_output.tsv')
-    parser.add_argument('--perturbo_per_element', required=True, help='Path to PerTurbo per_element_output.tsv')
+    parser.add_argument('--perturbo_per_guide', required=True, help='Path to PerTurbo per_guide_output (.tsv.gz or .parquet)')
+    parser.add_argument('--perturbo_per_element', required=True, help='Path to PerTurbo per_element_output (.tsv.gz or .parquet)')
     parser.add_argument('--base_mudata', required=True, help='Path to base mudata file for structure')
     
     args = parser.parse_args()

@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import false_discovery_control
 from scipy import sparse
+from result_table_io import read_result_table, write_result_table
 
 ELEMENT_COLUMNS = [
     "intended_target_name",
@@ -22,13 +23,11 @@ OUTPUT_COLUMNS = [
     "sceptre_q_value",
     "sceptre_fc_se",
     "sceptre_negLog10p",
-    "sceptre_log10_p_value",
     "perturbo_log2_fc",
     "perturbo_p_value",
     "perturbo_q_value",
     "perturbo_fc_se",
     "perturbo_negLog10p",
-    "perturbo_log10_p_value",
     "element_id",
     "element_type",
     "element_chr",
@@ -36,6 +35,7 @@ OUTPUT_COLUMNS = [
     "element_end",
     "element_name",
     "guide_ids",
+    "num_guides",
     "gene_name",
     "gene_id",
     "nPerturbedCells",
@@ -151,8 +151,10 @@ def _build_element_metadata(guide) -> pd.DataFrame:
         ELEMENT_COLUMNS + ["_element_key"], dropna=False, as_index=False
     ).agg(
         guide_ids=("guide_id", _collapse_unique_strings),
+        num_guides=("guide_id", "nunique"),
         element_type=("type", _collapse_unique_strings),
     )
+    grouped["num_guides"] = grouped["num_guides"].astype("Int64")
 
     assignment = (
         guide.layers["guide_assignment"]
@@ -237,40 +239,40 @@ def _fill_gene_names(results: pd.DataFrame, mdata) -> pd.Series:
 
 
 def create_catalog_per_element(
-    cis_per_element: pd.DataFrame,
-    trans_per_element: pd.DataFrame,
+    local_analysis_per_element: pd.DataFrame,
+    global_analysis_per_element: pd.DataFrame,
     mdata,
     pvalue_floor: float = P_VALUE_FLOOR,
 ) -> pd.DataFrame:
-    cis = _normalize_element_columns(cis_per_element)
-    trans = _normalize_element_columns(trans_per_element)
+    local_results = _normalize_element_columns(local_analysis_per_element)
+    global_results = _normalize_element_columns(global_analysis_per_element)
 
-    cis["gene_id"] = cis["gene_id"].astype(str)
-    trans["gene_id"] = trans["gene_id"].astype(str)
+    local_results["gene_id"] = local_results["gene_id"].astype(str)
+    global_results["gene_id"] = global_results["gene_id"].astype(str)
 
     cis_fc_col = _first_existing_column(
-        cis, ["sceptre_log2_fc", "log2_fc"], "cis SCEPTRE log2_fc"
+        local_results, ["sceptre_log2_fc", "log2_fc"], "local-analysis SCEPTRE log2_fc"
     )
     cis_p_col = _first_existing_column(
-        cis, ["sceptre_p_value", "p_value"], "cis SCEPTRE p_value"
+        local_results, ["sceptre_p_value", "p_value"], "local-analysis SCEPTRE p_value"
     )
     cis_q_col = _first_existing_column_optional(
-        cis, ["sceptre_q_value", "q_value"]
+        local_results, ["sceptre_q_value", "q_value"]
     )
     cis_fc_se_col = _first_existing_column_optional(
-        cis, ["sceptre_fc_se", "se_fold_change"]
+        local_results, ["sceptre_fc_se", "se_fold_change"]
     )
     trans_fc_col = _first_existing_column(
-        trans, ["perturbo_log2_fc", "log2_fc"], "trans PerTurbo log2_fc"
+        global_results, ["perturbo_log2_fc", "log2_fc"], "global-analysis PerTurbo log2_fc"
     )
     trans_p_col = _first_existing_column(
-        trans, ["perturbo_p_value", "p_value"], "trans PerTurbo p_value"
+        global_results, ["perturbo_p_value", "p_value"], "global-analysis PerTurbo p_value"
     )
     trans_q_col = _first_existing_column_optional(
-        trans, ["perturbo_q_value", "q_value"]
+        global_results, ["perturbo_q_value", "q_value"]
     )
     trans_fc_se_col = _first_existing_column_optional(
-        trans, ["perturbo_fc_se", "log2_fc_std"]
+        global_results, ["perturbo_fc_se", "log2_fc_std"]
     )
 
     cis_metric_cols = [cis_fc_col, cis_p_col]
@@ -279,16 +281,16 @@ def create_catalog_per_element(
     if cis_fc_se_col is not None:
         cis_metric_cols.append(cis_fc_se_col)
 
-    cis_subset = cis[JOIN_COLUMNS + cis_metric_cols].copy()
+    cis_subset = local_results[JOIN_COLUMNS + cis_metric_cols].copy()
     trans_metric_cols = [trans_fc_col, trans_p_col]
     if trans_q_col is not None:
         trans_metric_cols.append(trans_q_col)
     if trans_fc_se_col is not None:
         trans_metric_cols.append(trans_fc_se_col)
 
-    trans_subset = trans[JOIN_COLUMNS + trans_metric_cols].copy()
-    _assert_unique_keys(cis_subset, JOIN_COLUMNS, "cis_per_element")
-    _assert_unique_keys(trans_subset, JOIN_COLUMNS, "trans_per_element")
+    trans_subset = global_results[JOIN_COLUMNS + trans_metric_cols].copy()
+    _assert_unique_keys(cis_subset, JOIN_COLUMNS, "local_analysis_per_element")
+    _assert_unique_keys(trans_subset, JOIN_COLUMNS, "global_analysis_per_element")
 
     cis_rename_cols = {
         cis_fc_col: "sceptre_log2_fc",
@@ -333,18 +335,18 @@ def create_catalog_per_element(
     merged["_element_key"] = _element_key(merged)
     element_meta = _build_element_metadata(mdata["guide"])
     merged = merged.merge(
-        element_meta[["_element_key", "guide_ids", "element_type", "nPerturbedCells"]],
+        element_meta[
+            ["_element_key", "guide_ids", "num_guides", "element_type", "nPerturbedCells"]
+        ],
         on="_element_key",
         how="left",
     )
 
     merged["sceptre_negLog10p"] = _neg_log10(merged["_sceptre_p_value"], pvalue_floor)
-    merged["sceptre_log10_p_value"] = merged["sceptre_negLog10p"]
     merged["sceptre_p_value"] = merged["_sceptre_p_value"]
     merged["perturbo_negLog10p"] = _neg_log10(
         merged["_perturbo_p_value"], pvalue_floor
     )
-    merged["perturbo_log10_p_value"] = merged["perturbo_negLog10p"]
     merged["perturbo_p_value"] = merged["_perturbo_p_value"]
 
     merged["element_name"] = merged["intended_target_name"]
@@ -366,30 +368,36 @@ def create_catalog_per_element(
 
 
 def build_catalog_per_element_output(
-    cis_per_element_path: str,
-    trans_per_element_path: str,
+    local_analysis_per_element_path: str,
+    global_analysis_per_element_path: str,
     mudata_path: str,
     output_path: str,
     pvalue_floor: float = P_VALUE_FLOOR,
 ) -> pd.DataFrame:
-    cis = pd.read_csv(cis_per_element_path, sep="\t")
-    trans = pd.read_csv(trans_per_element_path, sep="\t")
+    local_results = read_result_table(local_analysis_per_element_path)
+    global_results = read_result_table(global_analysis_per_element_path)
     mdata = mu.read_h5mu(mudata_path)
 
-    catalog = create_catalog_per_element(cis, trans, mdata, pvalue_floor=pvalue_floor)
-    catalog.to_csv(output_path, sep="\t", index=False, compression="gzip")
+    catalog = create_catalog_per_element(
+        local_results, global_results, mdata, pvalue_floor=pvalue_floor
+    )
+    write_result_table(catalog, output_path)
     return catalog
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build catalog per-element output table from cis SCEPTRE and trans PerTurbo results."
+        description="Build the catalog per-element table from local and global analysis results."
     )
     parser.add_argument(
-        "--cis_per_element", required=True, help="Path to cis per-element TSV(.gz)"
+        "--local_analysis_per_element",
+        required=True,
+        help="Path to local-analysis per-element TSV(.gz)",
     )
     parser.add_argument(
-        "--trans_per_element", required=True, help="Path to trans per-element TSV(.gz)"
+        "--global_analysis_per_element",
+        required=True,
+        help="Path to global-analysis per-element TSV(.gz)",
     )
     parser.add_argument(
         "--mudata", required=True, help="Path to inference MuData (h5mu)"
@@ -397,7 +405,7 @@ def main():
     parser.add_argument(
         "--output",
         default="catalog_per_element_output.tsv.gz",
-        help="Output path for catalog table (gzipped TSV)",
+        help="Output path for catalog table (.tsv[.gz] or .parquet)",
     )
     parser.add_argument(
         "--pvalue_floor",
@@ -408,8 +416,8 @@ def main():
 
     args = parser.parse_args()
     build_catalog_per_element_output(
-        cis_per_element_path=args.cis_per_element,
-        trans_per_element_path=args.trans_per_element,
+        local_analysis_per_element_path=args.local_analysis_per_element,
+        global_analysis_per_element_path=args.global_analysis_per_element,
         mudata_path=args.mudata,
         output_path=args.output,
         pvalue_floor=args.pvalue_floor,

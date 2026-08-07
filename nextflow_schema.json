@@ -363,6 +363,16 @@
                     "default": "normal",
                     "description": "Perturbation-effect prior passed to PerTurbo v2."
                 },
+                "INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT": {
+                    "type": "string",
+                    "default": "tsv.gz",
+                    "enum": [
+                        "tsv.gz",
+                        "parquet"
+                    ],
+                    "description": "Serialization format for trans PerTurbo result tables and chunk intermediates.",
+                    "help_text": "Use parquet for substantially faster result-table reads and writes. The PerTurbo execution environment must provide pyarrow."
+                },
                 "INFERENCE_SCEPTRE_side": {
                     "type": "string",
                     "default": "both",
