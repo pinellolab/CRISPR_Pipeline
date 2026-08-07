@@ -119,7 +119,7 @@ def combine_chunk_results(result_files, output_path):
 def write_results_mudata(base_mdata_path, output_path, inference_type, results_df):
     mdata = md.read(base_mdata_path)
     mdata.uns[f"per_{inference_type}_results"] = results_df
-    mdata.write(output_path, compression="gzip")
+    mdata.write(output_path)
 
 
 def run_perturbo_chunked(

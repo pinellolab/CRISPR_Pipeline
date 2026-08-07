@@ -167,7 +167,7 @@ def prepare_mudata_for_perturbo_v2(input_path: str | Path, output_path: str | Pa
     _ensure_covariates(mdata)
     _build_element_mapping(mdata)
     guide_name_map = _build_guide_identity_mapping(mdata)
-    mdata.write(output_path, compression="gzip")
+    mdata.write(output_path)
     return guide_name_map
 
 

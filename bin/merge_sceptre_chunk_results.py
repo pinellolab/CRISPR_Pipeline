@@ -169,7 +169,7 @@ def merge_sceptre_chunk_results(
     if chunk_manifest and os.path.exists(chunk_manifest):
         mdata.uns["sceptre_chunk_manifest"] = pd.read_csv(chunk_manifest, sep="\t")
 
-    mdata.write(output_mudata, compression="gzip")
+    mdata.write(output_mudata)
 
 
 def main():
