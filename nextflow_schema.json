@@ -77,6 +77,12 @@
                     "description": "Recommended 12 bp sequence immediately upstream of the guide spacer.",
                     "help_text": "Use this when the guide spacer is preceded by a constant adapter/tag sequence. A 12 bp tag is recommended because it is usually specific enough to anchor the guide read while still tolerating normal read quality. When provided, mappingGuide preserves the guide read ID from the seqspec but resets the guide feature start/end to 0,0 so kb can search the whole guide read for the tagged spacer. Set null or an empty string to rely strictly on the feature coordinates encoded in the guide seqspec."
                 },
+                "is_BaseEditing": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Use CRISPR-Correct ambiguous guide mapping for base-editing guide libraries.",
+                    "help_text": "Enable only for base-editing assays whose guide reads need ambiguity-aware spacer matching. Standard CRISPRi/a and knockout assays continue to use mappingGuide."
+                },
                 "scrna_workflow": {
                     "type": "string",
                     "default": "standard",

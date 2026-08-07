@@ -3,6 +3,8 @@ nextflow.enable.dsl=2
 include { seqSpecParser } from '../../../modules/local/seqSpecParser'
 include { createGuideRef } from '../../../modules/local/createGuideRef'
 include { mappingGuide } from '../../../modules/local/mappingGuide'
+include { mappingGuideBaseEditing } from '../../../modules/local/mappingGuideBaseEditing'
+
 include { anndata_concat } from '../../../modules/local/anndata_concat'
 
 workflow mapping_guide_pipeline {
@@ -24,19 +26,30 @@ workflow mapping_guide_pipeline {
 
     GuideRef = createGuideRef(ch_guide_design, reverse_complement_flag, spacer_tag)
 
-    bc_replacement_ch = params.replace_barcodes ? Channel.fromPath(params.bc_replacement_file).collect() : Channel.fromPath("dummy_bc_replacement.txt").collect()
+    if( params.is_BaseEditing ) {
+        MappingOut = mappingGuideBaseEditing(
+            ch_guide,
+            SeqSpecResult.parsed_seqspec,
+            SeqSpecResult.barcode_file,
+            params.is_10x3v3,
+            ch_guide_design
+        )
+    }
+    else {
+        bc_replacement_ch = params.replace_barcodes ? Channel.fromPath(params.bc_replacement_file).collect() : Channel.fromPath("dummy_bc_replacement.txt").collect()
 
-    MappingOut = mappingGuide(
-        ch_guide,
-        GuideRef.guide_index,
-        GuideRef.t2g_guide,
-        SeqSpecResult.parsed_seqspec,
-        SeqSpecResult.barcode_file,
-        bc_replacement_ch,
-        params.is_10x3v3,
-        params.ENABLE_DATA_HASHING,
-        spacer_tag
-    )
+        MappingOut = mappingGuide(
+            ch_guide,
+            GuideRef.guide_index,
+            GuideRef.t2g_guide,
+            SeqSpecResult.parsed_seqspec,
+            SeqSpecResult.barcode_file,
+            bc_replacement_ch,
+            params.is_10x3v3,
+            params.ENABLE_DATA_HASHING,
+            spacer_tag
+        )
+    }
 
     ks_guide_out_dir_collected = MappingOut.ks_guide_out_dir
         .collect()
