@@ -20,6 +20,8 @@ GCP_user_notebook.ipynb
 *.pyc
 __pycache__/
 .DS_Store
+.mplconfig/
+.cache/
 sample_metadata*
 .params_*.json
 .qc_sweep_tui_state*.json

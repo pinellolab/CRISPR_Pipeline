@@ -1,12 +1,22 @@
 #!/usr/bin/env python
 
+import os
+
+# The container's $HOME is read-only, so matplotlib/fontconfig can't create
+# their usual cache dirs there; without this they fall back to a fresh
+# random temp dir on every single invocation (spamming stderr with
+# "Read-only file system"/"No writable cache directories" and paying a
+# cache-rebuild cost each time). Point them at the task's own work dir,
+# which Nextflow always makes writable. Must happen before matplotlib import.
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(os.getcwd(), ".mplconfig"))
+os.environ.setdefault("XDG_CACHE_HOME", os.path.join(os.getcwd(), ".cache"))
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import argparse
 import gzip
 from collections import Counter
-import numpy as np  
-import os
+import numpy as np
 
 # Set style
 plt.style.use('ggplot')
@@ -79,74 +89,13 @@ def resolve_input_path(path):
         f"Candidates: {', '.join(sorted(os.path.relpath(candidate, path) for candidate in candidates))}"
     )
 
-SUPPORTED_SEQUENCE_EXTENSIONS = (
-    '.fastq.gz', '.fq.gz', '.fasta.gz', '.fa.gz',
-    '.fastq', '.fq', '.fasta', '.fa'
-)
-
-def infer_filetype(filename):
-    lower_filename = filename.lower()
-    if lower_filename.endswith(('.fastq.gz', '.fq.gz', '.fastq', '.fq')):
-        return 'fastq'
-    if lower_filename.endswith(('.fasta.gz', '.fa.gz', '.fasta', '.fa')):
-        return 'fasta'
-    return None
-
-def strip_sequence_extension(filename):
-    lower_filename = filename.lower()
-    for ext in SUPPORTED_SEQUENCE_EXTENSIONS:
-        if lower_filename.endswith(ext):
-            return filename[:-len(ext)]
-    return os.path.splitext(filename)[0]
-
-def resolve_input_path(path):
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"Input path does not exist: {path}")
-
-    if os.path.isfile(path):
-        return path
-
-    if not os.path.isdir(path):
-        raise ValueError(f"Input path is neither a file nor a directory: {path}")
-
-    candidates = []
-    for root, _, files in os.walk(path):
-        for name in files:
-            candidate = os.path.join(root, name)
-            if infer_filetype(candidate):
-                candidates.append(candidate)
-
-    if not candidates:
-        raise FileNotFoundError(
-            f"No FASTQ/FASTA file found inside directory input: {path}"
-        )
-
-    dir_stem = strip_sequence_extension(os.path.basename(os.path.normpath(path))).lower()
-    stem_matches = [
-        candidate for candidate in candidates
-        if strip_sequence_extension(os.path.basename(candidate)).lower() == dir_stem
-    ]
-    if len(stem_matches) == 1:
-        return stem_matches[0]
-
-    if len(candidates) == 1:
-        return candidates[0]
-
-    raise ValueError(
-        f"Directory input contains multiple FASTQ/FASTA files: {path}. "
-        f"Candidates: {', '.join(sorted(os.path.relpath(candidate, path) for candidate in candidates))}"
-    )
-
 def is_gzipped(filename):
-    if not os.path.isfile(filename):
-        return False
     if not os.path.isfile(filename):
         return False
     with open(filename, 'rb') as f:
         return f.read(2) == b'\x1f\x8b'
 
 def open_file(filename, mode='rt'):
-    filename = resolve_input_path(filename)
     filename = resolve_input_path(filename)
     if is_gzipped(filename):
         return gzip.open(filename, mode)
@@ -170,8 +119,6 @@ def readFastq(filename, max_reads):
     except (FileNotFoundError, ValueError, OSError) as exc:
         print(f"Warning: skipping unreadable input {filename}: {exc}")
         return []
-    filetype = infer_filetype(filename)
-    filename = resolve_input_path(filename)
     filetype = infer_filetype(filename)
 
     with open_file(filename) as fh:
@@ -238,28 +185,54 @@ def fastq_sequence_plot(seqs, file_name, ax):
     ax.set_ylabel('Freq', fontsize=8)
     ax.tick_params(axis='both', labelsize=8)
 
+def _group_guides_by_length(guide_list):
+    guides_by_length = {}
+    for g in guide_list:
+        guides_by_length.setdefault(len(g), set()).add(g)
+    return guides_by_length, sorted(guides_by_length)
+
+def _find_leftmost_guide(seq, guides_by_length, lengths):
+    """Return (index, guide) for the leftmost position in seq where any guide
+    in guides_by_length matches, or (None, None) if there's no match."""
+    seq_len = len(seq)
+    for idx in range(seq_len):
+        for length in lengths:
+            if idx + length > seq_len:
+                continue
+            window = seq[idx:idx + length]
+            if window in guides_by_length[length]:
+                return idx, window
+    return None, None
+
 def analyze_guides_in_reads(reads, guide_list):
+    """Find, for each read, the leftmost position matching any guide.
+
+    Guides are bucketed by length so each read is scanned with one sliding
+    window per distinct guide length and O(1) set lookups, instead of a
+    linear seq.find() per guide -- O(read_length) per read rather than
+    O(guides * read_length), independent of guide-library size.
+    """
     positions = []
     upstream_map = {}
     guide_hits = Counter({g: 0 for g in guide_list})
-    
+
     if not reads or not guide_list:
         return positions, upstream_map, guide_hits
 
+    guides_by_length, lengths = _group_guides_by_length(guide_list)
+
     for seq in reads:
-        for guide in guide_list:
-            idx = seq.find(guide)
-            if idx != -1:
-                positions.append(idx)
-                guide_hits[guide] += 1
-                start_cut = max(0, idx - 12)
-                upstream_fragment = seq[start_cut:idx]
-                if len(upstream_fragment) < 12:
-                    padding = '-' * (12 - len(upstream_fragment))
-                    upstream_fragment = padding + upstream_fragment
-                if idx not in upstream_map: upstream_map[idx] = []
-                upstream_map[idx].append(upstream_fragment)
-                break 
+        idx, guide = _find_leftmost_guide(seq, guides_by_length, lengths)
+        if guide is None:
+            continue
+        positions.append(idx)
+        guide_hits[guide] += 1
+        start_cut = max(0, idx - 12)
+        upstream_fragment = seq[start_cut:idx]
+        if len(upstream_fragment) < 12:
+            padding = '-' * (12 - len(upstream_fragment))
+            upstream_fragment = padding + upstream_fragment
+        upstream_map.setdefault(idx, []).append(upstream_fragment)
     return positions, upstream_map, guide_hits
 
 def plot_positions(positions, title, ax, highlight=False):
