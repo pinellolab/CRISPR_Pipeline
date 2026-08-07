@@ -12,7 +12,6 @@ from analysis_output_formatting import (
     format_guide_output,
     make_h5mu_safe_dataframe,
 )
-from mudata_uns_io import write_uns_patch
 from result_table_io import read_result_table, write_result_table
 
 
@@ -83,27 +82,25 @@ def merge_local_global_results(
     global_per_element = format_element_output(global_per_element, base_mdata)
 
     print(f"Writing merged MuData to {output_path}...")
-    # Only .uns changes here -- patch it in place on a copy of base_mudata_path
-    # rather than doing a full MuData read + write, which would re-serialize
-    # every assay matrix just to attach/drop a few result tables.
-    write_uns_patch(
-        base_mudata_path,
-        output_path,
-        updates={
-            "local_analysis_per_guide_results": make_h5mu_safe_dataframe(local_per_guide),
-            "local_analysis_per_element_results": make_h5mu_safe_dataframe(local_per_element),
-            "global_analysis_per_guide_results": make_h5mu_safe_dataframe(global_per_guide),
-            "global_analysis_per_element_results": make_h5mu_safe_dataframe(global_per_element),
-        },
-        deletes=(
-            "per_guide_results",
-            "per_element_results",
-            "cis_per_guide_results",
-            "cis_per_element_results",
-            "trans_per_guide_results",
-            "trans_per_element_results",
-        ),
-    )
+    # This is the final published MuData (mergeMudata's own publishDir), and
+    # its .uns result tables are large -- unlike the fast, uncompressed
+    # write_uns_patch used for intermediates elsewhere in the pipeline, this
+    # one deliberately re-serializes with gzip so the published artifact
+    # isn't stored uncompressed on disk.
+    base_mdata.uns["local_analysis_per_guide_results"] = make_h5mu_safe_dataframe(local_per_guide)
+    base_mdata.uns["local_analysis_per_element_results"] = make_h5mu_safe_dataframe(local_per_element)
+    base_mdata.uns["global_analysis_per_guide_results"] = make_h5mu_safe_dataframe(global_per_guide)
+    base_mdata.uns["global_analysis_per_element_results"] = make_h5mu_safe_dataframe(global_per_element)
+    for obsolete_key in (
+        "per_guide_results",
+        "per_element_results",
+        "cis_per_guide_results",
+        "cis_per_element_results",
+        "trans_per_guide_results",
+        "trans_per_element_results",
+    ):
+        base_mdata.uns.pop(obsolete_key, None)
+    base_mdata.write(output_path, compression="gzip")
 
     extension = "parquet" if results_format == "parquet" else "tsv.gz"
     write_result_table(local_per_guide, f"local_analysis_per_guide_output.{extension}")

@@ -2,6 +2,7 @@ import pathlib
 import sys
 
 import anndata as ad
+import h5py
 import mudata as mu
 import numpy as np
 import pandas as pd
@@ -282,15 +283,24 @@ def test_merge_local_global_results_writes_q_columns_to_outputs_and_mudata(
     _write_tsv(trans_element, paths["trans_element"])
 
     monkeypatch.chdir(tmp_path)
+    output_mudata_path = tmp_path / "inference_mudata.h5mu"
     merge_local_global_results.merge_local_global_results(
         str(paths["cis_guide"]),
         str(paths["cis_element"]),
         str(paths["trans_guide"]),
         str(paths["trans_element"]),
         str(base_mudata),
-        str(tmp_path / "inference_mudata.h5mu"),
+        str(output_mudata_path),
         results_format="tsv.gz",
     )
+
+    # This is the final published MuData (mergeMudata's own publishDir); its
+    # .uns tables are the whole reason we deliberately pay a full
+    # re-serialize here instead of the fast uncompressed patch used for
+    # intermediates elsewhere -- confirm gzip is actually applied on disk,
+    # not just requested.
+    with h5py.File(output_mudata_path, "r") as f:
+        assert f["mod/gene/X"].compression == "gzip"
 
     cis_observed = pd.read_csv(tmp_path / "local_analysis_per_element_output.tsv.gz", sep="\t")
     cis_guide_observed = pd.read_csv(tmp_path / "local_analysis_per_guide_output.tsv.gz", sep="\t")
