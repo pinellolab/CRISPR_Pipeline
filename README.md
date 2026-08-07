@@ -135,6 +135,13 @@ Demo mode is strictly for pre-runs. The pipeline prints warnings at startup and 
 | `is_10x3v3` | `true` | `true`, `false` | Controls 10x Genomics 3' v3 feature-barcode chemistry (`10XV3`, `kite:10xFB`) for guide or hashing mapping depending on `ENABLE_DATA_HASHING`. RNA mapping always uses the RNA seqspec. Case 1: when `ENABLE_DATA_HASHING = false` and `is_10x3v3 = true`, guide mapping uses the 10x v3 feature-barcode kb settings instead of deriving guide chemistry from the guide seqspec. Case 2: when `ENABLE_DATA_HASHING = true` and `is_10x3v3 = true`, guide and RNA mapping use their seqspecs, while hash/HTO mapping uses the 10x v3 feature-barcode kb settings. This second case supports 10x v3 HTO data where barcode replacement/translation may be needed so hash, RNA, and guide barcodes match downstream. |
 | `reverse_complement_guides` | `false` | `true`, `false` | Reverse-complements guide spacer sequences while building the guide reference, preserving the metadata fields. |
 | `spacer_tag` | `GAGTACATGGGG` | DNA sequence, empty string, or `null` | Recommended 12 bp sequence immediately upstream of the guide spacer. When provided, guide mapping searches the whole guide read around this tag instead of relying only on fixed seqspec feature coordinates. |
+| `is_BaseEditing` | `false` | `true`, `false` | Enables ambiguity-aware base-editing guide mapping. When false, the standard CRISPR guide mapper is used. |
+| `BASEEDITING_method` | `legacy` | `legacy`, `flash` | Selects the original CRISPR-Correct mapper or the faster streaming FLASH mapper when `is_BaseEditing = true`. |
+| `BASEEDITING_FLASH_tolerance` | `5` | Integer `>= 0` | Maximum Hamming distance accepted by the FLASH guide matcher. |
+| `BASEEDITING_FLASH_guide_len` | `0` | Integer `>= 0` | Guide length used by FLASH; `0` infers the length from the guide metadata. |
+| `BASEEDITING_FLASH_device` | `auto` | `auto`, `cpu`, `cuda`, `cuda:N`, or GPU index | Device used by the FLASH matcher. `auto` selects an available accelerator and otherwise uses CPU. |
+| `BASEEDITING_FLASH_fastq_chunk_size` | `200000` | Integer `>= 1` | Number of paired FASTQ records streamed into each FLASH processing chunk. |
+| `BASEEDITING_FLASH_gpu_read_chunk` | `4096` | Integer `>= 1` | Dense guide-matching sub-chunk size on the selected CPU or GPU device. Reduce it if accelerator memory is insufficient. |
 | `scrna_workflow` | `standard` | `standard`, `nac` | Selects the kb count RNA workflow. `standard` performs mature transcript counting; `nac` performs nascent-aware counting with cDNA and nascent references for unspliced/nascent signal. |
 | `use_multimapping` | `false` | `true`, `false` | Passes kb count multimapping mode for scRNA mapping and keeps that setting during AnnData concatenation. |
 | `replace_barcodes` | `false` | `true`, `false` | Enables the CC-Perturb-seq barcode replacement strategy during RNA and guide mapping. When enabled, kb receives the replacement table and downstream concatenation reads `counts_unfiltered_modified`. |
@@ -195,7 +202,7 @@ The complete machine-readable QC output catalog is available as
 | `INFERENCE_PERTURBO_SIZE_FACTOR_MODE` | `observed` | PerTurbo size-factor mode | Size-factor handling passed to PerTurbo v2. |
 | `INFERENCE_PERTURBO_LIKELIHOOD` | `negbin` | PerTurbo likelihood name | Likelihood family passed to PerTurbo v2. |
 | `INFERENCE_PERTURBO_PRIOR` | `normal` | PerTurbo prior name | Perturbation-effect prior passed to PerTurbo v2. |
-| `INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT` | `tsv.gz` | `tsv.gz`, `parquet` | Serialization used for the global-analysis (all-by-all) PerTurbo v2 result tables and the final local/global/catalog result tables. `parquet` requires `pyarrow` and greatly reduces result-table I/O time on large tables. |
+| `INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT` | `parquet` | `tsv.gz`, `parquet` | Serialization used for the global-analysis (all-by-all) PerTurbo v2 result tables and the final local/global/catalog result tables. Requires `pyarrow` in the base image (pinned by default); set `tsv.gz` for compatibility with older images. |
 | `INFERENCE_SCEPTRE_side` | `both` | `both`, `left`, `right` | Alternative-hypothesis side passed to SCEPTRE inference. |
 | `INFERENCE_SCEPTRE_grna_integration_strategy` | `union` | SCEPTRE strategy string | Guide RNA integration strategy passed to SCEPTRE inference. |
 | `INFERENCE_SCEPTRE_resampling_approximation` | `skew_normal` | SCEPTRE approximation string | Resampling approximation passed to SCEPTRE inference. |

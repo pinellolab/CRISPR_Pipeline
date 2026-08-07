@@ -289,6 +289,7 @@ def test_merge_local_global_results_writes_q_columns_to_outputs_and_mudata(
         str(paths["trans_element"]),
         str(base_mudata),
         str(tmp_path / "inference_mudata.h5mu"),
+        results_format="tsv.gz",
     )
 
     cis_observed = pd.read_csv(tmp_path / "local_analysis_per_element_output.tsv.gz", sep="\t")

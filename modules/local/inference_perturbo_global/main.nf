@@ -1,5 +1,5 @@
 
-process inference_perturbo_trans {
+process inference_perturbo_global {
     cache 'lenient'
     publishDir path: {
         def out = params.outdir?.toString() ?: './pipeline_outputs'
@@ -8,12 +8,12 @@ process inference_perturbo_trans {
             return out
         }
         return "${out}/pipeline_outputs"
-    }, enabled: { params.INFERENCE_method == 'perturbo_trans' }
+    }, enabled: { params.INFERENCE_method == 'perturbo_global' }
 
     input:
     path mudata
     val inference_method
-    val dummy // fake dependency to force this to run after cis analysis
+    val dummy // fake dependency to force this to run after local analysis
 
     output:
     path "inference_mudata.h5mu", emit: inference_mudata
@@ -23,7 +23,7 @@ process inference_perturbo_trans {
 
     script:
         def save_model_params_arg = params.INFERENCE_PERTURBO_SAVE_MODEL_PARAMS ? '--save-model-params' : '--no-save-model-params'
-        def results_ext = params.INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT == 'parquet' ? 'parquet' : 'tsv.gz'
+        def results_ext = params.INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT == 'parquet' ? 'parquet' : 'tsv.gz'
         """
         perturbo_v2_pipeline_adapter.py \\
             --input ${mudata} \\
