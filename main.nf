@@ -112,8 +112,10 @@ workflow {
             params.ENABLE_DATA_HASHING
         )
 
-        PIPELINE_INITIALISATION.out.samplesheet.view { meta, fastqs ->
-            "Sample: ${meta.id}, Single-end: ${meta.single_end}, Files: ${fastqs}"
+        if (params.DEBUG_VAR) {
+            PIPELINE_INITIALISATION.out.samplesheet.view { meta, fastqs ->
+                "Sample: ${meta.id}, Single-end: ${meta.single_end}, Files: ${fastqs}"
+            }
         }
 
         //

@@ -55,7 +55,10 @@ workflow prepare_mapping_pipeline {
             ])
             return json
         }
-        .view {"Covariate_list: $it"}
+
+    if (params.DEBUG_VAR) {
+        covariate_list.view { "Covariate_list: $it" }
+    }
 
     Prepare_covariate = prepare_covariate(covariate_list)
 
