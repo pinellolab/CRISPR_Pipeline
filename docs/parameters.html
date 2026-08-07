@@ -320,7 +320,7 @@
 <tbody>
 <tr>
 <td><code>INFERENCE_method</code></td>
-<td>Inference method to run. (accepted: <code>default</code>|<code>sceptre</code>|<code>perturbo</code>|<code>sceptre,perturbo</code>) <details><summary>Help</summary><small>default runs cis SCEPTRE, cis PerTurbo, trans PerTurbo, and writes the merged cis/trans output tables. sceptre runs SCEPTRE only. perturbo runs PerTurbo only. sceptre,perturbo runs both methods on the same cis pair set.</small></details></td>
+<td>Inference method to run. (accepted: <code>default</code>|<code>sceptre</code>|<code>perturbo</code>|<code>sceptre,perturbo</code>) <details><summary>Help</summary><small>default runs local SCEPTRE, local PerTurbo, global PerTurbo, and writes the merged local/global output tables. sceptre runs SCEPTRE only. perturbo runs PerTurbo only. sceptre,perturbo runs both methods on the same cis pair set.</small></details></td>
 <td><code>string</code></td>
 <td>default</td>
 <td></td>
@@ -368,7 +368,7 @@
 </tr>
 <tr>
 <td><code>INFERENCE_PERTURBO_MAX_CHUNK_CELLS</code></td>
-<td>Maximum cells sent to a PerTurbo v2 fit at once. <details><summary>Help</summary><small>This is the primary GPU-memory knob for cis and trans runs; PerTurbo minibatching is intentionally disabled by the pipeline.</small></details></td>
+<td>Maximum cells sent to a PerTurbo v2 fit at once. <details><summary>Help</summary><small>This is the primary GPU-memory knob for local and global runs; PerTurbo minibatching is intentionally disabled by the pipeline.</small></details></td>
 <td><code>integer</code></td>
 <td>20000</td>
 <td></td>

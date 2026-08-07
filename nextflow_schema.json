@@ -311,7 +311,7 @@
                         "sceptre,perturbo"
                     ],
                     "description": "Inference method to run.",
-                    "help_text": "default runs cis SCEPTRE, cis PerTurbo, trans PerTurbo, and writes the merged cis/trans output tables. sceptre runs SCEPTRE only. perturbo runs PerTurbo only. sceptre,perturbo runs both methods on the same cis pair set."
+                    "help_text": "default runs local SCEPTRE, local PerTurbo, global PerTurbo, and writes the merged local/global output tables. sceptre runs SCEPTRE only. perturbo runs PerTurbo only. sceptre,perturbo runs both methods on the same cis pair set."
                 },
                 "INFERENCE_input_mudata": {
                     "type": [
@@ -363,7 +363,7 @@
                     "default": 20000,
                     "minimum": 1,
                     "description": "Maximum cells sent to a PerTurbo v2 fit at once.",
-                    "help_text": "This is the primary GPU-memory knob for cis and trans runs; PerTurbo minibatching is intentionally disabled by the pipeline."
+                    "help_text": "This is the primary GPU-memory knob for local and global runs; PerTurbo minibatching is intentionally disabled by the pipeline."
                 },
                 "INFERENCE_PERTURBO_NUM_STEPS_CONTROL": {
                     "type": "integer",
@@ -405,7 +405,7 @@
                         "tsv.gz",
                         "parquet"
                     ],
-                    "description": "Serialization format for trans PerTurbo result tables and chunk intermediates.",
+                    "description": "Serialization format for global PerTurbo result tables and chunk intermediates.",
                     "help_text": "Use parquet for substantially faster result-table reads and writes. The PerTurbo execution environment must provide pyarrow."
                 },
                 "INFERENCE_SCEPTRE_side": {
