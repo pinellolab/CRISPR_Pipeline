@@ -833,12 +833,27 @@ def build_output_anndata(
     x_unique = sp.csr_matrix((vals, (rows, cols)), shape=(n_cells, n_guides_unique), dtype=np.int32)
     x_output = x_unique[:, output_to_unique] if len(output_to_unique) else sp.csr_matrix((n_cells, 0), dtype=np.int32)
 
+    raw_guide_ids = guide_df["guide_id"]
+    if raw_guide_ids.isna().any():
+        raise ValueError("guide_id values must be non-empty before writing AnnData.")
+    guide_ids = raw_guide_ids.astype(str)
+    if guide_ids.str.strip().eq("").any():
+        raise ValueError("guide_id values must be non-empty before writing AnnData.")
+    if guide_ids.duplicated().any():
+        duplicates = guide_ids[guide_ids.duplicated(keep=False)].unique().tolist()
+        raise ValueError(
+            "guide_id values must be unique before writing AnnData. "
+            f"Duplicate examples: {duplicates[:10]}"
+        )
+
     adata = ad.AnnData(
         X=x_output,
         obs=pd.DataFrame(index=[barcode_key_to_str[int(cell_key)] for cell_key in cell_keys]),
-        var=pd.DataFrame(index=pd.Index([str(seq) for seq in raw_spacers])),
+        var=pd.DataFrame(
+            {"spacer": [str(seq) for seq in raw_spacers]},
+            index=pd.Index(guide_ids, name="guide_id"),
+        ),
     )
-    adata.var["guide_id"] = guide_df["guide_id"].astype(str).values
     return adata
 
 

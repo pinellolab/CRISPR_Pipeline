@@ -183,6 +183,11 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
     # rename gene_id in guide
     adata_guide.var.rename(columns={"gene_id": "guide_id"}, inplace=True)
     adata_guide.var.rename(columns={"feature_id": "guide_id"}, inplace=True)
+    if "guide_id" not in adata_guide.var.columns:
+        raise ValueError(
+            "Guide AnnData has no canonical guide_id feature index. Expected "
+            "var_names named 'guide_id', 'gene_id', or 'feature_id'."
+        )
 
     # check if the lengths are the same
     if len(guide_metadata) != len(adata_guide.var):

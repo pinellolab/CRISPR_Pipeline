@@ -28,6 +28,43 @@ def assert_unique_obs_names(adata, label):
     )
 
 
+def normalize_feature_index(adata, label):
+    """Promote an explicit guide_id column to the canonical feature index.
+
+    Older FLASH base-editing mapper outputs used spacer sequences as ``var_names``
+    and stored the stable guide identifier in ``adata.var['guide_id']``. AnnData's
+    on-disk concatenation does not preserve that auxiliary column by default, so
+    normalize those cached outputs before concatenation.
+    """
+    if "guide_id" not in adata.var.columns:
+        return
+
+    guide_ids = adata.var["guide_id"]
+    missing = guide_ids.isna() | guide_ids.astype(str).str.strip().eq("")
+    if missing.any():
+        raise ValueError(
+            f"{label} contains {int(missing.sum())} empty guide_id values."
+        )
+
+    guide_ids = guide_ids.astype(str)
+    duplicates = guide_ids[guide_ids.duplicated(keep=False)].unique().tolist()
+    if duplicates:
+        raise ValueError(
+            f"{label} contains duplicate guide_id values. "
+            "Duplicate examples: " + ", ".join(duplicates[:10])
+        )
+
+    previous_index = pd.Index(adata.var_names.astype(str))
+    if "spacer" not in adata.var.columns and all(
+        re.fullmatch(r"[ACGTNacgtn]+", value) for value in previous_index
+    ):
+        adata.var["spacer"] = previous_index.str.upper().to_numpy()
+
+    adata.var.drop(columns=["guide_id"], inplace=True)
+    adata.var_names = pd.Index(guide_ids, name="guide_id")
+    print(f"Normalized {label} feature index from guide_id column")
+
+
 def get_barcode_key(covariates, batch_col, batch_num):
     key_col = "barcode_key" if "barcode_key" in covariates.columns else "concat_batch"
     if key_col not in covariates.columns:
@@ -125,6 +162,11 @@ def main():
         help="Multi-mapping specification (true/false)",
         default="false",
     )
+    parser.add_argument(
+        "--normalize-feature-index",
+        action="store_true",
+        help="Promote an explicit guide_id var column to the canonical feature index.",
+    )
 
     args = parser.parse_args()
 
@@ -154,6 +196,8 @@ def main():
         print(f"Processing {h5ad_path}")
 
         adata = ad.read_h5ad(h5ad_path)
+        if args.normalize_feature_index:
+            normalize_feature_index(adata, h5ad_path)
         if all(
             layer in adata.layers
             for layer in ["mature", "nascent", "ambiguous"]
