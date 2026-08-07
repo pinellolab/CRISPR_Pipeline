@@ -12,6 +12,7 @@ from analysis_output_formatting import (
     format_guide_output,
     make_h5mu_safe_dataframe,
 )
+from mudata_uns_io import write_uns_patch
 from result_table_io import read_result_table, write_result_table
 
 
@@ -82,25 +83,30 @@ def merge_local_global_results(
     global_per_element = format_element_output(global_per_element, base_mdata)
 
     print(f"Writing merged MuData to {output_path}...")
-    # This is the final published MuData (mergeMudata's own publishDir), and
-    # its .uns result tables are large -- unlike the fast, uncompressed
-    # write_uns_patch used for intermediates elsewhere in the pipeline, this
-    # one deliberately re-serializes with gzip so the published artifact
-    # isn't stored uncompressed on disk.
-    base_mdata.uns["local_analysis_per_guide_results"] = make_h5mu_safe_dataframe(local_per_guide)
-    base_mdata.uns["local_analysis_per_element_results"] = make_h5mu_safe_dataframe(local_per_element)
-    base_mdata.uns["global_analysis_per_guide_results"] = make_h5mu_safe_dataframe(global_per_guide)
-    base_mdata.uns["global_analysis_per_element_results"] = make_h5mu_safe_dataframe(global_per_element)
-    for obsolete_key in (
+    # make_h5mu_safe_dataframe encodes the low-cardinality string columns in
+    # these tables (gene/guide ids, target names, chromosomes, pair types) as
+    # categoricals, which captures most of the disk-size win gzip would
+    # otherwise be relied on for. That makes the fast write_uns_patch path
+    # (byte-copy the matrices, patch only /uns) the better trade here instead
+    # of a full compressed re-serialize.
+    updates = {
+        "local_analysis_per_guide_results": make_h5mu_safe_dataframe(local_per_guide),
+        "local_analysis_per_element_results": make_h5mu_safe_dataframe(local_per_element),
+        "global_analysis_per_guide_results": make_h5mu_safe_dataframe(global_per_guide),
+        "global_analysis_per_element_results": make_h5mu_safe_dataframe(global_per_element),
+    }
+    obsolete_keys = (
         "per_guide_results",
         "per_element_results",
         "cis_per_guide_results",
         "cis_per_element_results",
         "trans_per_guide_results",
         "trans_per_element_results",
-    ):
-        base_mdata.uns.pop(obsolete_key, None)
-    base_mdata.write(output_path, compression="gzip")
+    )
+    base_mdata.file.close()
+    write_uns_patch(
+        base_mudata_path, output_path, updates=updates, deletes=obsolete_keys
+    )
 
     extension = "parquet" if results_format == "parquet" else "tsv.gz"
     write_result_table(local_per_guide, f"local_analysis_per_guide_output.{extension}")

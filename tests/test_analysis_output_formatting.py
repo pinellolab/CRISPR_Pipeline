@@ -42,3 +42,23 @@ def test_make_h5mu_safe_dataframe_converts_nullable_strings_to_object():
     assert safe["intended_target_name"].dtype == object
     assert safe.loc[0, "intended_target_name"] == "target1"
     assert safe.loc[1, "intended_target_name"] == ""
+
+
+def test_make_h5mu_safe_dataframe_categorizes_low_cardinality_columns():
+    n = 1000
+    results = pd.DataFrame(
+        {
+            # Only 3 unique values across 1000 rows -- should categorize.
+            "pair_type": ["discovery", "positive_control", "negative_control"] * (n // 3)
+            + ["discovery"],
+            # Every value unique -- should stay plain object, not categorical.
+            "guide_id": [f"guide_{i}" for i in range(n)],
+            "p_value": np.linspace(0, 1, n),
+        }
+    )
+
+    safe = make_h5mu_safe_dataframe(results)
+
+    assert isinstance(safe["pair_type"].dtype, pd.CategoricalDtype)
+    assert safe["pair_type"].tolist() == results["pair_type"].tolist()
+    assert safe["guide_id"].dtype == object

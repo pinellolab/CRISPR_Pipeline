@@ -294,13 +294,15 @@ def test_merge_local_global_results_writes_q_columns_to_outputs_and_mudata(
         results_format="tsv.gz",
     )
 
-    # This is the final published MuData (mergeMudata's own publishDir); its
-    # .uns tables are the whole reason we deliberately pay a full
-    # re-serialize here instead of the fast uncompressed patch used for
-    # intermediates elsewhere -- confirm gzip is actually applied on disk,
-    # not just requested.
+    # This is the final published MuData (mergeMudata's own publishDir). It's
+    # written via the fast write_uns_patch path (byte-copy + patch /uns only)
+    # rather than a full compressed re-serialize -- confirm the assay matrix
+    # is untouched (no compression newly applied by this step). Categorical
+    # encoding of low-cardinality .uns columns is covered by
+    # test_analysis_output_formatting.py's make_h5mu_safe_dataframe tests;
+    # this fixture is too small (2 rows) for the cardinality guard to kick in.
     with h5py.File(output_mudata_path, "r") as f:
-        assert f["mod/gene/X"].compression == "gzip"
+        assert f["mod/gene/X"].compression is None
 
     cis_observed = pd.read_csv(tmp_path / "local_analysis_per_element_output.tsv.gz", sep="\t")
     cis_guide_observed = pd.read_csv(tmp_path / "local_analysis_per_guide_output.tsv.gz", sep="\t")

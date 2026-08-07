@@ -4,6 +4,7 @@ import argparse
 import pandas as pd
 import mudata as mu
 
+from analysis_output_formatting import make_h5mu_safe_dataframe
 from intended_target_key_utils import (
     annotate_intended_target_groups,
     enrich_pairs_with_target_metadata,
@@ -71,8 +72,6 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
     subset = enrich_pairs_with_target_metadata(subset, mudata.mod["guide"].var)
     print(f"Subset contains {len(subset)} rows after filtering and metadata enrichment.")
 
-    mudata.uns["pairs_to_test"] = subset.to_dict(orient="list")
-
     key_mapping = {
         "gene_name": "gene_id",
         "guide_id": "guide_id",
@@ -83,16 +82,14 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
         "intended_target_key": "intended_target_key",
         "pair_type": "pair_type",
     }
+    print("Renaming columns in pairs_to_test...")
+    subset = subset.rename(columns=key_mapping)
 
-    if mudata.uns.get("pairs_to_test") is None:
-        raise ValueError(
-            "'pairs_to_test' in mudata.uns is None, something went wrong when processing the subset."
-        )
-
-    print("Renaming keys in pairs_to_test...")
-    mudata.uns["pairs_to_test"] = {
-        key_mapping.get(k, k): v for k, v in mudata.uns["pairs_to_test"].items()
-    }
+    # Stored as a DataFrame (not a plain dict of columns) so that low-cardinality
+    # string columns (gene/guide ids, target names, chromosomes) can round-trip
+    # through .uns as pandas categoricals -- both anndata and R's MuData package
+    # preserve this encoding, and it's far more compact on disk than plain strings.
+    mudata.uns["pairs_to_test"] = make_h5mu_safe_dataframe(subset)
 
     if subset_for_cis:
         print("Subsetting mudata for cis analysis...")
