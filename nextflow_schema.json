@@ -83,6 +83,41 @@
                     "description": "Use CRISPR-Correct ambiguous guide mapping for base-editing guide libraries.",
                     "help_text": "Enable only for base-editing assays whose guide reads need ambiguity-aware spacer matching. Standard CRISPRi/a and knockout assays continue to use mappingGuide."
                 },
+                "BASEEDITING_method": {
+                    "type": "string",
+                    "default": "legacy",
+                    "enum": ["legacy", "flash"],
+                    "description": "Select the legacy or streaming FLASH base-editing guide mapper."
+                },
+                "BASEEDITING_FLASH_tolerance": {
+                    "type": "integer",
+                    "default": 5,
+                    "minimum": 0,
+                    "description": "Maximum Hamming distance accepted by the FLASH guide matcher."
+                },
+                "BASEEDITING_FLASH_guide_len": {
+                    "type": "integer",
+                    "default": 0,
+                    "minimum": 0,
+                    "description": "Guide length used by FLASH; zero infers it from metadata."
+                },
+                "BASEEDITING_FLASH_device": {
+                    "type": "string",
+                    "default": "auto",
+                    "description": "FLASH matcher device: auto, cpu, cuda, cuda:N, or a GPU index."
+                },
+                "BASEEDITING_FLASH_fastq_chunk_size": {
+                    "type": "integer",
+                    "default": 200000,
+                    "minimum": 1,
+                    "description": "Number of FASTQ read pairs streamed per FLASH chunk."
+                },
+                "BASEEDITING_FLASH_gpu_read_chunk": {
+                    "type": "integer",
+                    "default": 4096,
+                    "minimum": 1,
+                    "description": "Dense matcher sub-chunk size used on the selected device."
+                },
                 "scrna_workflow": {
                     "type": "string",
                     "default": "standard",
