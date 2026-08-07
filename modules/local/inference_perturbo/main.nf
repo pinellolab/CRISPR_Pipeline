@@ -34,7 +34,7 @@ process inference_perturbo {
             --num-steps-control ${params.INFERENCE_PERTURBO_NUM_STEPS_CONTROL} \\
             --num-steps-betas ${params.INFERENCE_PERTURBO_NUM_STEPS_BETAS} \\
             --max-chunk-size ${params.INFERENCE_PERTURBO_MAX_CHUNK_CELLS} \\
-            --perturbation-chunk-size ${params.INFERENCE_PERTURBO_PERTURBATION_CHUNK_SIZE} \\
+            --perturbation-chunk-size 0 \\
             --size-factor-mode ${params.INFERENCE_PERTURBO_SIZE_FACTOR_MODE} \\
             --likelihood ${params.INFERENCE_PERTURBO_LIKELIHOOD} \\
             --prior ${params.INFERENCE_PERTURBO_PRIOR} \\
