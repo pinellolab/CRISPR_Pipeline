@@ -360,16 +360,10 @@
                 },
                 "INFERENCE_PERTURBO_MAX_CHUNK_CELLS": {
                     "type": "integer",
-                    "default": 50000,
+                    "default": 20000,
                     "minimum": 1,
                     "description": "Maximum cells sent to a PerTurbo v2 fit at once.",
                     "help_text": "This is the primary GPU-memory knob for cis and trans runs; PerTurbo minibatching is intentionally disabled by the pipeline."
-                },
-                "INFERENCE_PERTURBO_PERTURBATION_CHUNK_SIZE": {
-                    "type": "integer",
-                    "default": 0,
-                    "description": "Optional PerTurbo v2 perturbation chunk size for large all-by-all fits.",
-                    "help_text": "Values less than or equal to 0 disable perturbation chunking."
                 },
                 "INFERENCE_PERTURBO_NUM_STEPS_CONTROL": {
                     "type": "integer",

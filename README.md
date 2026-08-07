@@ -195,7 +195,6 @@ The complete machine-readable QC output catalog is available as
 | `INFERENCE_max_target_distance_bp` | `1000000` | Integer bp distance | Maximum guide-target genomic distance used for cis pair construction. |
 | `INFERENCE_PERTURBO_DEVICE` | `gpu` | `gpu`, `cpu` | Device requested for PerTurbo v2 inference. |
 | `INFERENCE_PERTURBO_MAX_CHUNK_CELLS` | `50000` | Integer `>= 1` | Maximum cells sent to a PerTurbo v2 fit at once. This is the primary GPU-memory knob for local and global runs; PerTurbo minibatching is intentionally disabled by the pipeline. |
-| `INFERENCE_PERTURBO_PERTURBATION_CHUNK_SIZE` | `0` | Integer; `<= 0` disables perturbation chunking | Optional PerTurbo v2 perturbation chunk size for large all-by-all fits. |
 | `INFERENCE_PERTURBO_NUM_STEPS_CONTROL` | `2500` | Integer `>= 1` | SVI steps for the PerTurbo v2 control/baseline fit. |
 | `INFERENCE_PERTURBO_NUM_STEPS_BETAS` | `2500` | Integer `>= 1` | SVI steps for PerTurbo v2 perturbation-effect fits. |
 | `INFERENCE_PERTURBO_SAVE_MODEL_PARAMS` | `false` | Boolean | Save PerTurbo v2 fitted model bundles in addition to pipeline-compatible result tables. Off by default to keep pipeline outputs smaller. |
