@@ -5,6 +5,7 @@ import anndata as ad
 import mudata as mu
 import numpy as np
 import pandas as pd
+import pytest
 from scipy import sparse
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -143,3 +144,70 @@ def test_convert_guide_effects_restores_control_guide_ids_and_filters_pairs(tmp_
     assert np.isclose(observed.loc[0, "log2_fc"], 1.0)
     assert np.isclose(observed.loc[0, "p_value"], 0.05)
     assert np.isclose(observed.loc[1, "p_value"], 0.9)
+
+
+def test_run_pipeline_adapter_patches_uns_without_rewriting_x(tmp_path, monkeypatch):
+    pytest.importorskip("pyarrow")
+    input_path = tmp_path / "input.h5mu"
+    _make_mudata().write(input_path)
+
+    import h5py
+
+    with h5py.File(input_path, "r") as f:
+        x_before = f["mod/gene/X"][:].copy()
+
+    # Element-level "element" values are intended_target_key groupings, not
+    # raw guide ids -- derive them the same way convert_element_effects does.
+    prepared_path = tmp_path / "prepared_for_test.h5mu"
+    adapter.prepare_mudata_for_perturbo_v2(input_path, prepared_path)
+    prepared = mu.read_h5mu(prepared_path)
+    elem_a = prepared["guide"].var.loc["gA", "intended_target_key"]
+    elem_b = prepared["guide"].var.loc["gB", "intended_target_key"]
+
+    element_effects = pd.DataFrame(
+        {
+            "element": [elem_a, elem_b],
+            "gene": ["GENE1", "GENE2"],
+            "posterior_mean": [np.log(2), np.log(3)],
+            "posterior_scale": [np.log(2) / 10, np.log(2) / 9],
+            "posterior_prob": [0.05, 0.07],
+        }
+    )
+    guide_effects = pd.DataFrame(
+        {
+            "element": ["gA", "gB"],
+            "gene": ["GENE1", "GENE2"],
+            "posterior_mean": [np.log(2), np.log(3)],
+            "posterior_scale": [np.log(2) / 10, np.log(2) / 9],
+            "posterior_prob": [0.05, 0.07],
+        }
+    )
+
+    def fake_run_perturbo(input_path, out_dir, *, map_key, names_key, args):
+        out_dir.mkdir(parents=True, exist_ok=True)
+        effects = element_effects if map_key == adapter.ELEMENT_MAP_KEY else guide_effects
+        effects.to_parquet(out_dir / "element_effects.parquet", index=False)
+
+    monkeypatch.setattr(adapter, "_run_perturbo", fake_run_perturbo)
+
+    output_mudata = tmp_path / "output.h5mu"
+    args = adapter.build_parser().parse_args(
+        [
+            "--input", str(input_path),
+            "--per-element-output", str(tmp_path / "per_element.tsv.gz"),
+            "--per-guide-output", str(tmp_path / "per_guide.tsv.gz"),
+            "--output-mudata", str(output_mudata),
+            "--test-all-pairs",
+        ]
+    )
+    adapter.run_pipeline_adapter(args)
+
+    assert output_mudata.exists()
+    with h5py.File(output_mudata, "r") as f:
+        x_after = f["mod/gene/X"][:].copy()
+    assert np.array_equal(x_before, x_after), "X data should be byte-identical after a /uns-only patch"
+
+    result = mu.read_h5mu(output_mudata)
+    assert "per_element_results" in result.uns
+    assert "per_guide_results" in result.uns
+    assert list(pd.DataFrame(result.uns["per_element_results"])["gene_id"]) == ["GENE1", "GENE2"]

@@ -2,7 +2,7 @@
 
 import argparse
 import pandas as pd
-import muon as mu
+import mudata as mu
 
 def select_nodes(mdata, num_nodes: int):
     results_df = pd.DataFrame({k: v for k, v in mdata.uns['test_results'].items()})

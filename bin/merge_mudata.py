@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import argparse
-import muon as mu
+import mudata as mu
 import pandas as pd
 import sys
 import os

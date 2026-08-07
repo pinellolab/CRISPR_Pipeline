@@ -22,6 +22,7 @@ from intended_target_key_utils import (
     enrich_pairs_with_target_metadata,
     get_target_lookup,
 )
+from mudata_uns_io import write_uns_patch
 from result_table_io import write_result_table
 
 
@@ -347,10 +348,14 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
         write_result_table(element_df, args.per_element_output)
         write_result_table(guide_df, args.per_guide_output)
 
-        mdata = md.read_h5mu(args.input)
-        mdata.uns["per_element_results"] = make_h5mu_safe_dataframe(element_df)
-        mdata.uns["per_guide_results"] = make_h5mu_safe_dataframe(guide_df)
-        mdata.write(args.output_mudata, compression="gzip")
+        write_uns_patch(
+            args.input,
+            args.output_mudata,
+            updates={
+                "per_element_results": make_h5mu_safe_dataframe(element_df),
+                "per_guide_results": make_h5mu_safe_dataframe(guide_df),
+            },
+        )
 
         if args.v2_artifact_dir:
             artifact_dir = Path(args.v2_artifact_dir)

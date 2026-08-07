@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import muon as mu
+import mudata as mu
 import argparse
 from scipy.io import mmread
 from scipy.sparse import csr_matrix

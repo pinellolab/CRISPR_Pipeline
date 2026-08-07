@@ -2,7 +2,7 @@
 
 import argparse
 import pandas as pd
-import muon as mu
+import mudata as mu
 
 from intended_target_key_utils import (
     annotate_intended_target_groups,

@@ -376,7 +376,9 @@ def build_catalog_per_element_output(
 ) -> pd.DataFrame:
     local_results = read_result_table(local_analysis_per_element_path)
     global_results = read_result_table(global_analysis_per_element_path)
-    mdata = mu.read_h5mu(mudata_path)
+    # backed="r" avoids loading gene/guide .X into memory; this script only
+    # reads .var and .layers["guide_assignment"], which load eagerly either way.
+    mdata = mu.read_h5mu(mudata_path, backed="r")
 
     catalog = create_catalog_per_element(
         local_results, global_results, mdata, pvalue_floor=pvalue_floor

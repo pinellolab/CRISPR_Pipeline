@@ -38,6 +38,11 @@ def _make_test_mudata():
             index=["g1", "g2"],
         ),
     )
+    # Every real pipeline run sets this layer well before merge_local_global_
+    # results/catalog builders run; match that so tests don't exercise the
+    # X-fallback path in analysis_output_formatting.py, which real data never
+    # takes and which isn't backed-mode safe.
+    guide.layers["guide_assignment"] = guide.X.copy()
     return mu.MuData({"gene": gene, "guide": guide})
 
 

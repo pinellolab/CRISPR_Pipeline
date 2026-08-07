@@ -4,7 +4,7 @@ import argparse
 import pandas as pd
 import numpy as np
 from collections import defaultdict
-import muon as mu
+import mudata as mu
 import os
 from gtfparse import read_gtf
 from typing import Literal, Tuple, Dict, Optional
@@ -191,7 +191,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print("Loading MuData file...")
-    mdata = mu.read(args.mdata_path)
+    # backed="r" avoids loading gene/guide .X into memory; this script only
+    # reads .var and .uns[results_key].
+    mdata = mu.read(args.mdata_path, backed="r")
 
     # Determine which results to process based on --default flag
     if args.default:

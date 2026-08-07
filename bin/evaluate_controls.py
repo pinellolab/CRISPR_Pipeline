@@ -250,7 +250,9 @@ if __name__ == "__main__":
 
     print("Loading MuData file...")
     
-    md_read = md.read_h5mu(args.mdata_path)
+    # backed="r" avoids loading gene/guide .X into memory; this script only
+    # reads .var and .uns.
+    md_read = md.read_h5mu(args.mdata_path, backed="r")
 
     print("Finished Loading MuData file...")
 

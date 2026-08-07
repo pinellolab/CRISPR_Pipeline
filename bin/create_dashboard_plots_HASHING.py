@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
-import muon as mu
+import mudata as mu
 import anndata as ad
 import numpy as np
 from umap import UMAP
