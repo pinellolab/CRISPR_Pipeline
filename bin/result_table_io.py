@@ -43,27 +43,46 @@ def detect_result_format(path):
     )
 
 
+def categoricalize_text_columns(frame):
+    """Normalize all text columns to categoricals for compact Parquet output.
+
+    Result tables repeat identifiers, chromosome names, guide metadata, and
+    analysis labels many times.  Dictionary encoding those values through
+    pandas categoricals avoids materializing a plain-string copy in every
+    intermediate and records the intended logical type in Parquet metadata.
+    """
+    normalized = frame.copy()
+    for column in normalized.columns:
+        series = normalized[column]
+        if (
+            pd.api.types.is_object_dtype(series.dtype)
+            or pd.api.types.is_string_dtype(series.dtype)
+            or isinstance(series.dtype, pd.CategoricalDtype)
+        ):
+            # AnnData/HDF5 cannot serialize a categorical whose levels use
+            # pandas' nullable StringArray; object-backed levels are portable.
+            normalized[column] = series.astype(object).astype("category")
+    return normalized
+
+
+# Backwards-compatible name for callers that are preparing a Parquet write.
+make_parquet_safe = categoricalize_text_columns
+
+
 def read_result_table(path):
     result_format = detect_result_format(path)
     if result_format == "parquet":
-        return pd.read_parquet(path, engine="pyarrow")
-    return pd.read_csv(path, sep="\t")
-
-
-def make_parquet_safe(frame):
-    """Normalize scalar object columns so PyArrow sees one stable type."""
-    normalized = frame.copy()
-    for column in normalized.columns:
-        if pd.api.types.is_object_dtype(normalized[column].dtype):
-            normalized[column] = normalized[column].astype("string")
-    return normalized
+        frame = pd.read_parquet(path, engine="pyarrow")
+    else:
+        frame = pd.read_csv(path, sep="\t")
+    return categoricalize_text_columns(frame)
 
 
 def write_result_table(frame, path, parquet_compression="zstd"):
     destination = Path(path)
     result_format = detect_result_format(destination)
     if result_format == "parquet":
-        make_parquet_safe(frame).to_parquet(
+        categoricalize_text_columns(frame).to_parquet(
             destination,
             engine="pyarrow",
             compression=parquet_compression,

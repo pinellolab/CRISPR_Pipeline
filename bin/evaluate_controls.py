@@ -37,8 +37,30 @@ def savefig(path):
 
 
 def perform_binary_evaluation(label_controls, infered_significance_col, outdir, plot=True, evaluation_tag=''):
-    true_label = label_controls
-    pred_value = infered_significance_col
+    evaluation_input = pd.DataFrame(
+        {
+            "label": label_controls,
+            "p_value": pd.to_numeric(infered_significance_col, errors="coerce"),
+        }
+    ).dropna()
+    true_label = evaluation_input["label"].astype(int)
+    pred_value = evaluation_input["p_value"]
+
+    if evaluation_input.empty or true_label.nunique() < 2:
+        reason = (
+            "Controls evaluation skipped: precision-recall and ROC curves require "
+            "at least one finite p-value for both direct-target and control rows."
+        )
+        print(reason)
+        with open(
+            os.path.join(outdir, "controls_evaluation_skipped.txt"),
+            "w",
+            encoding="utf-8",
+        ) as handle:
+            handle.write(reason + "\n")
+            handle.write(f"valid_rows={len(evaluation_input)}\n")
+            handle.write(f"classes={sorted(true_label.unique().tolist())}\n")
+        return False
 
     pre, rec, _ = precision_recall_curve(true_label, 1-pred_value)
     auprc = auc(rec, pre)
@@ -66,6 +88,7 @@ def perform_binary_evaluation(label_controls, infered_significance_col, outdir, 
         # Save
         savefig(os.path.join(outdir, "global_analysis_perturbo_precision_recall_roc.png"))
         plt.show()
+    return True
 
 
 def plot_volcano(
@@ -183,11 +206,12 @@ def run_evaluation_controls(md_read, outdir):
 
     table_to_test_cis['direct_target'] = 1
     print (f"Number of targeting guides for direct targets: {table_to_test_cis.shape[0]}")
-    if non_target_controls.empty:
+    if table_to_test_cis.empty or non_target_controls.empty:
+        missing_group = "direct-target rows" if table_to_test_cis.empty else "non-targeting guides"
         reason = (
-            "Controls evaluation skipped: no non-targeting guides are present "
-            "in the inference results, so AUROC/AUPRC and matched-control plots "
-            "cannot be calculated."
+            f"Controls evaluation skipped: no {missing_group} are present in the "
+            "inference results, so AUROC/AUPRC and matched-control plots cannot "
+            "be calculated."
         )
         print(reason)
         with open(
@@ -197,7 +221,7 @@ def run_evaluation_controls(md_read, outdir):
         ) as handle:
             handle.write(reason + "\n")
             handle.write(f"targeting_direct_target_rows={table_to_test_cis.shape[0]}\n")
-            handle.write("non_targeting_control_rows=0\n")
+            handle.write(f"non_targeting_control_rows={non_target_controls.shape[0]}\n")
         return
 
     sample_with_replacement = non_target_controls.shape[0] < table_to_test_cis.shape[0]

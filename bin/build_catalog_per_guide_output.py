@@ -9,7 +9,7 @@ import pandas as pd
 from scipy import sparse
 from scipy.stats import false_discovery_control
 
-from result_table_io import read_result_table, write_result_table
+from result_table_io import categoricalize_text_columns, read_result_table, write_result_table
 
 JOIN_COLUMNS = ["gene_id", "guide_id"]
 GUIDE_METADATA_COLUMNS = [
@@ -249,7 +249,7 @@ def create_catalog_per_guide(
         merged[f"{method}_negLog10p"] = _neg_log10(raw, pvalue_floor)
     merged["gene_name"] = _fill_gene_names(merged, mdata)
 
-    catalog = merged[OUTPUT_COLUMNS].copy()
+    catalog = categoricalize_text_columns(merged[OUTPUT_COLUMNS])
     return catalog.sort_values(
         ["guide_chr", "guide_start", "guide_end", "guide_id", "gene_id"],
         kind="stable",

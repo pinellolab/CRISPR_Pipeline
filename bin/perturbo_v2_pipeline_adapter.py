@@ -348,14 +348,15 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
         write_result_table(element_df, args.per_element_output)
         write_result_table(guide_df, args.per_guide_output)
 
-        write_uns_patch(
-            args.input,
-            args.output_mudata,
-            updates={
-                "per_element_results": make_h5mu_safe_dataframe(element_df),
-                "per_guide_results": make_h5mu_safe_dataframe(guide_df),
-            },
-        )
+        if args.output_mudata:
+            write_uns_patch(
+                args.input,
+                args.output_mudata,
+                updates={
+                    "per_element_results": make_h5mu_safe_dataframe(element_df),
+                    "per_guide_results": make_h5mu_safe_dataframe(guide_df),
+                },
+            )
 
         if args.v2_artifact_dir:
             artifact_dir = Path(args.v2_artifact_dir)
@@ -375,7 +376,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input", required=True, help="Input CRISPR_Pipeline MuData file")
     parser.add_argument("--per-element-output", required=True, help="Output per-element table (.tsv.gz or .parquet, by extension)")
     parser.add_argument("--per-guide-output", required=True, help="Output per-guide table (.tsv.gz or .parquet, by extension)")
-    parser.add_argument("--output-mudata", required=True, help="Output MuData with result tables in .uns")
+    parser.add_argument("--output-mudata", help="Optional MuData with result tables in .uns")
     parser.add_argument("--v2-artifact-dir", default=None, help="Optional directory for raw PerTurbo v2 artifacts")
     parser.add_argument("--test-all-pairs", action="store_true", help="Do not filter output to mdata.uns['pairs_to_test']")
     parser.add_argument("--device", default="gpu", help="JAX device for PerTurbo v2, e.g. gpu or cpu")

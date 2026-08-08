@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import false_discovery_control
 from scipy import sparse
-from result_table_io import read_result_table, write_result_table
+from result_table_io import categoricalize_text_columns, read_result_table, write_result_table
 
 ELEMENT_COLUMNS = [
     "intended_target_name",
@@ -357,7 +357,7 @@ def create_catalog_per_element(
 
     merged["gene_name"] = _fill_gene_names(merged, mdata)
 
-    catalog = merged[OUTPUT_COLUMNS].copy()
+    catalog = categoricalize_text_columns(merged[OUTPUT_COLUMNS])
     catalog = catalog.sort_values(
         by=["element_chr", "element_start", "element_end", "element_name", "gene_id"],
         kind="stable",
