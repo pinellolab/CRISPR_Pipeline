@@ -372,6 +372,35 @@
                     "description": "Maximum cells sent to a PerTurbo v2 fit at once.",
                     "help_text": "This is the primary GPU-memory knob for local and global runs; PerTurbo minibatching is intentionally disabled by the pipeline."
                 },
+                "INFERENCE_PERTURBO_LOCAL_MAX_CHUNK_CELLS": {
+                    "type": "integer",
+                    "default": 20000,
+                    "minimum": 1,
+                    "description": "Maximum cells per PerTurbo v2 local/cis chunk.",
+                    "help_text": "Overrides the local/cis process only, allowing larger two-GPU local chunks without changing or invalidating global/trans inference."
+                },
+                "INFERENCE_PERTURBO_LOCAL_PARALLEL_FITS": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Fit local/cis element and guide PerTurbo v2 models concurrently.",
+                    "help_text": "Requires two visible GPUs. This affects only local/cis inference; global/trans inference is unchanged."
+                },
+                "INFERENCE_PERTURBO_ELEMENT_GPU": {
+                    "type": "string",
+                    "default": "0",
+                    "description": "CUDA device ID used by the local/cis element fit when parallel fits are enabled."
+                },
+                "INFERENCE_PERTURBO_GUIDE_GPU": {
+                    "type": "string",
+                    "default": "1",
+                    "description": "CUDA device ID used by the local/cis guide fit when parallel fits are enabled."
+                },
+                "INFERENCE_PERTURBO_JAX_CACHE_DIR": {
+                    "type": "string",
+                    "default": ".perturbo_jax_cache",
+                    "description": "Directory used for persistent JAX compilation caches.",
+                    "help_text": "Use a persistent fast-disk path to reuse compiled programs across task retries. Element and guide fits use separate subdirectories."
+                },
                 "INFERENCE_PERTURBO_NUM_STEPS_CONTROL": {
                     "type": "integer",
                     "default": 2500,

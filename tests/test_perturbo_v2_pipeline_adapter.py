@@ -75,10 +75,18 @@ def test_prepare_mudata_adds_v2_metadata_and_control_guide_names(tmp_path):
     assert adapter.ELEMENT_NAMES_KEY in guide.uns
     assert adapter.GUIDE_MAP_KEY in guide.varm
     assert adapter.GUIDE_NAMES_KEY in guide.uns
+    assert adapter.ELEMENT_PAIR_MASK_KEY in gene.varm
+    assert adapter.GUIDE_PAIR_MASK_KEY in gene.varm
     assert "total_gene_umis" in gene.obs
     assert "log1p_total_guide_umis_centered" in gene.obs
     assert any(str(name).startswith("non-targeting|") for name in guide.uns[adapter.GUIDE_NAMES_KEY])
     assert guide_name_map["non-targeting|nt1"] == "nt1"
+    element_mask = sparse.csr_matrix(gene.varm[adapter.ELEMENT_PAIR_MASK_KEY])
+    guide_mask = sparse.csr_matrix(gene.varm[adapter.GUIDE_PAIR_MASK_KEY])
+    assert element_mask.shape[0] == gene.n_vars
+    assert guide_mask.shape[0] == gene.n_vars
+    assert element_mask.nnz >= 3
+    assert guide_mask.nnz >= 3
 
 
 def test_convert_element_effects_maps_metadata_and_filters_pairs(tmp_path):
@@ -183,12 +191,14 @@ def test_run_pipeline_adapter_patches_uns_without_rewriting_x(tmp_path, monkeypa
         }
     )
 
-    def fake_run_perturbo(input_path, out_dir, *, map_key, names_key, args):
+    def fake_run_perturbo(input_path, out_dir, *, map_key, names_key, args, **kwargs):
         out_dir.mkdir(parents=True, exist_ok=True)
         effects = element_effects if map_key == adapter.ELEMENT_MAP_KEY else guide_effects
         effects.to_parquet(out_dir / "element_effects.parquet", index=False)
+        return object()
 
     monkeypatch.setattr(adapter, "_run_perturbo", fake_run_perturbo)
+    monkeypatch.setattr(adapter, "_wait_for_fits", lambda processes: None)
 
     output_mudata = tmp_path / "output.h5mu"
     args = adapter.build_parser().parse_args(

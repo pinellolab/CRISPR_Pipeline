@@ -22,6 +22,7 @@ process inference_perturbo {
 
     script:
         def save_model_params_arg = params.INFERENCE_PERTURBO_SAVE_MODEL_PARAMS ? '--save-model-params' : '--no-save-model-params'
+        def parallel_fits_arg = params.INFERENCE_PERTURBO_LOCAL_PARALLEL_FITS ? '--parallel-fits' : '--no-parallel-fits'
         """
         perturbo_v2_pipeline_adapter.py \\
             --input ${mudata} \\
@@ -33,8 +34,12 @@ process inference_perturbo {
             --batch-size 0 \\
             --num-steps-control ${params.INFERENCE_PERTURBO_NUM_STEPS_CONTROL} \\
             --num-steps-betas ${params.INFERENCE_PERTURBO_NUM_STEPS_BETAS} \\
-            --max-chunk-size ${params.INFERENCE_PERTURBO_MAX_CHUNK_CELLS} \\
+            --max-chunk-size ${params.INFERENCE_PERTURBO_LOCAL_MAX_CHUNK_CELLS} \\
             --perturbation-chunk-size 0 \\
+            ${parallel_fits_arg} \\
+            --element-gpu ${params.INFERENCE_PERTURBO_ELEMENT_GPU} \\
+            --guide-gpu ${params.INFERENCE_PERTURBO_GUIDE_GPU} \\
+            --jax-cache-dir ${params.INFERENCE_PERTURBO_JAX_CACHE_DIR} \\
             --size-factor-mode ${params.INFERENCE_PERTURBO_SIZE_FACTOR_MODE} \\
             --likelihood ${params.INFERENCE_PERTURBO_LIKELIHOOD} \\
             --prior ${params.INFERENCE_PERTURBO_PRIOR} \\

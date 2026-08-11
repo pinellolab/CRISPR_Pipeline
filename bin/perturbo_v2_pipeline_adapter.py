@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import time
 
 import mudata as md
 import numpy as np
@@ -33,6 +35,10 @@ ELEMENT_MAP_KEY = "perturbo_v2_intended_targets"
 ELEMENT_NAMES_KEY = "perturbo_v2_intended_target_names"
 GUIDE_MAP_KEY = "perturbo_v2_guides"
 GUIDE_NAMES_KEY = "perturbo_v2_guide_names"
+ELEMENT_PAIR_MASK_KEY = "perturbo_v2_element_pairs"
+ELEMENT_PAIR_NAMES_KEY = "perturbo_v2_element_pair_names"
+GUIDE_PAIR_MASK_KEY = "perturbo_v2_guide_pairs"
+GUIDE_PAIR_NAMES_KEY = "perturbo_v2_guide_pair_names"
 CONTROL_SUBSTRING = "non-targeting"
 
 
@@ -116,23 +122,10 @@ def _build_guide_identity_mapping(mdata: md.MuData) -> dict[str, str]:
     perturbo_names = guide_ids.copy()
     perturbo_names.loc[control_mask] = CONTROL_SUBSTRING + "|" + guide_ids.loc[control_mask]
 
-    mapping = pd.DataFrame(
-        np.eye(len(guide_ids), dtype=np.float32),
-        index=guide.var_names,
-        columns=perturbo_names.tolist(),
-    )
+    mapping = sparse.eye(len(guide_ids), dtype=np.float32, format="csr")
     guide.varm[GUIDE_MAP_KEY] = mapping
-    guide.uns[GUIDE_NAMES_KEY] = mapping.columns.astype(str).tolist()
-    return dict(zip(mapping.columns.astype(str), guide_ids.tolist()))
-
-
-def _mapping_to_dataframe(mdata: md.MuData, map_key: str, names_key: str) -> pd.DataFrame:
-    guide = mdata[GUIDE_MODALITY]
-    mapping = guide.varm[map_key]
-    if isinstance(mapping, pd.DataFrame):
-        return mapping
-    names = [str(x) for x in guide.uns[names_key]]
-    return pd.DataFrame(np.asarray(mapping), index=guide.var_names, columns=names)
+    guide.uns[GUIDE_NAMES_KEY] = perturbo_names.astype(str).tolist()
+    return dict(zip(perturbo_names.astype(str), guide_ids.tolist()))
 
 
 def _covariate_has_control_variance(input_path: Path, map_key: str, names_key: str) -> bool:
@@ -141,13 +134,15 @@ def _covariate_has_control_variance(input_path: Path, map_key: str, names_key: s
         mdata[GENE_MODALITY].obs["log1p_total_guide_umis_centered"],
         errors="coerce",
     ).to_numpy(dtype=float)
-    mapping = _mapping_to_dataframe(mdata, map_key, names_key)
-    control_cols = [
-        col for col in mapping.columns.astype(str) if CONTROL_SUBSTRING in col.lower()
-    ]
-    if not control_cols:
+    guide = mdata[GUIDE_MODALITY]
+    mapping = guide.varm[map_key]
+    names = [str(x) for x in guide.uns[names_key]]
+    control_idx = [i for i, name in enumerate(names) if CONTROL_SUBSTRING in name.lower()]
+    if not control_idx:
         return False
-    control_guides = np.asarray(mapping.loc[:, control_cols].sum(axis=1)).ravel() > 0
+    if isinstance(mapping, pd.DataFrame):
+        mapping = mapping.to_numpy()
+    control_guides = np.asarray(mapping[:, control_idx].sum(axis=1)).ravel() > 0
     if not np.any(control_guides):
         return False
     assignment = _get_assignment_matrix(mdata)
@@ -158,15 +153,104 @@ def _covariate_has_control_variance(input_path: Path, map_key: str, names_key: s
     return bool(np.nanstd(control_values) > 1e-8)
 
 
-def prepare_mudata_for_perturbo_v2(input_path: str | Path, output_path: str | Path) -> dict[str, str]:
+def _build_gene_pair_mask(
+    mdata: md.MuData,
+    *,
+    pair_element_column: str,
+    element_names: list[str],
+    mask_key: str,
+    mask_names_key: str,
+    guide_name_map: dict[str, str] | None = None,
+) -> None:
+    pairs = mdata.uns.get("pairs_to_test")
+    if pairs is None:
+        raise KeyError("pairs_to_test not found in MuData; local PerTurbo fitting requires explicit pairs.")
+    pairs = pairs.copy() if isinstance(pairs, pd.DataFrame) else pd.DataFrame(pairs)
+    if pair_element_column == "intended_target_key" and pair_element_column not in pairs.columns:
+        pairs = enrich_pairs_with_target_metadata(pairs, pd.DataFrame(mdata[GUIDE_MODALITY].var))
+
+    gene_names = mdata[GENE_MODALITY].var_names.astype(str).tolist()
+    gene_index = {name: i for i, name in enumerate(gene_names)}
+    element_index = {name: i for i, name in enumerate(element_names)}
+    if guide_name_map is None:
+        pair_element_names = pairs[pair_element_column].astype(str)
+    else:
+        output_name_by_guide = {guide_id: output_name for output_name, guide_id in guide_name_map.items()}
+        pair_element_names = pairs[pair_element_column].astype(str).map(output_name_by_guide)
+
+    pair_gene_names = pairs["gene_id"].astype(str)
+    missing_genes = sorted(set(pair_gene_names) - set(gene_index))
+    missing_elements = sorted(set(pair_element_names.dropna()) - set(element_index))
+    unmapped_elements = pairs.loc[pair_element_names.isna(), pair_element_column].astype(str).drop_duplicates().tolist()
+    if missing_genes or missing_elements or unmapped_elements:
+        messages = []
+        if missing_genes:
+            messages.append(f"{len(missing_genes)} genes absent from RNA modality: {', '.join(missing_genes[:10])}")
+        if missing_elements:
+            messages.append(f"{len(missing_elements)} elements absent from mapping: {', '.join(missing_elements[:10])}")
+        if unmapped_elements:
+            messages.append(f"{len(unmapped_elements)} guide IDs could not be mapped: {', '.join(unmapped_elements[:10])}")
+        raise ValueError("Cannot construct PerTurbo local pair mask; " + "; ".join(messages))
+
+    pair_rows = pair_gene_names.map(gene_index).to_numpy(dtype=int)
+    pair_cols = pair_element_names.map(element_index).to_numpy(dtype=int)
+    control_cols = np.asarray(
+        [i for i, name in enumerate(element_names) if CONTROL_SUBSTRING in name.lower()],
+        dtype=int,
+    )
+    if control_cols.size:
+        control_rows = np.repeat(np.arange(len(gene_names), dtype=int), control_cols.size)
+        repeated_control_cols = np.tile(control_cols, len(gene_names))
+        rows = np.concatenate([pair_rows, control_rows])
+        cols = np.concatenate([pair_cols, repeated_control_cols])
+    else:
+        rows, cols = pair_rows, pair_cols
+    mask = sparse.coo_matrix(
+        (np.ones(rows.size, dtype=np.bool_), (rows, cols)),
+        shape=(len(gene_names), len(element_names)),
+    ).tocsr()
+    mask.sum_duplicates()
+    mask.data[:] = True
+    mdata[GENE_MODALITY].varm[mask_key] = mask
+    mdata[GENE_MODALITY].uns[mask_names_key] = element_names
+    print(
+        f"Prepared {mask_key}: {len(pairs):,} requested pairs plus "
+        f"{len(gene_names) * control_cols.size:,} control-null pairs ({mask.nnz:,} unique total)."
+    )
+
+
+def prepare_mudata_for_perturbo_v2(
+    input_path: str | Path,
+    output_path: str | Path,
+    *,
+    test_all_pairs: bool = False,
+) -> dict[str, str]:
     """Write a PerTurbo v2-ready MuData and return guide output-name remapping."""
     mdata = md.read_h5mu(input_path)
     if GENE_MODALITY not in mdata.mod or GUIDE_MODALITY not in mdata.mod:
         raise KeyError("Expected MuData modalities named 'gene' and 'guide'.")
     _ensure_library_size(mdata)
     _ensure_covariates(mdata)
-    _build_element_mapping(mdata)
+    element_mapping = _build_element_mapping(mdata)
     guide_name_map = _build_guide_identity_mapping(mdata)
+    if not test_all_pairs:
+        element_names = element_mapping.columns.astype(str).tolist()
+        guide_names = [str(x) for x in mdata[GUIDE_MODALITY].uns[GUIDE_NAMES_KEY]]
+        _build_gene_pair_mask(
+            mdata,
+            pair_element_column="intended_target_key",
+            element_names=element_names,
+            mask_key=ELEMENT_PAIR_MASK_KEY,
+            mask_names_key=ELEMENT_PAIR_NAMES_KEY,
+        )
+        _build_gene_pair_mask(
+            mdata,
+            pair_element_column="guide_id",
+            element_names=guide_names,
+            mask_key=GUIDE_PAIR_MASK_KEY,
+            mask_names_key=GUIDE_PAIR_NAMES_KEY,
+            guide_name_map=guide_name_map,
+        )
     mdata.write(output_path)
     return guide_name_map
 
@@ -260,8 +344,12 @@ def _run_perturbo(
     *,
     map_key: str,
     names_key: str,
+    pair_mask_key: str | None,
+    pair_names_key: str | None,
+    gpu_id: str | None,
+    phase: str,
     args: argparse.Namespace,
-) -> None:
+) -> subprocess.Popen:
     cmd = [
         "perturbo",
         "--input",
@@ -302,6 +390,10 @@ def _run_perturbo(
         args.device,
         "--no-progress-bar",
     ]
+    if pair_mask_key is not None:
+        cmd.extend(["--gene-by-element-varm-key", pair_mask_key])
+        if pair_names_key is not None:
+            cmd.extend(["--gene-by-element-names-uns-key", pair_names_key])
     if _covariate_has_control_variance(input_path, map_key, names_key):
         cmd.extend(["--continuous-covariates", "log1p_total_guide_umis_centered"])
     else:
@@ -313,32 +405,85 @@ def _run_perturbo(
         cmd.extend(["--batch-covariate", "batch"])
     if not args.save_model_params:
         cmd.append("--no-save-model-params")
-    print("Running PerTurbo v2:", " ".join(cmd))
-    subprocess.run(cmd, check=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    process_env = os.environ.copy()
+    if gpu_id is not None:
+        process_env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    cache_root = Path(args.jax_cache_dir)
+    if not cache_root.is_absolute():
+        cache_root = Path.cwd() / cache_root
+    cache_dir = cache_root / phase
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    process_env["JAX_COMPILATION_CACHE_DIR"] = str(cache_dir)
+    process_env["JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS"] = "0"
+    process_env["JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES"] = "-1"
+    process_env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+    phase_tmp = out_dir / "tmp"
+    phase_tmp.mkdir(parents=True, exist_ok=True)
+    process_env["TMPDIR"] = str(phase_tmp)
+    print(
+        f"Running PerTurbo v2 {phase} fit on CUDA_VISIBLE_DEVICES={process_env.get('CUDA_VISIBLE_DEVICES', '<inherited>')}: "
+        + " ".join(cmd)
+    )
+    return subprocess.Popen(cmd, env=process_env)
+
+
+def _wait_for_fits(processes: dict[str, subprocess.Popen]) -> None:
+    pending = dict(processes)
+    while pending:
+        for name, process in list(pending.items()):
+            return_code = process.poll()
+            if return_code is None:
+                continue
+            pending.pop(name)
+            if return_code != 0:
+                for peer in pending.values():
+                    peer.terminate()
+                for peer in pending.values():
+                    peer.wait()
+                raise subprocess.CalledProcessError(return_code, process.args)
+            print(f"PerTurbo v2 {name} fit completed successfully.")
+        if pending:
+            time.sleep(1)
 
 
 def run_pipeline_adapter(args: argparse.Namespace) -> None:
     with tempfile.TemporaryDirectory(prefix="perturbo_v2_pipeline_") as tmp:
         tmp_dir = Path(tmp)
         prepared = tmp_dir / "prepared_mudata.h5mu"
-        guide_name_map = prepare_mudata_for_perturbo_v2(args.input, prepared)
+        guide_name_map = prepare_mudata_for_perturbo_v2(
+            args.input,
+            prepared,
+            test_all_pairs=args.test_all_pairs,
+        )
 
         element_dir = tmp_dir / "element_fit"
         guide_dir = tmp_dir / "guide_fit"
-        _run_perturbo(
+        element_process = _run_perturbo(
             prepared,
             element_dir,
             map_key=ELEMENT_MAP_KEY,
             names_key=ELEMENT_NAMES_KEY,
+            pair_mask_key=None if args.test_all_pairs else ELEMENT_PAIR_MASK_KEY,
+            pair_names_key=None if args.test_all_pairs else ELEMENT_PAIR_NAMES_KEY,
+            gpu_id=args.element_gpu if args.parallel_fits else None,
+            phase="element",
             args=args,
         )
-        _run_perturbo(
+        if not args.parallel_fits:
+            _wait_for_fits({"element": element_process})
+        guide_process = _run_perturbo(
             prepared,
             guide_dir,
             map_key=GUIDE_MAP_KEY,
             names_key=GUIDE_NAMES_KEY,
+            pair_mask_key=None if args.test_all_pairs else GUIDE_PAIR_MASK_KEY,
+            pair_names_key=None if args.test_all_pairs else GUIDE_PAIR_NAMES_KEY,
+            gpu_id=args.guide_gpu if args.parallel_fits else None,
+            phase="guide",
             args=args,
         )
+        _wait_for_fits({"element": element_process, "guide": guide_process} if args.parallel_fits else {"guide": guide_process})
 
         element_effects = pd.read_parquet(element_dir / "element_effects.parquet")
         guide_effects = pd.read_parquet(guide_dir / "element_effects.parquet")
@@ -389,6 +534,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--likelihood", default="negbin", choices=["nb", "negbin", "censored_nb", "lognormal_nb", "mixture_nb"])
     parser.add_argument("--prior", default="normal", choices=["normal", "cauchy"])
     parser.add_argument("--save-model-params", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--parallel-fits",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Fit the element and guide models concurrently (normally one GPU per fit).",
+    )
+    parser.add_argument("--element-gpu", default="0", help="CUDA device ID for the parallel element fit")
+    parser.add_argument("--guide-gpu", default="1", help="CUDA device ID for the parallel guide fit")
+    parser.add_argument(
+        "--jax-cache-dir",
+        default=".perturbo_jax_cache",
+        help="Persistent JAX compilation cache root; separate element/guide subdirectories are used.",
+    )
     return parser
 
 
