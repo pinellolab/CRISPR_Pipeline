@@ -56,11 +56,11 @@ workflow CRISPR_PIPELINE {
     }
 
     ch_rna = ch_samples.filter { meta, _fastqs -> meta.modality == 'scrna' }
-    //ch_rna.view()
     ch_guide = ch_samples.filter { meta, _fastqs -> meta.modality == 'grna' }
-    ch_guide.view()
     ch_hash = ch_samples.filter { meta, _fastqs -> meta.modality == 'hash' }
-    //ch_hash.view()
+    if (params.DEBUG_VAR) {
+        ch_guide.view()
+    }
 
     ch_rna_seqspec = ch_rna
         .map { meta, _fastqs -> file(meta.seqspec) }
@@ -77,10 +77,11 @@ workflow CRISPR_PIPELINE {
         .unique()
         .first()
 
-    // View the seqspec paths
-    ch_rna_seqspec.view { "RNA seqspec: $it" }
-    ch_guide_seqspec.view { "Guide seqspec: $it" }
-    ch_hash_seqspec.view { "Hash seqspec: $it" }
+    if (params.DEBUG_VAR) {
+        ch_rna_seqspec.view { "RNA seqspec: $it" }
+        ch_guide_seqspec.view { "Guide seqspec: $it" }
+        ch_hash_seqspec.view { "Hash seqspec: $it" }
+    }
 
     // barcode_onlist
     ch_barcode_onlist = ch_rna

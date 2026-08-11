@@ -1,6 +1,6 @@
 process FILTER_DEMO_SAMPLESHEET {
     tag "demo pre-run"
-    container params.containers.base
+    container { params.containers.base }
     cpus 1
     memory '1 GB'
 

@@ -2,7 +2,6 @@
 process mappingscRNA {
 
     cache 'lenient'
-    debug true
     stageOutMode 'copy'
 
 

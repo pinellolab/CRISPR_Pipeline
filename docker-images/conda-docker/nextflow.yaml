@@ -7,13 +7,13 @@ dependencies:
   - aria2
   - numpy  
   - pandas>=2.1.0,<3
+  - pyarrow
   - pip
-  - anndata
+  - anndata>=0.11,<0.12
   - gmm-demux
   - scanpy
   - matplotlib
   - ipykernel
-  - muon
   - mudata
   - seaborn
   - scrublet

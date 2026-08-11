@@ -1,6 +1,5 @@
 process guide_assignment_cleanser {
     cache 'lenient'
-    debug true
 
     input:
         path mudata_input

@@ -1,7 +1,14 @@
 process seqSpecCheck {
     cache 'lenient'
-    debug true
-    
+    publishDir path: {
+        def out = params.outdir?.toString() ?: './pipeline_outputs'
+        out = out.replaceAll('/$','')
+        if (out == 'pipeline_outputs' || out.endsWith('/pipeline_outputs')) {
+            return "${out}/seqspeccheck"
+        }
+        return "${out}/pipeline_outputs/seqspeccheck"
+    }, mode: 'copy', overwrite: true
+
     input:
     tuple val(meta), path(reads)
     path(metadata)

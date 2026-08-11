@@ -1,6 +1,5 @@
 process guide_assignment_sceptre {
     cache 'lenient'
-    debug true
 
     input:
     path mudata_input

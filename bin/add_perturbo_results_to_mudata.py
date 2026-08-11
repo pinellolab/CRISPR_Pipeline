@@ -33,7 +33,7 @@ def add_perturbo_results_to_mudata(per_guide_results, per_element_results, base_
     
     # Write the updated mudata
     print(f"Writing updated MuData to {output_path}...")
-    mdata.write(output_path, compression="gzip")
+    mdata.write(output_path)
     
     print("Successfully added PerTurbo results to MuData!")
     print(f"Output contains:")

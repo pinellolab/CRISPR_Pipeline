@@ -9,7 +9,7 @@ import pandas as pd
 from scipy import sparse
 from scipy.stats import false_discovery_control
 
-from result_table_io import read_result_table, write_result_table
+from result_table_io import categoricalize_text_columns, read_result_table, write_result_table
 
 JOIN_COLUMNS = ["gene_id", "guide_id"]
 GUIDE_METADATA_COLUMNS = [
@@ -249,7 +249,7 @@ def create_catalog_per_guide(
         merged[f"{method}_negLog10p"] = _neg_log10(raw, pvalue_floor)
     merged["gene_name"] = _fill_gene_names(merged, mdata)
 
-    catalog = merged[OUTPUT_COLUMNS].copy()
+    catalog = categoricalize_text_columns(merged[OUTPUT_COLUMNS])
     return catalog.sort_values(
         ["guide_chr", "guide_start", "guide_end", "guide_id", "gene_id"],
         kind="stable",
@@ -266,7 +266,9 @@ def build_catalog_per_guide_output(
 ) -> pd.DataFrame:
     local_results = read_result_table(local_analysis_per_guide_path)
     global_results = read_result_table(global_analysis_per_guide_path)
-    mdata = mu.read_h5mu(mudata_path)
+    # backed="r" avoids loading gene/guide .X into memory; this script only
+    # reads .var and .layers["guide_assignment"], which load eagerly either way.
+    mdata = mu.read_h5mu(mudata_path, backed="r")
     catalog = create_catalog_per_guide(
         local_results, global_results, mdata, pvalue_floor=pvalue_floor
     )

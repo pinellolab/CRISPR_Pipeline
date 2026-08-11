@@ -145,7 +145,7 @@ def chunk_mudata_sceptre(
 
         if pairs_df is not None:
             filtered_pairs = _filter_pairs_by_gene(pairs_df, chunk_gene.var_names.tolist())
-            chunk_mdata.uns["pairs_to_test"] = filtered_pairs.to_dict(orient="list")
+            chunk_mdata.uns["pairs_to_test"] = filtered_pairs
 
         chunk_filename = f"{output_prefix}.{i:03d}.h5mu"
         chunk_path = os.path.join(output_dir, chunk_filename)

@@ -4,7 +4,7 @@ import argparse
 import anndata as ad
 import pandas as pd
 import numpy as np
-from muon import MuData
+from mudata import MuData
 from gtfparse import read_gtf
 import matplotlib.pyplot as plt
 import os

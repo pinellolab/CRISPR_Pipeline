@@ -9,6 +9,7 @@ import mudata as mu
 import numpy as np
 import pandas as pd
 from scipy.stats import false_discovery_control
+from result_table_io import categoricalize_text_columns
 
 
 def _expand_tsv_inputs(files):
@@ -154,9 +155,13 @@ def merge_sceptre_chunk_results(
     _assert_unique(merged_guide, ["gene_id", "guide_id"], "per-guide")
     _assert_unique(merged_element, ["gene_id", "intended_target_name"], "per-element")
 
-    merged_guide = merged_guide.sort_values(["gene_id", "guide_id"]).reset_index(drop=True)
+    merged_guide = categoricalize_text_columns(merged_guide).sort_values(
+        ["gene_id", "guide_id"]
+    ).reset_index(drop=True)
     merged_element = (
-        merged_element.sort_values(["gene_id", "intended_target_name"]).reset_index(drop=True)
+        categoricalize_text_columns(merged_element)
+        .sort_values(["gene_id", "intended_target_name"])
+        .reset_index(drop=True)
     )
 
     merged_guide.to_csv(output_per_guide, sep="\t", index=False, compression="gzip")
@@ -169,7 +174,7 @@ def merge_sceptre_chunk_results(
     if chunk_manifest and os.path.exists(chunk_manifest):
         mdata.uns["sceptre_chunk_manifest"] = pd.read_csv(chunk_manifest, sep="\t")
 
-    mdata.write(output_mudata, compression="gzip")
+    mdata.write(output_mudata)
 
 
 def main():

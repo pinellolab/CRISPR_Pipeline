@@ -1,6 +1,5 @@
 process anndata_concat {
     cache 'lenient'
-    debug true
 
     input:
     path parsed_covariate_df

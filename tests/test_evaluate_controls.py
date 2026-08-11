@@ -12,7 +12,7 @@ BIN_DIR = REPO_ROOT / "bin"
 if str(BIN_DIR) not in sys.path:
     sys.path.insert(0, str(BIN_DIR))
 
-from evaluate_controls import run_evaluation_controls
+from evaluate_controls import perform_binary_evaluation, run_evaluation_controls
 
 
 def test_control_evaluation_skips_cleanly_without_negative_controls(tmp_path):
@@ -46,3 +46,10 @@ def test_control_evaluation_skips_cleanly_without_negative_controls(tmp_path):
     marker = tmp_path / "controls_evaluation_skipped.txt"
     assert marker.exists()
     assert "no non-targeting guides" in marker.read_text()
+
+
+def test_binary_evaluation_skips_empty_input(tmp_path):
+    assert not perform_binary_evaluation([], [], tmp_path, plot=False)
+    marker = tmp_path / "controls_evaluation_skipped.txt"
+    assert marker.exists()
+    assert "valid_rows=0" in marker.read_text()

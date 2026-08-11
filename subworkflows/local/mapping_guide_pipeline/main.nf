@@ -73,7 +73,9 @@ workflow mapping_guide_pipeline {
     ks_guide_out_dir_collected = MappingOut.ks_guide_out_dir
         .collect()
         .map { dirs -> dirs.sort { a, b -> a.getName() <=> b.getName() } }
-    ks_guide_out_dir_collected.view()
+    if (params.DEBUG_VAR) {
+        ks_guide_out_dir_collected.view()
+    }
 
     AnndataConcatenate = anndata_concat(
         parsed_covariate_file,

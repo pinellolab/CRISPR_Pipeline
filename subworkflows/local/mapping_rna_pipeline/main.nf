@@ -37,7 +37,9 @@ workflow mapping_rna_pipeline {
     ks_transcripts_out_dir_collected = MappingOut.ks_transcripts_out_dir
         .collect()
         .map { dirs -> dirs.sort { a, b -> a.getName() <=> b.getName() } }
-    ks_transcripts_out_dir_collected.view()
+    if (params.DEBUG_VAR) {
+        ks_transcripts_out_dir_collected.view()
+    }
 
     AnndataConcatenate = anndata_concat(
         parsed_covariate_file,

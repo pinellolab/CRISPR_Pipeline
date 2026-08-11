@@ -7,7 +7,7 @@ include { inference_sceptre } from '../../../modules/local/inference_sceptre'
 include { sceptre_chunk_prepare } from '../../../modules/local/sceptre_chunk_prepare'
 include { sceptre_chunk_merge } from '../../../modules/local/sceptre_chunk_merge'
 include { inference_perturbo } from '../../../modules/local/inference_perturbo'
-include { inference_perturbo_trans } from '../../../modules/local/inference_perturbo_trans'
+include { inference_perturbo_global } from '../../../modules/local/inference_perturbo_global'
 include { mergedResults } from '../../../modules/local/mergedResults'
 include { publishFiles } from '../../../modules/local/publishFiles'
 include { mergeMudata } from '../../../modules/local/mergeMudata'
@@ -91,31 +91,31 @@ workflow inference_pipeline {
         if (params.INFERENCE_target_guide_pairing_strategy != 'default') {
             error "INFERENCE_method='default' requires INFERENCE_target_guide_pairing_strategy='default'"
         }
-        // Process cis results
-        SceptreChunkInput_cis = sceptre_chunk_prepare(PrepareInference.mudata_inference_input)
-        SceptreChunkResults_cis = inference_sceptre(SceptreChunkInput_cis.mudata_chunks.flatten())
-        SceptreResults_cis = sceptre_chunk_merge(
-            SceptreChunkResults_cis.per_guide_output.collect().map(sort_paths),
-            SceptreChunkResults_cis.per_element_output.collect().map(sort_paths),
+        // Process local-analysis results
+        SceptreChunkInput_local = sceptre_chunk_prepare(PrepareInference.mudata_inference_input)
+        SceptreChunkResults_local = inference_sceptre(SceptreChunkInput_local.mudata_chunks.flatten())
+        SceptreResults_local = sceptre_chunk_merge(
+            SceptreChunkResults_local.per_guide_output.collect().map(sort_paths),
+            SceptreChunkResults_local.per_element_output.collect().map(sort_paths),
             PrepareInference.mudata_inference_input,
-            SceptreChunkInput_cis.chunk_manifest
+            SceptreChunkInput_local.chunk_manifest
         )
-        PerturboResults_cis = inference_perturbo(PrepareInference.mudata_inference_input, "perturbo")
-        MergedInference_cis = mergedResults(
-            SceptreResults_cis.per_guide_output,
-            SceptreResults_cis.per_element_output,
-            PerturboResults_cis.per_guide_output,
-            PerturboResults_cis.per_element_output,
+        PerturboResults_local = inference_perturbo(PrepareInference.mudata_inference_input, "perturbo")
+        MergedInference_local = mergedResults(
+            SceptreResults_local.per_guide_output,
+            SceptreResults_local.per_element_output,
+            PerturboResults_local.per_guide_output,
+            PerturboResults_local.per_element_output,
             PrepareInference.mudata_inference_input
         )
-        // Process trans results - use concat_mudata directly
-        MergedInference_trans = inference_perturbo_trans(mudata_concat, "perturbo", PerturboResults_cis.inference_mudata)
+        // Process global-analysis results - use concat_mudata directly
+        MergedInference_global = inference_perturbo_global(mudata_concat, "perturbo", PerturboResults_local.inference_mudata)
 
         MergedInference = mergeMudata(
-            MergedInference_cis.per_guide_output,
-            MergedInference_cis.per_element_output,
-            MergedInference_trans.per_guide_output,
-            MergedInference_trans.per_element_output,
+            MergedInference_local.per_guide_output,
+            MergedInference_local.per_element_output,
+            MergedInference_global.per_guide_output,
+            MergedInference_global.per_element_output,
             mudata_concat,
         )
         FinalInference = MergedInference.inference_mudata

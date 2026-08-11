@@ -2,6 +2,7 @@ import pathlib
 import sys
 
 import anndata as ad
+import h5py
 import mudata as mu
 import numpy as np
 import pandas as pd
@@ -38,6 +39,11 @@ def _make_test_mudata():
             index=["g1", "g2"],
         ),
     )
+    # Every real pipeline run sets this layer well before merge_local_global_
+    # results/catalog builders run; match that so tests don't exercise the
+    # X-fallback path in analysis_output_formatting.py, which real data never
+    # takes and which isn't backed-mode safe.
+    guide.layers["guide_assignment"] = guide.X.copy()
     return mu.MuData({"gene": gene, "guide": guide})
 
 
@@ -277,14 +283,26 @@ def test_merge_local_global_results_writes_q_columns_to_outputs_and_mudata(
     _write_tsv(trans_element, paths["trans_element"])
 
     monkeypatch.chdir(tmp_path)
+    output_mudata_path = tmp_path / "inference_mudata.h5mu"
     merge_local_global_results.merge_local_global_results(
         str(paths["cis_guide"]),
         str(paths["cis_element"]),
         str(paths["trans_guide"]),
         str(paths["trans_element"]),
         str(base_mudata),
-        str(tmp_path / "inference_mudata.h5mu"),
+        str(output_mudata_path),
+        results_format="tsv.gz",
     )
+
+    # This is the final published MuData (mergeMudata's own publishDir). It's
+    # written via the fast write_uns_patch path (byte-copy + patch /uns only)
+    # rather than a full compressed re-serialize -- confirm the assay matrix
+    # is untouched (no compression newly applied by this step). Categorical
+    # encoding of low-cardinality .uns columns is covered by
+    # test_analysis_output_formatting.py's make_h5mu_safe_dataframe tests;
+    # this fixture is too small (2 rows) for the cardinality guard to kick in.
+    with h5py.File(output_mudata_path, "r") as f:
+        assert f["mod/gene/X"].compression is None
 
     cis_observed = pd.read_csv(tmp_path / "local_analysis_per_element_output.tsv.gz", sep="\t")
     cis_guide_observed = pd.read_csv(tmp_path / "local_analysis_per_guide_output.tsv.gz", sep="\t")

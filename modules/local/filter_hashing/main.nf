@@ -2,7 +2,6 @@
 process filter_hashing{
 
     cache 'lenient'
-    debug true
 
     input:
     path filtered_anndata_rna

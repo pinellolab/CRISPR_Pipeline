@@ -306,7 +306,7 @@ def run_perturbo(
     # Optionally write the full MuData if an output path was provided
     if mdata_output_fp:
         print("Writing mudata to ", mdata_output_fp)
-        mdata.write(mdata_output_fp, compression="gzip")
+        mdata.write(mdata_output_fp)
 
     return mdata
 

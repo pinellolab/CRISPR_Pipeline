@@ -311,7 +311,7 @@
                         "sceptre,perturbo"
                     ],
                     "description": "Inference method to run.",
-                    "help_text": "default runs cis SCEPTRE, cis PerTurbo, trans PerTurbo, and writes the merged cis/trans output tables. sceptre runs SCEPTRE only. perturbo runs PerTurbo only. sceptre,perturbo runs both methods on the same cis pair set."
+                    "help_text": "default runs local SCEPTRE, local PerTurbo, global PerTurbo, and writes the merged local/global output tables. sceptre runs SCEPTRE only. perturbo runs PerTurbo only. sceptre,perturbo runs both methods on the same cis pair set."
                 },
                 "INFERENCE_input_mudata": {
                     "type": [
@@ -349,26 +349,63 @@
                     "minimum": 0,
                     "description": "Maximum genomic distance, in base pairs, used when constructing cis guide-target pairs."
                 },
-                "INFERENCE_PERTURBO_BATCH_SIZE": {
+                "INFERENCE_PERTURBO_DEVICE": {
+                    "type": "string",
+                    "default": "gpu",
+                    "enum": [
+                        "gpu",
+                        "cpu"
+                    ],
+                    "description": "Device requested for PerTurbo v2 inference."
+                },
+                "INFERENCE_PERTURBO_MAX_CHUNK_CELLS": {
                     "type": "integer",
-                    "default": 4096,
+                    "default": 20000,
                     "minimum": 1,
-                    "description": "Batch size passed to PerTurbo inference for cis and trans runs."
+                    "description": "Maximum cells sent to a PerTurbo v2 fit at once.",
+                    "help_text": "This is the primary GPU-memory knob for local and global runs; PerTurbo minibatching is intentionally disabled by the pipeline."
                 },
-                "INFERENCE_PERTURBO_TRANS_MAX_GENES_PER_CHUNK": {
+                "INFERENCE_PERTURBO_NUM_STEPS_CONTROL": {
                     "type": "integer",
-                    "default": 8000,
-                    "description": "Maximum genes per chunk for trans PerTurbo all-by-all inference.",
-                    "help_text": "Values greater than 0 cap each balanced trans gene chunk. Values less than or equal to 0 disable trans gene chunking in the PerTurbo chunked runner."
+                    "default": 2500,
+                    "minimum": 1,
+                    "description": "SVI steps for the PerTurbo v2 control/baseline fit."
                 },
-                "INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT": {
+                "INFERENCE_PERTURBO_NUM_STEPS_BETAS": {
+                    "type": "integer",
+                    "default": 2500,
+                    "minimum": 1,
+                    "description": "SVI steps for PerTurbo v2 perturbation-effect fits."
+                },
+                "INFERENCE_PERTURBO_SAVE_MODEL_PARAMS": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Save PerTurbo v2 fitted model bundles in addition to pipeline-compatible result tables.",
+                    "help_text": "Off by default to keep pipeline outputs smaller."
+                },
+                "INFERENCE_PERTURBO_SIZE_FACTOR_MODE": {
+                    "type": "string",
+                    "default": "observed",
+                    "description": "Size-factor handling passed to PerTurbo v2."
+                },
+                "INFERENCE_PERTURBO_LIKELIHOOD": {
+                    "type": "string",
+                    "default": "negbin",
+                    "description": "Likelihood family passed to PerTurbo v2."
+                },
+                "INFERENCE_PERTURBO_PRIOR": {
+                    "type": "string",
+                    "default": "normal",
+                    "description": "Perturbation-effect prior passed to PerTurbo v2."
+                },
+                "INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT": {
                     "type": "string",
                     "default": "parquet",
                     "enum": [
                         "tsv.gz",
                         "parquet"
                     ],
-                    "description": "Serialization format for trans PerTurbo result tables and chunk intermediates.",
+                    "description": "Serialization format for global PerTurbo result tables and chunk intermediates.",
                     "help_text": "Use parquet for substantially faster result-table reads and writes. The PerTurbo execution environment must provide pyarrow."
                 },
                 "INFERENCE_SCEPTRE_side": {

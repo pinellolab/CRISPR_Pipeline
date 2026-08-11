@@ -1,6 +1,5 @@
 process mergeMudata {
     cache 'lenient'
-    debug true
     publishDir path: {
         def out = params.outdir?.toString() ?: './pipeline_outputs'
         out = out.replaceAll('/$','')
@@ -27,7 +26,7 @@ process mergeMudata {
         path "catalog_per_guide_output.*", emit: catalog_per_guide_output
 
     script:
-    def results_ext = params.INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT == 'parquet' ? 'parquet' : 'tsv.gz'
+    def results_ext = params.INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT == 'parquet' ? 'parquet' : 'tsv.gz'
     """
         merge_local_global_results.py \\
             --local_analysis_per_guide ${local_analysis_per_guide} \\
@@ -36,7 +35,7 @@ process mergeMudata {
             --global_analysis_per_element ${global_analysis_per_element} \\
             --base_mudata ${base_mudata} \\
             --output inference_mudata.h5mu \\
-            --results_format ${params.INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT}
+            --results_format ${params.INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT}
 
         build_catalog_per_element_output.py \\
             --local_analysis_per_element local_analysis_per_element_output.${results_ext} \\

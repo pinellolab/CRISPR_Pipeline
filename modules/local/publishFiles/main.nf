@@ -21,7 +21,7 @@ process publishFiles {
         path "global_analysis_per_guide_output.*"
 
     script:
-    def results_ext = params.INFERENCE_PERTURBO_TRANS_RESULTS_FORMAT == 'parquet' ? 'parquet' : 'tsv.gz'
+    def results_ext = params.INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT == 'parquet' ? 'parquet' : 'tsv.gz'
     """
         # Check all files exist
         for file in "${local_analysis_per_element_results}" "${local_analysis_per_guide_results}" "${global_analysis_per_element_results}" "${global_analysis_per_guide_results}"; do

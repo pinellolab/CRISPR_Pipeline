@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
 import argparse
-import muon as mu
+import mudata as mu
 import anndata as ad
 import pandas as pd
 import numpy as np
-from muon import MuData
+from mudata import MuData
 
 import scanpy as sc
 import scrublet as scr

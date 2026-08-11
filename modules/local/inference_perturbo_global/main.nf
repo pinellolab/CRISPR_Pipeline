@@ -1,5 +1,5 @@
 
-process inference_perturbo {
+process inference_perturbo_global {
     cache 'lenient'
     publishDir path: {
         def out = params.outdir?.toString() ?: './pipeline_outputs'
@@ -8,27 +8,30 @@ process inference_perturbo {
             return out
         }
         return "${out}/pipeline_outputs"
-    }, enabled: { params.INFERENCE_method == 'perturbo' }
+    }, enabled: { params.INFERENCE_method == 'perturbo_global' }
 
     input:
     path mudata
     val inference_method
+    val dummy // fake dependency to force this to run after local analysis
 
     output:
     path "inference_mudata.h5mu", emit: inference_mudata
-    path "perturbo_local_analysis_per_element_output.tsv.gz", emit: per_element_output
-    path "perturbo_local_analysis_per_guide_output.tsv.gz", emit: per_guide_output
+    path "perturbo_global_analysis_per_element_output.*", emit: per_element_output
+    path "perturbo_global_analysis_per_guide_output.*", emit: per_guide_output
     path "perturbo_v2_outputs", optional: true, emit: perturbo_v2_outputs
 
     script:
         def save_model_params_arg = params.INFERENCE_PERTURBO_SAVE_MODEL_PARAMS ? '--save-model-params' : '--no-save-model-params'
+        def results_ext = params.INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT == 'parquet' ? 'parquet' : 'tsv.gz'
         """
         perturbo_v2_pipeline_adapter.py \\
             --input ${mudata} \\
-            --per-element-output perturbo_local_analysis_per_element_output.tsv.gz \\
-            --per-guide-output perturbo_local_analysis_per_guide_output.tsv.gz \\
+            --per-element-output perturbo_global_analysis_per_element_output.${results_ext} \\
+            --per-guide-output perturbo_global_analysis_per_guide_output.${results_ext} \\
             --output-mudata inference_mudata.h5mu \\
             --v2-artifact-dir perturbo_v2_outputs \\
+            --test-all-pairs \\
             --device ${params.INFERENCE_PERTURBO_DEVICE} \\
             --batch-size 0 \\
             --num-steps-control ${params.INFERENCE_PERTURBO_NUM_STEPS_CONTROL} \\

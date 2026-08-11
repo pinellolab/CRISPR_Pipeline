@@ -118,8 +118,8 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     Args:
         sceptre_per_guide: Path to SCEPTRE per_guide_output.tsv
         sceptre_per_element: Path to SCEPTRE per_element_output.tsv  
-        perturbo_per_guide: Path to PerTurbo per_guide_output.tsv
-        perturbo_per_element: Path to PerTurbo per_element_output.tsv
+        perturbo_per_guide: Path to PerTurbo per_guide_output (.tsv.gz or .parquet)
+        perturbo_per_element: Path to PerTurbo per_element_output (.tsv.gz or .parquet)
         base_mudata_path: Path to base mudata file for structure
     """
     print("Loading input files...")
@@ -261,7 +261,7 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     
     # Write outputs
     print("Writing merged results...")
-    base_mdata.write("inference_mudata.h5mu", compression="gzip")
+    base_mdata.write("inference_mudata.h5mu")
     merged_guide_df.to_csv("per_guide_output.tsv.gz", sep='\t', index=False, compression='gzip')
     merged_element_df.to_csv("per_element_output.tsv.gz", sep='\t', index=False, compression='gzip')
     
@@ -272,8 +272,8 @@ def main():
     parser = argparse.ArgumentParser(description='Merge SCEPTRE and PerTurbo results')
     parser.add_argument('--sceptre_per_guide', required=True, help='Path to SCEPTRE per_guide_output.tsv')
     parser.add_argument('--sceptre_per_element', required=True, help='Path to SCEPTRE per_element_output.tsv')
-    parser.add_argument('--perturbo_per_guide', required=True, help='Path to PerTurbo per_guide_output.tsv')
-    parser.add_argument('--perturbo_per_element', required=True, help='Path to PerTurbo per_element_output.tsv')
+    parser.add_argument('--perturbo_per_guide', required=True, help='Path to PerTurbo per_guide_output (.tsv.gz or .parquet)')
+    parser.add_argument('--perturbo_per_element', required=True, help='Path to PerTurbo per_element_output (.tsv.gz or .parquet)')
     parser.add_argument('--base_mudata', required=True, help='Path to base mudata file for structure')
     
     args = parser.parse_args()

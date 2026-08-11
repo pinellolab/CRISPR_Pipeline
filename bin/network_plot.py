@@ -3,7 +3,7 @@ import os
 import argparse
 import pandas as pd
 import numpy as np
-import muon as mu
+import mudata as mu
 from mudata import MuData
 import networkx as nx
 import matplotlib.pyplot as plt

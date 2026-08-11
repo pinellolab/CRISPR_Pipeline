@@ -6,7 +6,7 @@ import glob
 import html
 import pandas as pd
 import argparse
-import muon as mu
+import mudata as mu
 import anndata as ad
 import numpy as np
 import pickle
