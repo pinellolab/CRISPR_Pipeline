@@ -168,6 +168,7 @@ The complete machine-readable QC output catalog is available as
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
 | `QC_min_genes_per_cell` | `800` | Integer | Minimum detected genes required to keep a cell when `QC_barcode_filter = 'none'`. A gene is counted as present in a cell when its RNA count is greater than zero. |
+| `QC_min_counts_per_cell` | `0` | Non-negative integer | Minimum total RNA UMI count required after barcode calling. It is active with `none`, `knee`, and `knee2`; `0` disables the filter. |
 | `QC_min_cells_per_gene` | `0.05` | Fraction in `[0, 1)` | Minimum retained-cell fraction required to keep a gene during guide-assignment aggregation. `0` retains every gene detected in at least one cell. |
 | `TAPSEQ_QC_MODE` | `false` | `true`, `false` | TAP-seq gene-retention mode. It removes the standard 10-cell preprocessing floor, retaining every observed gene before the final fractional support filter. Use a small fraction such as `0.000001` when all observed TAP-seq genes should be retained. |
 | `QC_pct_mito` | `15` | `0` to `100` | Maximum mitochondrial read percentage allowed per cell during preprocessing. |

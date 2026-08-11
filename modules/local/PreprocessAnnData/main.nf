@@ -7,6 +7,7 @@ process PreprocessAnnData {
     path adata_rna
     path gname_rna
     val min_genes
+    val min_counts
     val min_cells
     val pct_mito
     val reference
@@ -24,7 +25,7 @@ process PreprocessAnnData {
         if [ "${tapseq_qc_mode}" = "true" ]; then
             TAPSEQ_ARG="--tapseq-mode"
         fi
-        preprocess_adata.py ${adata_rna} ${gname_rna} --min_genes ${min_genes} --min_cells ${min_cells} --pct_mito ${pct_mito} --reference ${reference} --barcode-filter ${barcode_filter} --bc_replacement ${params.replace_barcodes} \${TAPSEQ_ARG}
+        preprocess_adata.py ${adata_rna} ${gname_rna} --min_genes ${min_genes} --min_counts ${min_counts} --min_cells ${min_cells} --pct_mito ${pct_mito} --reference ${reference} --barcode-filter ${barcode_filter} --bc_replacement ${params.replace_barcodes} \${TAPSEQ_ARG}
         mv concatenated_adata.h5ad rna_concatenated_adata.h5ad
         """
 

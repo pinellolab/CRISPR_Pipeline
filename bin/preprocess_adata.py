@@ -113,6 +113,7 @@ def main(
     adata_rna,
     gname_rna,
     min_genes,
+    min_counts,
     min_cells,
     pct_mito,
     reference,
@@ -220,7 +221,23 @@ def main(
         save="plot_scrna.png",
     )
 
-    # filter for mic_cells and min_genes
+    # Apply an explicit library-size floor independently of barcode calling.
+    # This allows knee/knee2 to identify candidate cells while still removing
+    # low-RNA barcodes with a reproducible, experiment-specific cutoff.
+    if min_counts < 0:
+        raise ValueError("Minimum RNA UMI count per cell must be non-negative.")
+    before_min_counts = adata_rna.n_obs
+    if min_counts > 0:
+        adata_rna = adata_rna[
+            adata_rna.obs["total_counts"] >= min_counts, :
+        ].copy()
+    print(
+        "RNA UMI filter retained "
+        f"{adata_rna.n_obs}/{before_min_counts} cells "
+        f"(total_counts >= {min_counts})."
+    )
+
+    # filter for min_cells and min_genes
     if barcode_filter == "none":
         sc.pp.filter_cells(adata_rna, min_genes=min_genes)
     else:
@@ -258,6 +275,15 @@ if __name__ == "__main__":
         type=int,
         default=100,
         help="Minimum number of genes per cell.",
+    )
+    parser.add_argument(
+        "--min_counts",
+        type=int,
+        default=0,
+        help=(
+            "Minimum total RNA UMI count per cell, applied after barcode "
+            "calling. Zero disables this filter."
+        ),
     )
     parser.add_argument(
         "--min_cells",
@@ -300,6 +326,7 @@ if __name__ == "__main__":
         args.adata_rna,
         args.gname_rna,
         args.min_genes,
+        args.min_counts,
         args.min_cells,
         args.pct_mito,
         args.reference,

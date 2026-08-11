@@ -209,6 +209,13 @@
                     "description": "Minimum detected genes required to keep a cell when QC_barcode_filter is none.",
                     "help_text": "A gene is considered present in a cell when its count is greater than zero in the RNA AnnData matrix. This parameter is passed to scanpy.pp.filter_cells(min_genes=...) and is only active when QC_barcode_filter = 'none'. When knee or knee2 filtering is enabled, total RNA UMI depth selects cells first and the min-genes cell filter is skipped."
                 },
+                "QC_min_counts_per_cell": {
+                    "type": "integer",
+                    "default": 0,
+                    "minimum": 0,
+                    "description": "Minimum total RNA UMI count required to keep a cell after barcode calling.",
+                    "help_text": "This library-size filter is applied after none, knee, or knee2 barcode selection and therefore remains active when QC_min_genes_per_cell is skipped. Set to 0 to disable it."
+                },
                 "QC_min_cells_per_gene": {
                     "type": "number",
                     "default": 0.05,

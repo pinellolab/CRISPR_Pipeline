@@ -90,16 +90,19 @@ def _load_params(params_json=None, params_dir=None):
 def _get_qc_params(params):
     has_params = bool(params)
     min_genes = params.get("QC_min_genes_per_cell", 500)
+    min_counts = params.get("QC_min_counts_per_cell", 0)
     pct_mito = params.get("QC_pct_mito", 20)
     barcode_filter = params.get("QC_barcode_filter", "knee")
     return {
         "min_genes": min_genes,
+        "min_counts": min_counts,
         "pct_mito": pct_mito,
         "barcode_filter": str(barcode_filter).lower(),
         "enable_scrublet": _as_bool(params.get("ENABLE_SCRUBLET", False)),
         "params_found": has_params,
         "barcode_filter_source": "params" if "QC_barcode_filter" in params else "default",
         "min_genes_source": "params" if "QC_min_genes_per_cell" in params else "default",
+        "min_counts_source": "params" if "QC_min_counts_per_cell" in params else "default",
         "pct_mito_source": "params" if "QC_pct_mito" in params else "default",
     }
 
@@ -624,6 +627,12 @@ def _build_comprehensive_qc_report(
             "warn" if barcode_filter in {"knee", "knee2"} else "good",
         ),
         _qc_kpi(
+            "Minimum RNA UMIs",
+            _display(qc_params.get("min_counts"), digits=0),
+            f"{_tip('QC_min_counts_per_cell', 'Explicit RNA library-size floor applied after barcode calling.', code=True)}.",
+            "good" if qc_params.get("min_counts", 0) else "info",
+        ),
+        _qc_kpi(
             "Significant global-analysis tests",
             _display(significant_trans, digits=0),
             "From additional_qc/global_analysis/global_analysis_metrics.tsv when inference results exist.",
@@ -679,13 +688,14 @@ def _build_comprehensive_qc_report(
         ),
         _qc_step(
             4,
-            "Mitochondrial percentage filter",
+            "RNA UMI floor and mitochondrial percentage filters",
             "Cell QC",
-            f"Rule: {_tip('pct_counts_mt', 'Cell-level mitochondrial percentage from Scanpy QC metrics.', code=True)} < {_tip('QC_pct_mito', 'Resolved maximum mitochondrial percentage parameter.', code=True)}.",
+            f"Rules: {_tip('total_counts', 'Cell-level RNA UMI total from Scanpy QC metrics.', code=True)} >= {_tip('QC_min_counts_per_cell', 'Resolved minimum RNA UMI parameter; zero disables this rule.', code=True)} and {_tip('pct_counts_mt', 'Cell-level mitochondrial percentage from Scanpy QC metrics.', code=True)} < {_tip('QC_pct_mito', 'Resolved maximum mitochondrial percentage parameter.', code=True)}.",
             [
                 ("Cells kept", _format_count(filtered_count)),
                 ("Removed", removed(filter_count, filtered_count)),
                 ("Cutoff", _format_pct(qc_params.get("pct_mito"))),
+                ("Min RNA UMIs", _format_count(qc_params.get("min_counts"))),
                 ("Median mito", _display(gene_row.get("mito_median") if gene_row is not None else None, digits=2, suffix="%")),
             ],
         ),
@@ -746,6 +756,7 @@ def _build_comprehensive_qc_report(
         ("Params source", params_status, "params_*.json / fallback defaults"),
         ("Cell barcode filter", _tip(f"QC_barcode_filter = {barcode_filter}", "Cell filtering mode used during RNA preprocessing.", code=True), "Resolved params"),
         ("Min genes per cell", _tip(f"QC_min_genes_per_cell = {qc_params.get('min_genes')}", "Minimum detected genes per cell; skipped for knee/knee2.", code=True), "Resolved params"),
+        ("Min RNA UMIs per cell", _tip(f"QC_min_counts_per_cell = {qc_params.get('min_counts')}", "Minimum total RNA UMI count applied after barcode calling; zero disables it.", code=True), "Resolved params"),
         ("Mito cutoff", _tip(f"QC_pct_mito = {qc_params.get('pct_mito')}", "Maximum mitochondrial percentage allowed.", code=True), "Resolved params"),
         ("Min cells per gene", _tip(f"QC_min_cells_per_gene = {params.get('QC_min_cells_per_gene', 'N/A')}", "Minimum gene support before inference: a fraction in [0, 1); zero retains genes detected in at least one cell.", code=True), "Resolved params"),
         ("Scrublet", _tip(f"ENABLE_SCRUBLET = {params.get('ENABLE_SCRUBLET', False)}", "Whether Scrublet doublet removal was enabled.", code=True), "Resolved params"),

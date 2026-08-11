@@ -320,6 +320,7 @@ def _selected_params(params):
     keys = [
         "QC_barcode_filter",
         "QC_min_genes_per_cell",
+        "QC_min_counts_per_cell",
         "QC_min_cells_per_gene",
         "QC_pct_mito",
         "QC_batch_col",

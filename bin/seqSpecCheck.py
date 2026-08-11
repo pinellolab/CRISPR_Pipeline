@@ -214,10 +214,11 @@ def analyze_guides_in_reads(reads, guide_list):
     """
     positions = []
     upstream_map = {}
-    guide_hits = Counter({g: 0 for g in guide_list})
 
     if not reads or not guide_list:
-        return positions, upstream_map, guide_hits
+        return positions, upstream_map, Counter()
+
+    guide_hits = Counter({g: 0 for g in guide_list})
 
     guides_by_length, lengths = _group_guides_by_length(guide_list)
 
@@ -460,4 +461,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

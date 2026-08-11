@@ -19,6 +19,7 @@ workflow preprocessing_pipeline {
         concat_anndata_rna,
         selected_trans_out_dir,
         params.QC_min_genes_per_cell,
+        params.QC_min_counts_per_cell,
         params.QC_min_cells_per_gene,
         params.QC_pct_mito,
         params.REFERENCE_transcriptome,
