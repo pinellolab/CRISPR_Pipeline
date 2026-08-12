@@ -51,15 +51,15 @@ ${dashboard_params_json}
 EOF_DASHBOARD_PARAMS
 
         echo "=== RENAMING INPUT DIRECTORIES ==="
-        [[ -e guide_seqSpec_plots ]] && mv guide_seqSpec_plots input_guide_seqSpec_plots
-        [[ -e hashing_seqSpec_plots ]] && mv hashing_seqSpec_plots input_hashing_seqSpec_plots
-        [[ -e figures ]] && mv figures input_figures
-        [[ -e evaluation_output ]] && mv evaluation_output input_evaluation_output
-        [[ -e svg ]] && mv svg input_svg
-        [[ -e additional_qc ]] && mv additional_qc input_additional_qc
-        [[ -e benchmark_output ]] && mv benchmark_output input_benchmark_output
-        [[ -e ${mudata} ]] && mv ${mudata} input_mudata.h5mu
-        [[ -e plots ]] && mv plots input_controls_evaluation_output_dir
+        [[ -e guide_seqSpec_plots || -L guide_seqSpec_plots ]] && mv guide_seqSpec_plots input_guide_seqSpec_plots
+        [[ -e hashing_seqSpec_plots || -L hashing_seqSpec_plots ]] && mv hashing_seqSpec_plots input_hashing_seqSpec_plots
+        [[ -e figures || -L figures ]] && mv figures input_figures
+        [[ -e evaluation_output || -L evaluation_output ]] && mv evaluation_output input_evaluation_output
+        [[ -e svg || -L svg ]] && mv svg input_svg
+        [[ -e additional_qc || -L additional_qc ]] && mv additional_qc input_additional_qc
+        [[ -e benchmark_output || -L benchmark_output ]] && mv benchmark_output input_benchmark_output
+        [[ -e ${mudata} || -L ${mudata} ]] && mv ${mudata} input_mudata.h5mu
+        [[ -e plots || -L plots ]] && mv plots input_controls_evaluation_output_dir
 
 
         # Create new output directories with actual content
