@@ -525,9 +525,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--v2-artifact-dir", default=None, help="Optional directory for raw PerTurbo v2 artifacts")
     parser.add_argument("--test-all-pairs", action="store_true", help="Do not filter output to mdata.uns['pairs_to_test']")
     parser.add_argument("--device", default="gpu", help="JAX device for PerTurbo v2, e.g. gpu or cpu")
-    parser.add_argument("--batch-size", type=int, default=4096, help="SVI minibatch size")
+    parser.add_argument("--batch-size", type=int, default=0, help="SVI minibatch size")
     parser.add_argument("--num-steps-control", type=int, default=2500, help="Control-fit SVI steps")
-    parser.add_argument("--num-steps-betas", type=int, default=2500, help="Beta-fit SVI steps")
+    parser.add_argument(
+        "--num-steps-betas", type=int, default=1000, help="Beta-fit SVI steps"
+    )
     parser.add_argument("--max-chunk-size", type=int, default=50000, help="PerTurbo v2 max chunk cell count")
     parser.add_argument("--perturbation-chunk-size", type=int, default=0, help="PerTurbo v2 perturbation chunk size")
     parser.add_argument("--size-factor-mode", default="observed", choices=["infer", "observed", "none"])
