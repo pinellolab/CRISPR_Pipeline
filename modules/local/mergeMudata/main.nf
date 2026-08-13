@@ -28,6 +28,8 @@ process mergeMudata {
     script:
     def results_ext = params.INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT == 'parquet' ? 'parquet' : 'tsv.gz'
     """
+        export POLARS_MAX_THREADS=${task.cpus}
+
         merge_local_global_results.py \\
             --local_analysis_per_guide ${local_analysis_per_guide} \\
             --local_analysis_per_element ${local_analysis_per_element} \\

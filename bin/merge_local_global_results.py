@@ -41,7 +41,13 @@ def _add_perturbo_columns(df: pd.DataFrame) -> pd.DataFrame:
     )
     out = out.drop(columns=["perturbo_fdr_log10_p_value"], errors="ignore")
     if "perturbo_p_value" in out.columns:
-        out["perturbo_q_value"] = _bh_adjust(out["perturbo_p_value"])
+        if "perturbo_q_value" not in out.columns:
+            out["perturbo_q_value"] = _bh_adjust(out["perturbo_p_value"])
+        else:
+            missing_q = out["perturbo_q_value"].isna() & out["perturbo_p_value"].notna()
+            if missing_q.any():
+                computed_q = _bh_adjust(out["perturbo_p_value"])
+                out.loc[missing_q, "perturbo_q_value"] = computed_q.loc[missing_q]
     return out
 
 

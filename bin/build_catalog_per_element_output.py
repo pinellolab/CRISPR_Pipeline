@@ -9,6 +9,7 @@ import pandas as pd
 from scipy.stats import false_discovery_control
 from scipy import sparse
 from result_table_io import categoricalize_text_columns, read_result_table, write_result_table
+from streaming_catalog_io import try_write_enriched_parquet_catalog
 
 ELEMENT_COLUMNS = [
     "intended_target_name",
@@ -373,7 +374,41 @@ def build_catalog_per_element_output(
     mudata_path: str,
     output_path: str,
     pvalue_floor: float = P_VALUE_FLOOR,
-) -> pd.DataFrame:
+) -> Optional[pd.DataFrame]:
+    if try_write_enriched_parquet_catalog(
+        local_path=local_analysis_per_element_path,
+        global_path=global_analysis_per_element_path,
+        output_path=output_path,
+        join_columns=JOIN_COLUMNS,
+        local_metric_columns=[
+            "sceptre_log2_fc",
+            "sceptre_p_value",
+            "sceptre_q_value",
+            "sceptre_fc_se",
+            "sceptre_negLog10p",
+        ],
+        global_required_columns=[
+            "perturbo_log2_fc",
+            "perturbo_p_value",
+            "perturbo_q_value",
+            "perturbo_fc_se",
+            "perturbo_negLog10p",
+            "element_id",
+            "element_type",
+            "element_chr",
+            "element_start",
+            "element_end",
+            "element_name",
+            "guide_ids",
+            "num_guides",
+            "gene_name",
+            "nPerturbedCells",
+        ],
+        output_columns=OUTPUT_COLUMNS,
+        sort_columns=["element_chr", "element_start", "element_end", "element_name", "gene_id"],
+    ):
+        return None
+
     local_results = read_result_table(local_analysis_per_element_path)
     global_results = read_result_table(global_analysis_per_element_path)
     # backed="r" avoids loading gene/guide .X into memory; this script only
