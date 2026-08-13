@@ -11,6 +11,49 @@ def _is_parquet(path: str | Path) -> bool:
     return str(path).lower().endswith((".parquet", ".pq"))
 
 
+def _normalize_join_keys(local_scan, global_scan, join_columns, pl):
+    """Cast equivalent dictionary/string and numeric join keys identically.
+
+    Parquet written from pandas categoricals is scanned by Polars as
+    ``Categorical``, whereas the same identifiers in Polars-written output are
+    ``String``. Polars deliberately refuses to guess this cast during a join.
+    Normalize only the key columns and preserve every metric's native dtype.
+    """
+
+    local_schema = local_scan.collect_schema()
+    global_schema = global_scan.collect_schema()
+    string_types = (pl.String, pl.Categorical, pl.Enum)
+    local_exprs = []
+    global_exprs = []
+    for column in join_columns:
+        local_dtype = local_schema[column]
+        global_dtype = global_schema[column]
+        if local_dtype in string_types or global_dtype in string_types:
+            common_dtype = pl.String
+        elif local_dtype.is_integer() and global_dtype.is_integer():
+            common_dtype = pl.Int64
+        elif (
+            (local_dtype.is_integer() or local_dtype.is_float())
+            and (global_dtype.is_integer() or global_dtype.is_float())
+        ):
+            common_dtype = pl.Float64
+        elif local_dtype == global_dtype:
+            continue
+        else:
+            raise TypeError(
+                f"Cannot normalize catalog join column {column!r}: "
+                f"local={local_dtype}, global={global_dtype}"
+            )
+        local_exprs.append(pl.col(column).cast(common_dtype))
+        global_exprs.append(pl.col(column).cast(common_dtype))
+
+    if local_exprs:
+        local_scan = local_scan.with_columns(local_exprs)
+    if global_exprs:
+        global_scan = global_scan.with_columns(global_exprs)
+    return local_scan, global_scan
+
+
 def try_write_enriched_parquet_catalog(
     *,
     local_path: str | Path,
@@ -42,6 +85,10 @@ def try_write_enriched_parquet_catalog(
         return False
     if not global_required.issubset(global_schema):
         return False
+
+    local_scan, global_scan = _normalize_join_keys(
+        local_scan, global_scan, join_columns, pl
+    )
 
     local_keys = local_scan.select(join_columns)
     duplicate_key = (
