@@ -388,3 +388,112 @@ def test_merge_local_global_results_writes_q_columns_to_outputs_and_mudata(
     assert "sceptre_negLog10p" in stored_cis.columns
     assert "perturbo_negLog10p" in stored_trans.columns
     assert "element_id" in stored_cis.columns
+
+
+def test_merge_local_global_results_uses_fast_parquet_path(tmp_path, monkeypatch):
+    base_mudata = tmp_path / "base.h5mu"
+    _make_test_mudata().write(base_mudata)
+
+    local_guide = pd.DataFrame(
+        {
+            "gene_id": ["GENE1", "GENE2"],
+            "guide_id": ["g1", "g2"],
+            "sceptre_log2_fc": [1.0, -1.0],
+            "sceptre_p_value": [0.01, 0.2],
+            "sceptre_q_value": [0.02, 0.2],
+            "sceptre_fc_se": [0.1, 0.2],
+            "perturbo_log2_fc": [0.5, -0.5],
+            "perturbo_p_value": [0.01, 0.2],
+        }
+    )
+    local_element = pd.DataFrame(
+        {
+            "gene_id": ["GENE1", "GENE2"],
+            "intended_target_name": ["target1", "target2"],
+            "intended_target_chr": ["chr1", "chr2"],
+            "intended_target_start": [100, 200],
+            "intended_target_end": [150, 250],
+            "sceptre_log2_fc": [1.0, -1.0],
+            "sceptre_p_value": [0.01, 0.2],
+            "sceptre_q_value": [0.02, 0.2],
+            "sceptre_fc_se": [0.1, 0.2],
+            "perturbo_log2_fc": [0.5, -0.5],
+            "perturbo_p_value": [0.01, 0.2],
+        }
+    )
+    global_guide = pd.DataFrame(
+        {
+            "gene_id": ["GENE1", "GENE2"],
+            "guide_id": ["g1", "g2"],
+            "log2_fc": np.array([0.4, -0.4], dtype=np.float32),
+            "perturbo_fc_se": np.array([0.1, 0.2], dtype=np.float32),
+            "p_value": np.array([0.05, 0.5], dtype=np.float32),
+            "perturbo_q_value": [0.1, 0.5],
+        }
+    )
+    global_element = pd.DataFrame(
+        {
+            "gene_id": ["GENE1", "GENE2"],
+            "intended_target_name": ["target1", "target2"],
+            "intended_target_chr": ["chr1", "chr2"],
+            "intended_target_start": [100, 200],
+            "intended_target_end": [150, 250],
+            "log2_fc": np.array([0.4, -0.4], dtype=np.float32),
+            "perturbo_fc_se": np.array([0.1, 0.2], dtype=np.float32),
+            "p_value": np.array([0.05, 0.5], dtype=np.float32),
+            "perturbo_q_value": [0.1, 0.5],
+        }
+    )
+
+    local_guide_path = tmp_path / "local_guide.tsv.gz"
+    local_element_path = tmp_path / "local_element.tsv.gz"
+    global_guide_path = tmp_path / "global_guide.parquet"
+    global_element_path = tmp_path / "global_element.parquet"
+    _write_tsv(local_guide, local_guide_path)
+    _write_tsv(local_element, local_element_path)
+    global_guide.to_parquet(global_guide_path, index=False)
+    global_element.to_parquet(global_element_path, index=False)
+
+    monkeypatch.chdir(tmp_path)
+    merge_local_global_results.merge_local_global_results(
+        str(local_guide_path),
+        str(local_element_path),
+        str(global_guide_path),
+        str(global_element_path),
+        str(base_mudata),
+        str(tmp_path / "inference_mudata.h5mu"),
+        results_format="parquet",
+    )
+
+    observed_guide = pd.read_parquet(
+        tmp_path / "global_analysis_per_guide_output.parquet"
+    )
+    observed_element = pd.read_parquet(
+        tmp_path / "global_analysis_per_element_output.parquet"
+    )
+    assert list(observed_guide.columns) == [
+        "gene_id", "guide_id", "perturbo_log2_fc", "perturbo_p_value",
+        "perturbo_q_value", "perturbo_fc_se", "perturbo_negLog10p",
+        "guide_sequence", "guide_type", "targeting", "guide_chr",
+        "guide_start", "guide_end", "guide_strand", "pam",
+        "intended_target_name", "intended_target_chr",
+        "intended_target_start", "intended_target_end", "gene_name",
+        "nPerturbedCells",
+    ]
+    assert list(observed_element.columns) == [
+        "gene_id", "intended_target_name", "intended_target_chr",
+        "intended_target_start", "intended_target_end", "perturbo_log2_fc",
+        "perturbo_p_value", "perturbo_q_value", "perturbo_fc_se",
+        "perturbo_negLog10p", "element_id", "element_type", "element_chr",
+        "element_start", "element_end", "element_name", "guide_ids",
+        "num_guides", "gene_name", "nPerturbedCells",
+    ]
+    assert np.allclose(
+        observed_guide["perturbo_negLog10p"], -np.log10(global_guide["p_value"])
+    )
+    assert observed_guide["gene_name"].tolist() == ["SYM1", "SYM2"]
+    assert observed_element["guide_ids"].tolist() == ["g1", "g2"]
+
+    merged = mu.read_h5mu(tmp_path / "inference_mudata.h5mu")
+    assert len(merged.uns["global_analysis_per_guide_results"]) == 2
+    assert len(merged.uns["global_analysis_per_element_results"]) == 2
