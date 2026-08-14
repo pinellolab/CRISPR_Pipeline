@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import gc
 
 import mudata as mu
 import numpy as np
@@ -12,8 +13,12 @@ from analysis_output_formatting import (
     format_guide_output,
     make_h5mu_safe_dataframe,
 )
-from mudata_uns_io import write_uns_patch
+from mudata_uns_io import write_parquet_dataframe_to_uns, write_uns_patch
 from result_table_io import read_result_table, write_result_table
+from fast_result_enrichment import (
+    enrich_global_parquet,
+    supports_fast_parquet_path,
+)
 
 
 def _bh_adjust(pvalues: pd.Series) -> pd.Series:
@@ -68,39 +73,19 @@ def merge_local_global_results(
     results_format="parquet",
 ):
     """Merge local- and global-analysis result tables into the final MuData."""
-    print("Loading input files...")
+    print("Loading local-analysis input files...", flush=True)
     local_per_guide = read_result_table(local_analysis_per_guide_path)
     local_per_element = read_result_table(local_analysis_per_element_path)
-    global_per_guide = read_result_table(global_analysis_per_guide_path)
-    global_per_element = read_result_table(global_analysis_per_element_path)
 
     local_per_guide = _finalize_perturbo_columns(_add_perturbo_columns(local_per_guide))
     local_per_element = _finalize_perturbo_columns(_add_perturbo_columns(local_per_element))
-    global_per_guide = _finalize_perturbo_columns(_add_perturbo_columns(global_per_guide))
-    global_per_element = _finalize_perturbo_columns(_add_perturbo_columns(global_per_element))
 
     # backed="r" avoids loading gene/guide .X into memory; format_guide_output/
     # format_element_output only need .var and .layers["guide_assignment"],
     # which load eagerly even in backed mode.
     base_mdata = mu.read_h5mu(base_mudata_path, backed="r")
     local_per_guide = format_guide_output(local_per_guide, base_mdata)
-    global_per_guide = format_guide_output(global_per_guide, base_mdata)
     local_per_element = format_element_output(local_per_element, base_mdata)
-    global_per_element = format_element_output(global_per_element, base_mdata)
-
-    print(f"Writing merged MuData to {output_path}...")
-    # make_h5mu_safe_dataframe encodes the low-cardinality string columns in
-    # these tables (gene/guide ids, target names, chromosomes, pair types) as
-    # categoricals, which captures most of the disk-size win gzip would
-    # otherwise be relied on for. That makes the fast write_uns_patch path
-    # (byte-copy the matrices, patch only /uns) the better trade here instead
-    # of a full compressed re-serialize.
-    updates = {
-        "local_analysis_per_guide_results": make_h5mu_safe_dataframe(local_per_guide),
-        "local_analysis_per_element_results": make_h5mu_safe_dataframe(local_per_element),
-        "global_analysis_per_guide_results": make_h5mu_safe_dataframe(global_per_guide),
-        "global_analysis_per_element_results": make_h5mu_safe_dataframe(global_per_element),
-    }
     obsolete_keys = (
         "per_guide_results",
         "per_element_results",
@@ -109,22 +94,134 @@ def merge_local_global_results(
         "trans_per_guide_results",
         "trans_per_element_results",
     )
-    base_mdata.file.close()
-    write_uns_patch(
-        base_mudata_path, output_path, updates=updates, deletes=obsolete_keys
-    )
 
     extension = "parquet" if results_format == "parquet" else "tsv.gz"
     write_result_table(local_per_guide, f"local_analysis_per_guide_output.{extension}")
     write_result_table(local_per_element, f"local_analysis_per_element_output.{extension}")
-    write_result_table(global_per_guide, f"global_analysis_per_guide_output.{extension}")
-    write_result_table(global_per_element, f"global_analysis_per_element_output.{extension}")
 
-    print("Successfully merged local and global analysis results.")
-    print(f"  - local_analysis_per_guide_results: {len(local_per_guide)} entries")
-    print(f"  - local_analysis_per_element_results: {len(local_per_element)} entries")
-    print(f"  - global_analysis_per_guide_results: {len(global_per_guide)} entries")
-    print(f"  - global_analysis_per_element_results: {len(global_per_element)} entries")
+    fast_path = results_format == "parquet" and supports_fast_parquet_path(
+        global_analysis_per_guide_path,
+        global_analysis_per_element_path,
+    )
+    if fast_path:
+        global_guide_output = "global_analysis_per_guide_output.parquet"
+        global_element_output = "global_analysis_per_element_output.parquet"
+        try:
+            enrich_global_parquet(
+                global_analysis_per_guide_path,
+                global_guide_output,
+                base_mdata,
+                "guide",
+            )
+            enrich_global_parquet(
+                global_analysis_per_element_path,
+                global_element_output,
+                base_mdata,
+                "element",
+            )
+        except ValueError as exc:
+            print(
+                f"Fast Parquet enrichment is not compatible with these inputs: {exc}. "
+                "Falling back to pandas.",
+                flush=True,
+            )
+            fast_path = False
+
+    if not fast_path:
+        print("Loading global-analysis inputs with pandas...", flush=True)
+        global_per_guide = read_result_table(global_analysis_per_guide_path)
+        global_per_element = read_result_table(global_analysis_per_element_path)
+        global_per_guide = _finalize_perturbo_columns(
+            _add_perturbo_columns(global_per_guide)
+        )
+        global_per_element = _finalize_perturbo_columns(
+            _add_perturbo_columns(global_per_element)
+        )
+        global_per_guide = format_guide_output(global_per_guide, base_mdata)
+        global_per_element = format_element_output(global_per_element, base_mdata)
+        write_result_table(
+            global_per_guide, f"global_analysis_per_guide_output.{extension}"
+        )
+        write_result_table(
+            global_per_element, f"global_analysis_per_element_output.{extension}"
+        )
+
+    base_mdata.file.close()
+
+    # Copy the assay matrices once, then patch one result table at a time. This
+    # preserves the self-contained H5MU contract while avoiding simultaneous
+    # in-memory copies of both 100M+-row global tables.
+    print(f"Writing merged MuData to {output_path}...", flush=True)
+    local_guide_safe = make_h5mu_safe_dataframe(local_per_guide)
+    local_element_safe = make_h5mu_safe_dataframe(local_per_element)
+    write_uns_patch(
+        base_mudata_path,
+        output_path,
+        updates={
+            "local_analysis_per_guide_results": local_guide_safe,
+            "local_analysis_per_element_results": local_element_safe,
+        },
+        deletes=obsolete_keys,
+    )
+
+    local_guide_rows = len(local_per_guide)
+    local_element_rows = len(local_per_element)
+    del local_guide_safe, local_element_safe, local_per_guide, local_per_element
+    gc.collect()
+
+    if fast_path:
+        import pyarrow.parquet as pq
+
+        global_guide_rows = pq.ParquetFile(
+            "global_analysis_per_guide_output.parquet"
+        ).metadata.num_rows
+        write_parquet_dataframe_to_uns(
+            output_path,
+            "global_analysis_per_guide_results",
+            "global_analysis_per_guide_output.parquet",
+        )
+        gc.collect()
+
+        global_element_rows = pq.ParquetFile(
+            "global_analysis_per_element_output.parquet"
+        ).metadata.num_rows
+        write_parquet_dataframe_to_uns(
+            output_path,
+            "global_analysis_per_element_results",
+            "global_analysis_per_element_output.parquet",
+        )
+        gc.collect()
+    else:
+        global_guide_rows = len(global_per_guide)
+        global_element_rows = len(global_per_element)
+        write_uns_patch(
+            output_path,
+            output_path,
+            updates={
+                "global_analysis_per_guide_results": make_h5mu_safe_dataframe(
+                    global_per_guide
+                )
+            },
+        )
+        del global_per_guide
+        gc.collect()
+        write_uns_patch(
+            output_path,
+            output_path,
+            updates={
+                "global_analysis_per_element_results": make_h5mu_safe_dataframe(
+                    global_per_element
+                )
+            },
+        )
+        del global_per_element
+        gc.collect()
+
+    print("Successfully merged local and global analysis results.", flush=True)
+    print(f"  - local_analysis_per_guide_results: {local_guide_rows} entries")
+    print(f"  - local_analysis_per_element_results: {local_element_rows} entries")
+    print(f"  - global_analysis_per_guide_results: {global_guide_rows} entries")
+    print(f"  - global_analysis_per_element_results: {global_element_rows} entries")
 
 
 def main():

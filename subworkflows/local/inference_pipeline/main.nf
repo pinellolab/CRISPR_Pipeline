@@ -11,6 +11,8 @@ include { inference_perturbo_global } from '../../../modules/local/inference_per
 include { mergedResults } from '../../../modules/local/mergedResults'
 include { publishFiles } from '../../../modules/local/publishFiles'
 include { mergeMudata } from '../../../modules/local/mergeMudata'
+include { buildCatalogElement } from '../../../modules/local/buildCatalogElement'
+include { buildCatalogGuide } from '../../../modules/local/buildCatalogGuide'
 
 workflow inference_pipeline {
 
@@ -117,6 +119,18 @@ workflow inference_pipeline {
             MergedInference_global.per_guide_output,
             MergedInference_global.per_element_output,
             mudata_concat,
+        )
+        // Catalog construction is intentionally independent from mergeMudata:
+        // each large table is cacheable and resumable on its own.
+        buildCatalogElement(
+            MergedInference.local_analysis_per_element_output,
+            MergedInference.global_analysis_per_element_output,
+            MergedInference.inference_mudata,
+        )
+        buildCatalogGuide(
+            MergedInference.local_analysis_per_guide_output,
+            MergedInference.global_analysis_per_guide_output,
+            MergedInference.inference_mudata,
         )
         FinalInference = MergedInference.inference_mudata
     } else {
