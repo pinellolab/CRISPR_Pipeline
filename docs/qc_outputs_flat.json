@@ -1038,7 +1038,7 @@
     "flat_key": "dashboard_derived.mean_guides_per_cell_final",
     "section": "dashboard_derived",
     "metric": "mean_guides_per_cell_final",
-    "description": "Mean guide count per final cell from the guide modality matrix.",
+    "description": "Mean number of assigned guides per final cell from guide.layers['guide_assignment'].",
     "unit": "guides_per_cell",
     "row_level": "measurement-set or run-level",
     "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"
@@ -1047,7 +1047,7 @@
     "flat_key": "dashboard_derived.mean_cells_per_guide_final",
     "section": "dashboard_derived",
     "metric": "mean_cells_per_guide_final",
-    "description": "Mean cell count per guide from the guide modality matrix.",
+    "description": "Mean number of assigned cells per guide from guide.layers['guide_assignment'].",
     "unit": "cells_per_guide",
     "row_level": "measurement-set or run-level",
     "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab"

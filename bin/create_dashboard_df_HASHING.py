@@ -1451,10 +1451,10 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
 
     ### Create inference visualization df
     ##mean guides/cell
-    guides_per_cell = np.sum(mudata.mod['guide'].X, axis=1)
+    guides_per_cell = np.sum(guide_assignment_matrix, axis=1)
     mean_guides_per_cell = np.mean(guides_per_cell)
     ##mean cell/guides
-    cells_per_guide = np.sum(mudata.mod['guide'].X, axis=0)
+    cells_per_guide = np.sum(guide_assignment_matrix, axis=0)
     mean_cells_per_guide = np.mean(cells_per_guide)
 
     iv_highlight = f"Mean guides per cell: {human_format(mean_guides_per_cell)}, Mean cells per guide: {human_format(mean_cells_per_guide)}"

@@ -157,8 +157,8 @@ METRIC_CATALOG = {
             {"name": "final_gene_mean_umis_per_cell", "description": "Mean total gene UMI counts per final cell.", "unit": "UMIs_per_cell"},
             {"name": "total_sgrna_assignment_values", "description": "Sum of guide assignment values across all cells and guides.", "unit": "assignment_values"},
             {"name": "median_sgrna_assignment_per_guide", "description": "Median summed guide assignment value per guide.", "unit": "assignment_values_per_guide"},
-            {"name": "mean_guides_per_cell_final", "description": "Mean guide count per final cell from the guide modality matrix.", "unit": "guides_per_cell"},
-            {"name": "mean_cells_per_guide_final", "description": "Mean cell count per guide from the guide modality matrix.", "unit": "cells_per_guide"},
+            {"name": "mean_guides_per_cell_final", "description": "Mean number of assigned guides per final cell from guide.layers['guide_assignment'].", "unit": "guides_per_cell"},
+            {"name": "mean_cells_per_guide_final", "description": "Mean number of assigned cells per guide from guide.layers['guide_assignment'].", "unit": "cells_per_guide"},
             {"name": "final_cells_total_gene_umis_lt_100", "description": "Final cells with total_gene_umis below 100; diagnostic only unless configured as a filter.", "unit": "cells"},
             {"name": "final_cells_total_gene_umis_lt_500", "description": "Final cells with total_gene_umis below 500; diagnostic only unless configured as a filter.", "unit": "cells"},
             {"name": "final_cells_no_gene_count_gt_1", "description": "Final cells with no gene whose count is greater than 1; diagnostic only.", "unit": "cells"},
@@ -308,11 +308,15 @@ def _guide_assignment_summary(guide_mod):
         return {
             "total_sgrna_assignment_values": None,
             "median_sgrna_assignment_per_guide": None,
+            "mean_guides_per_cell": None,
+            "mean_cells_per_guide": None,
         }
     values_per_guide = _matrix_sum_vector(assignment, axis=0)
     return {
         "total_sgrna_assignment_values": float(values_per_guide.sum()) if values_per_guide.size else 0.0,
         "median_sgrna_assignment_per_guide": float(np.median(values_per_guide)) if values_per_guide.size else None,
+        "mean_guides_per_cell": _matrix_mean_sum(assignment, axis=1),
+        "mean_cells_per_guide": _matrix_mean_sum(assignment, axis=0),
     }
 
 
@@ -402,8 +406,6 @@ def build_pipeline_qc_metrics_payload(
             "guide_cells": int(guide_mod.n_obs),
             "guide_features": int(guide_mod.n_vars),
             "gene_mean_umis_per_cell": _matrix_mean_sum(gene_mod.X, axis=1),
-            "mean_guides_per_cell": _matrix_mean_sum(guide_mod.X, axis=1),
-            "mean_cells_per_guide": _matrix_mean_sum(guide_mod.X, axis=0),
             **guide_assignment,
         },
         "diagnostics": {
