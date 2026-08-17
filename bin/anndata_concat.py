@@ -9,7 +9,11 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from barcode_keys import qualify_barcodes
-from count_matrix_utils import describe_matrix, to_sparse_counts
+from count_matrix_utils import (
+    describe_matrix,
+    normalize_sparse_index_dtypes,
+    to_sparse_counts,
+)
 
 
 def extract_batch_num(filename):
@@ -281,6 +285,11 @@ def main():
     )
 
     final_adata = ad.read_h5ad(args.output)
+    final_adata.X = normalize_sparse_index_dtypes(final_adata.X)
+    for layer_name in list(final_adata.layers.keys()):
+        final_adata.layers[layer_name] = normalize_sparse_index_dtypes(
+            final_adata.layers[layer_name]
+        )
     if var_index_name:
         print(f"Restoring var index name: {var_index_name}")
         final_adata.var_names.name = var_index_name

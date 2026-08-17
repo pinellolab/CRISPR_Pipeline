@@ -27,6 +27,39 @@ UNSIGNED_COUNT_DTYPES = (np.uint16, np.uint32, np.uint64)
 SIGNED_COUNT_DTYPES = (np.int16, np.int32, np.int64)
 
 
+def normalize_sparse_index_dtypes(matrix):
+    """Make compressed sparse index arrays use one compatible dtype.
+
+    ``anndata.experimental.concat_on_disk`` can produce a large CSR/CSC matrix
+    whose ``indices`` and ``indptr`` arrays have different integer widths.
+    SciPy's compiled compressed-sparse operations reject that otherwise valid
+    matrix with ``ValueError: Output dtype not compatible with inputs`` (for
+    example in ``eliminate_zeros`` called by Scanpy QC).  Normalize only the
+    index arrays, preserving the count data dtype and avoiding an expensive
+    float copy of the full matrix.
+
+    The matrix is updated in place when normalization is required and returned
+    for convenient assignment to ``AnnData.X`` or a layer.
+    """
+    if not sparse.issparse(matrix) or not all(
+        hasattr(matrix, attr) for attr in ("indices", "indptr")
+    ):
+        return matrix
+
+    if matrix.indices.dtype == matrix.indptr.dtype:
+        return matrix
+
+    int32_max = np.iinfo(np.int32).max
+    target_dtype = (
+        np.int32
+        if matrix.nnz <= int32_max and max(matrix.shape, default=0) <= int32_max
+        else np.int64
+    )
+    matrix.indices = matrix.indices.astype(target_dtype, copy=False)
+    matrix.indptr = matrix.indptr.astype(target_dtype, copy=False)
+    return matrix
+
+
 def smallest_count_dtype(max_value, min_value=0):
     """Return the narrowest integer dtype that holds [min_value, max_value].
 

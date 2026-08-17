@@ -12,6 +12,7 @@ if str(BIN_DIR) not in sys.path:
     sys.path.insert(0, str(BIN_DIR))
 
 from count_matrix_utils import (
+    normalize_sparse_index_dtypes,
     smallest_count_dtype,
     to_sparse_counts,
 )
@@ -90,6 +91,44 @@ def test_boolean_assignment_matrix_becomes_uint16():
     observed = to_sparse_counts(dense)
     assert observed.dtype == np.uint16
     np.testing.assert_array_equal(observed.toarray(), dense.astype(np.uint16))
+
+
+def test_normalize_sparse_index_dtypes_repairs_scipy_compressed_operations():
+    """Reproduce the large concat failure seen in PreprocessAnnData.
+
+    SciPy rejects a CSR matrix whose indices and indptr use different integer
+    widths. The repair must leave compact count data untouched while making
+    eliminate_zeros (used by Scanpy QC) valid again.
+    """
+    matrix = sparse.csr_matrix(
+        np.array([[0, 3, 0], [7, 0, 0]], dtype=np.uint16)
+    )
+    matrix.indices = matrix.indices.astype(np.int32)
+    matrix.indptr = matrix.indptr.astype(np.int64)
+
+    with pytest.raises(ValueError, match="Output dtype not compatible"):
+        matrix.eliminate_zeros()
+
+    observed = normalize_sparse_index_dtypes(matrix)
+    assert observed is matrix
+    assert observed.dtype == np.uint16
+    assert observed.indices.dtype == observed.indptr.dtype == np.dtype(np.int32)
+    observed.eliminate_zeros()
+    np.testing.assert_array_equal(
+        observed.toarray(), np.array([[0, 3, 0], [7, 0, 0]], dtype=np.uint16)
+    )
+
+
+def test_normalize_sparse_index_dtypes_is_noop_when_already_compatible():
+    matrix = sparse.csr_matrix(np.eye(3, dtype=np.uint16))
+    original_indices = matrix.indices
+    original_indptr = matrix.indptr
+
+    observed = normalize_sparse_index_dtypes(matrix)
+
+    assert observed is matrix
+    assert observed.indices is original_indices
+    assert observed.indptr is original_indptr
 
 
 @pytest.mark.parametrize("axis", [0, 1])

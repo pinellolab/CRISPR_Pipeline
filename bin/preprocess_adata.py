@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
+from count_matrix_utils import normalize_sparse_index_dtypes
 from scipy.interpolate import UnivariateSpline
 
 
@@ -192,10 +193,11 @@ def main(
         ("RPS", "RPL")
     )
 
-    # Calculate QC metrics. scanpy computes these fine directly on integer
-    # (uint16/int32) or float dtypes -- no need to force .X to float32 first,
-    # which would permanently double the on-disk size of the raw count
-    # matrix for the sole benefit of this one QC call.
+    # On-disk concatenation of large matrices can leave CSR indices and indptr
+    # with different integer widths. SciPy's eliminate_zeros (called by Scanpy
+    # QC) rejects that layout. Normalize only the sparse index arrays; retain
+    # the compact integer count dtype instead of widening all counts to float.
+    adata_rna.X = normalize_sparse_index_dtypes(adata_rna.X)
     sc.pp.calculate_qc_metrics(
         adata_rna, qc_vars=["mt", "ribo"], inplace=True, log1p=True
     )
