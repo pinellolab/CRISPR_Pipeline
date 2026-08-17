@@ -20,3 +20,9 @@ def test_specialized_processes_retain_their_container_overrides():
     assert "container = { params.containers.cleanser }" in config
     assert "container = { params.containers.sceptre }" in config
     assert "container = { params.containers.perturbo }" in config
+
+
+def test_benchmark_assets_are_resolved_from_the_pipeline_checkout():
+    config = (REPO_ROOT / "nextflow.config").read_text()
+
+    assert 'ENCODE_BED_DIR = "${projectDir}/encode_bed_files"' in config
