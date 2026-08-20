@@ -18,6 +18,15 @@ def human_format(num):
         num /= 1000.0
     return '{}{}'.format('{:f}'.format(num).rstrip('0').rstrip('.'), ['', 'K', 'M', 'B', 'T'][magnitude])
 
+def guide_assignment_counts(guide_mod, axis):
+    ## axis=1 -> guides assigned per cell, axis=0 -> cells assigned per guide.
+    ## Counts come from the binary guide_assignment layer rather than the raw guide
+    ## UMI counts in .X, and an entry counts as assigned when it is non-zero: the
+    ## same definition used by mapping_guide.py and by the guide histograms in
+    ## create_dashboard_plots.py. Accepts a sparse or dense layer.
+    counts = (guide_mod.layers['guide_assignment'] > 0).sum(axis=axis)
+    return np.asarray(counts).ravel()
+
 def new_block(modality, description, subject, value_display, highlighted=False, table=None, table_description=None, image='', image_description=''):
     if table is None:
         table = pd.DataFrame()
@@ -891,10 +900,10 @@ def create_dashboard_df(guide_fq_tbl, mudata_path, gene_ann_path, filtered_ann_p
 
     ### Create inference visualization df
     ##mean guides/cell
-    guides_per_cell = np.sum(mudata.mod['guide'].X, axis=1)
+    guides_per_cell = guide_assignment_counts(mudata.mod['guide'], axis=1)
     mean_guides_per_cell = np.mean(guides_per_cell)
     ##mean cell/guides
-    cells_per_guide = np.sum(mudata.mod['guide'].X, axis=0)
+    cells_per_guide = guide_assignment_counts(mudata.mod['guide'], axis=0)
     mean_cells_per_guide = np.mean(cells_per_guide)
 
     iv_highlight = f"Mean guides per cell: {human_format(mean_guides_per_cell)}, Mean cells per guide: {human_format(mean_cells_per_guide)}"
