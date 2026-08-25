@@ -154,7 +154,13 @@ def test_convert_guide_effects_restores_control_guide_ids_and_filters_pairs(tmp_
     assert np.isclose(observed.loc[1, "p_value"], 0.9)
 
 
-def test_run_pipeline_adapter_patches_uns_without_rewriting_x(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("test_all_pairs", "analysis_prefix"),
+    [(False, "local_analysis"), (True, "global_analysis")],
+)
+def test_run_pipeline_adapter_patches_uns_without_rewriting_x(
+    tmp_path, monkeypatch, test_all_pairs, analysis_prefix
+):
     pytest.importorskip("pyarrow")
     input_path = tmp_path / "input.h5mu"
     _make_mudata().write(input_path)
@@ -201,15 +207,15 @@ def test_run_pipeline_adapter_patches_uns_without_rewriting_x(tmp_path, monkeypa
     monkeypatch.setattr(adapter, "_wait_for_fits", lambda processes: None)
 
     output_mudata = tmp_path / "output.h5mu"
-    args = adapter.build_parser().parse_args(
-        [
-            "--input", str(input_path),
-            "--per-element-output", str(tmp_path / "per_element.tsv.gz"),
-            "--per-guide-output", str(tmp_path / "per_guide.tsv.gz"),
-            "--output-mudata", str(output_mudata),
-            "--test-all-pairs",
-        ]
-    )
+    cli_args = [
+        "--input", str(input_path),
+        "--per-element-output", str(tmp_path / "per_element.tsv.gz"),
+        "--per-guide-output", str(tmp_path / "per_guide.tsv.gz"),
+        "--output-mudata", str(output_mudata),
+    ]
+    if test_all_pairs:
+        cli_args.append("--test-all-pairs")
+    args = adapter.build_parser().parse_args(cli_args)
     adapter.run_pipeline_adapter(args)
 
     assert output_mudata.exists()
@@ -220,4 +226,6 @@ def test_run_pipeline_adapter_patches_uns_without_rewriting_x(tmp_path, monkeypa
     result = mu.read_h5mu(output_mudata)
     assert "per_element_results" in result.uns
     assert "per_guide_results" in result.uns
+    assert f"{analysis_prefix}_per_element_results" in result.uns
+    assert f"{analysis_prefix}_per_guide_results" in result.uns
     assert list(pd.DataFrame(result.uns["per_element_results"])["gene_id"]) == ["GENE1", "GENE2"]

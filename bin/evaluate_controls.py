@@ -146,6 +146,20 @@ def run_evaluation_controls(md_read, outdir):
     os.makedirs(outdir, exist_ok=True)
 
     col_used = 'global_analysis_per_guide_results'
+    if col_used not in md_read.uns:
+        reason = (
+            "Controls evaluation skipped: global PerTurbo guide results are "
+            "not present for this inference mode."
+        )
+        print(reason)
+        with open(
+            os.path.join(outdir, "controls_evaluation_skipped.txt"),
+            "w",
+            encoding="utf-8",
+        ) as handle:
+            handle.write(reason + "\n")
+            handle.write("global_analysis_per_guide_results=absent\n")
+        return
     fc_col, p_col = select_inference_columns(md_read.uns[col_used])
     #converting to avoid non boolean values
     col = md_read['guide'].var['targeting']

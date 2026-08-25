@@ -195,6 +195,12 @@ if __name__ == "__main__":
     # reads .var and .uns[results_key].
     mdata = mu.read(args.mdata_path, backed="r")
 
+    # Nextflow declares this directory as the process output. Preserve an
+    # explicit empty output when the selected inference mode has no plottable
+    # result table instead of turning a successful no-op into a missing-output
+    # task failure.
+    os.makedirs("evaluation_output", exist_ok=True)
+
     # Determine which results to process based on --default flag
     if args.default:
         results_configs = [

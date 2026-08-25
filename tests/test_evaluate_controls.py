@@ -53,3 +53,14 @@ def test_binary_evaluation_skips_empty_input(tmp_path):
     marker = tmp_path / "controls_evaluation_skipped.txt"
     assert marker.exists()
     assert "valid_rows=0" in marker.read_text()
+
+
+def test_control_evaluation_skips_cleanly_without_global_results(tmp_path):
+    class LocalOnlyResult:
+        uns = {"local_analysis_per_guide_results": pd.DataFrame()}
+
+    run_evaluation_controls(LocalOnlyResult(), outdir=tmp_path)
+
+    marker = tmp_path / "controls_evaluation_skipped.txt"
+    assert marker.exists()
+    assert "global PerTurbo guide results are not present" in marker.read_text()

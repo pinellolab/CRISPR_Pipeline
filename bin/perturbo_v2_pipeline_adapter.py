@@ -494,12 +494,20 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
         write_result_table(guide_df, args.per_guide_output)
 
         if args.output_mudata:
+            element_results = make_h5mu_safe_dataframe(element_df)
+            guide_results = make_h5mu_safe_dataframe(guide_df)
+            analysis_prefix = "global_analysis" if args.test_all_pairs else "local_analysis"
             write_uns_patch(
                 args.input,
                 args.output_mudata,
                 updates={
-                    "per_element_results": make_h5mu_safe_dataframe(element_df),
-                    "per_guide_results": make_h5mu_safe_dataframe(guide_df),
+                    # Keep the generic keys used by standalone/single-method
+                    # consumers, and also expose the analysis-qualified keys
+                    # consumed by pipeline evaluation and dashboard steps.
+                    "per_element_results": element_results,
+                    "per_guide_results": guide_results,
+                    f"{analysis_prefix}_per_element_results": element_results,
+                    f"{analysis_prefix}_per_guide_results": guide_results,
                 },
             )
 
