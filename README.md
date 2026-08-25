@@ -301,7 +301,8 @@ containers {
    base     = 'ghcr.io/pinellolab/crispr_pipeline/conda-docker'
    cleanser = 'ghcr.io/gersbachlab-bioinformatics/cleanser:1.2.1'
    sceptre  = 'sjiang9/sceptre-igvf:0.1'
-   perturbo = 'ghcr.io/pinellolab/perturbo'
+   // One image supports masked local/cis and unmasked global/trans inference.
+   perturbo = 'ghcr.io/pinellolab/crispr_pipeline/perturbo:v2-cis-mask'
 }
 ```
 

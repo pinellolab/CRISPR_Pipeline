@@ -1,0 +1,437 @@
+diff --git a/src/perturbo/cli.py b/src/perturbo/cli.py
+index 0f4ccfa..4e9f618 100644
+--- a/src/perturbo/cli.py
++++ b/src/perturbo/cli.py
+@@ -11,6 +11,7 @@ from typing import Any
+ import jax.numpy as jnp
+ import numpy as np
+ import pandas as pd
++from scipy import sparse
+ 
+ from .core import *  # noqa: F403 - CLI delegates to the fitting workflow namespace.
+ from .core import (
+@@ -49,6 +50,7 @@ from .core import (
+     fit_perturbation_effects,
+     load_analysis_cells,
+     load_controls,
++    subset_control_fit_genes,
+ )
+ from .io import MuDataSetup, control_fit_arrays, save_array_bundle, save_light_fit_bundle
+ from .results import build_guide_efficiency_df, build_standard_element_effects_df
+@@ -97,6 +99,57 @@ def _guide_efficacy_for_cli(
+     return np.clip(arr.reshape(int(n_guides), -1).mean(axis=1), a_min=0.0, a_max=None).astype(np.float32)
+ 
+ 
++def _load_gene_by_element_mask(
++    data,
++    *,
++    modality_key: str | None,
++    varm_key: str,
++    names_uns_key: str | None,
++    element_names: list[str],
++) -> sparse.csr_matrix:
++    """Load and align a gene-by-element mask to the CLI perturbation order."""
++    adata = _resolve_adata(data, modality_key)
++    if varm_key not in adata.varm:
++        raise KeyError(f"Gene-by-element mask '{varm_key}' was not found in analysis modality .varm.")
++    raw = adata.varm[varm_key]
++    if isinstance(raw, pd.DataFrame):
++        source_names = [str(x) for x in raw.columns]
++        matrix = sparse.csr_matrix(raw.to_numpy())
++    else:
++        if names_uns_key is None:
++            raise ValueError(
++                "--gene-by-element-names-uns-key is required when the gene-by-element mask "
++                "does not carry DataFrame column labels."
++            )
++        if names_uns_key not in adata.uns:
++            raise KeyError(f"Gene-by-element names '{names_uns_key}' were not found in analysis modality .uns.")
++        source_names = [str(x) for x in np.asarray(adata.uns[names_uns_key]).reshape(-1)]
++        matrix = sparse.csr_matrix(raw)
++    if matrix.shape != (adata.n_vars, len(source_names)):
++        raise ValueError(
++            "Gene-by-element mask must have shape (n_genes, n_named_elements); "
++            f"got {matrix.shape} for {adata.n_vars} genes and {len(source_names)} names."
++        )
++    if len(set(source_names)) != len(source_names):
++        raise ValueError("Gene-by-element mask names must be unique.")
++    source_index = {name: idx for idx, name in enumerate(source_names)}
++    missing = [name for name in element_names if name not in source_index]
++    if missing:
++        raise ValueError(
++            "Gene-by-element mask is missing perturbations used by the analysis: " + ", ".join(missing[:20])
++        )
++    aligned = matrix[:, [source_index[name] for name in element_names]].astype(bool).tocsr()
++    empty = np.flatnonzero(np.asarray(aligned.getnnz(axis=0)) == 0)
++    if empty.size:
++        preview = ", ".join(element_names[int(i)] for i in empty[:20])
++        raise ValueError(f"Gene-by-element mask has no tested genes for {empty.size} perturbations: {preview}")
++    print(
++        "[perturbo] Local pair mask loaded: "
++        f"{aligned.nnz:,} tested gene-element pairs out of {aligned.shape[0] * aligned.shape[1]:,}."
++    )
++    return aligned
++
++
+ def main(argv: list[str] | None = None) -> None:
+     import argparse
+ 
+@@ -138,6 +191,22 @@ def main(argv: list[str] | None = None) -> None:
+             "Required when --perturbation-element-varm-key has no column labels."
+         ),
+     )
++    parser.add_argument(
++        "--gene-by-element-varm-key",
++        default=None,
++        help=(
++            "Optional key in the analysis modality .varm containing a gene-by-element test mask. "
++            "When supplied, chunked stage-2 fitting loads and fits only the requested local/cis genes."
++        ),
++    )
++    parser.add_argument(
++        "--gene-by-element-names-uns-key",
++        default=None,
++        help=(
++            "Optional key in the analysis modality .uns containing the element names for "
++            "--gene-by-element-varm-key when the mask has no DataFrame column labels."
++        ),
++    )
+     parser.add_argument(
+         "--control-substring",
+         default=None,
+@@ -452,6 +521,8 @@ def main(argv: list[str] | None = None) -> None:
+         raise ValueError(
+             "--perturbation-element-names-uns-key requires --perturbation-element-varm-key."
+         )
++    if args.gene_by_element_names_uns_key is not None and args.gene_by_element_varm_key is None:
++        raise ValueError("--gene-by-element-names-uns-key requires --gene-by-element-varm-key.")
+     guide_effect_strategy, guide_activity_mode = _validate_guide_strategy(
+         args.guide_effect_strategy,
+         args.guide_activity_mode,
+@@ -595,6 +666,7 @@ def main(argv: list[str] | None = None) -> None:
+                 max_chunk_size=args.max_chunk_size,
+                 max_perturbations_per_chunk=args.perturbation_chunk_size or None,
+             )
++
+         else:
+             pert_series = analysis_adata_for_workflow.obs[args.perturbation_key].astype(str)
+             all_perturbation_names = [str(x) for x in pd.Categorical(pert_series).categories.tolist()]
+@@ -606,6 +678,23 @@ def main(argv: list[str] | None = None) -> None:
+                 max_perturbations_per_chunk=args.perturbation_chunk_size or None,
+             )
+ 
++    gene_by_element_mask: sparse.csr_matrix | None = None
++    if args.gene_by_element_varm_key is not None:
++        if not should_chunk or chunks is None or all_perturbation_names is None:
++            raise ValueError(
++                "Gene-by-element masking currently requires chunked fitting; lower --max-chunk-size "
++                "or set --perturbation-chunk-size."
++            )
++        if guide_effect_strategy != "shared":
++            raise ValueError("Gene-by-element masking currently supports --guide-effect-strategy=shared only.")
++        gene_by_element_mask = _load_gene_by_element_mask(
++            data,
++            modality_key=args.modality_key,
++            varm_key=args.gene_by_element_varm_key,
++            names_uns_key=args.gene_by_element_names_uns_key,
++            element_names=list(all_perturbation_names),
++        )
++
+     controls_loaded = load_controls(
+         data,
+         perturbation_key=args.perturbation_key,
+@@ -692,10 +781,10 @@ def main(argv: list[str] | None = None) -> None:
+             raise RuntimeError("Chunk metadata was not initialized.")
+         n_genes = len(analysis_gene_names)
+         n_perts = len(all_perturbation_names)
+-        posterior_mean = np.zeros((n_perts, n_genes), dtype=np.float32)
+-        posterior_scale = np.zeros((n_perts, n_genes), dtype=np.float32)
+-        z_values = np.zeros((n_perts, n_genes), dtype=np.float32)
+-        dispersion_excess_inverse = np.zeros((n_perts, n_genes), dtype=np.float32) if args.fit_perturbation_dispersion else None
++        posterior_mean = np.full((n_perts, n_genes), np.nan, dtype=np.float32)
++        posterior_scale = np.full((n_perts, n_genes), np.nan, dtype=np.float32)
++        z_values = np.full((n_perts, n_genes), np.nan, dtype=np.float32)
++        dispersion_excess_inverse = np.full((n_perts, n_genes), np.nan, dtype=np.float32) if args.fit_perturbation_dispersion else None
+         last_state = None
+         for chunk_i, chunk_info in enumerate(chunks):
+             chunk_names = chunk_info.pert_names
+@@ -708,6 +797,19 @@ def main(argv: list[str] | None = None) -> None:
+                 "[perturbo] Processing perturbation chunk indices "
+                 f"{int(chunk_indices.min())}..{int(chunk_indices.max())}"
+             )
++            if gene_by_element_mask is None:
++                gene_indices = np.arange(n_genes)
++                chunk_test_mask = None
++                chunk_control_fit = control_fit
++            else:
++                chunk_gene_by_element = gene_by_element_mask[:, chunk_indices]
++                gene_indices = np.flatnonzero(np.asarray(chunk_gene_by_element.getnnz(axis=1)) > 0)
++                chunk_test_mask = chunk_gene_by_element[gene_indices, :].T.tocsr()
++                chunk_control_fit = subset_control_fit_genes(control_fit, gene_indices)
++                print(
++                    "[perturbo] Local pair mask for chunk: "
++                    f"{chunk_test_mask.nnz:,} pairs across {gene_indices.size:,}/{n_genes:,} genes."
++                )
+             chunk_data = load_analysis_cells(
+                 data,
+                 perturbation_key=args.perturbation_key,
+@@ -721,6 +823,7 @@ def main(argv: list[str] | None = None) -> None:
+                 gene_name_key=args.gene_name_key,
+                 device=args.device,
+                 selected_perturbations=chunk_names,
++                selected_gene_indices=gene_indices,
+                 cell_keep_mask=cell_keep_mask,
+                 clip_gene_expression_percentile=clip_percentile,
+                 winsorize_gene_expression=apply_winsorize,
+@@ -736,7 +839,7 @@ def main(argv: list[str] | None = None) -> None:
+                 chunk_data.size_factors = _fixed_zero_size_factors(chunk_data.counts)
+             chunk_fit = fit_perturbation_effects(
+                 chunk_data,
+-                control_fit,
++                chunk_control_fit,
+                 num_steps=schedule.resolve_stage_steps(
+                     stage="beta",
+                     num_cells=int(chunk_data.counts.shape[0]),
+@@ -758,11 +861,27 @@ def main(argv: list[str] | None = None) -> None:
+                 fit_perturbation_dispersion=args.fit_perturbation_dispersion,
+                 perturbation_dispersion_prior_rate=args.perturbation_dispersion_prior_rate,
+             )
+-            posterior_mean[chunk_indices] = np.asarray(chunk_fit.posterior_mean)
+-            posterior_scale[chunk_indices] = np.asarray(chunk_fit.posterior_scale)
+-            z_values[chunk_indices] = np.asarray(chunk_fit.z_values)
+-            if dispersion_excess_inverse is not None and chunk_fit.dispersion_excess_inverse is not None:
+-                dispersion_excess_inverse[chunk_indices] = np.asarray(chunk_fit.dispersion_excess_inverse)
++            chunk_mean = np.asarray(chunk_fit.posterior_mean)
++            chunk_scale = np.asarray(chunk_fit.posterior_scale)
++            chunk_z = np.asarray(chunk_fit.z_values)
++            if chunk_test_mask is None:
++                posterior_mean[chunk_indices] = chunk_mean
++                posterior_scale[chunk_indices] = chunk_scale
++                z_values[chunk_indices] = chunk_z
++                if dispersion_excess_inverse is not None and chunk_fit.dispersion_excess_inverse is not None:
++                    dispersion_excess_inverse[chunk_indices] = np.asarray(chunk_fit.dispersion_excess_inverse)
++            else:
++                local_element_idx, local_gene_idx = chunk_test_mask.nonzero()
++                global_element_idx = chunk_indices[local_element_idx]
++                global_gene_idx = gene_indices[local_gene_idx]
++                posterior_mean[global_element_idx, global_gene_idx] = chunk_mean[local_element_idx, local_gene_idx]
++                posterior_scale[global_element_idx, global_gene_idx] = chunk_scale[local_element_idx, local_gene_idx]
++                z_values[global_element_idx, global_gene_idx] = chunk_z[local_element_idx, local_gene_idx]
++                if dispersion_excess_inverse is not None and chunk_fit.dispersion_excess_inverse is not None:
++                    chunk_dispersion = np.asarray(chunk_fit.dispersion_excess_inverse)
++                    dispersion_excess_inverse[global_element_idx, global_gene_idx] = chunk_dispersion[
++                        local_element_idx, local_gene_idx
++                    ]
+             last_state = chunk_fit.svi_result
+             if chunk_fit.losses.size > 0:
+                 chunk_losses.append(chunk_fit.losses)
+@@ -875,6 +994,7 @@ def main(argv: list[str] | None = None) -> None:
+         element_names=list(all_perturbation_names),
+         gene_names=list(analysis_gene_names),
+         null_z_values=null_z_values,
++        tested_pairs_mask=None if gene_by_element_mask is None else gene_by_element_mask.T,
+     )
+     element_effects_path = out_dir / "element_effects.parquet"
+     element_effects.to_parquet(element_effects_path, index=False)
+@@ -966,9 +1086,9 @@ def main(argv: list[str] | None = None) -> None:
+             library_size_key=library_size_key_for_loading,
+             size_factor_key=size_factor_key_for_loading,
+             continuous_covariates_keys=list(continuous_covariates or []),
+-            gene_by_element_key=None,
++            gene_by_element_key=args.gene_by_element_varm_key,
+             guide_by_element_key=args.perturbation_element_varm_key,
+-            rna_element_uns_key=None,
++            rna_element_uns_key=args.gene_by_element_names_uns_key,
+             guide_element_uns_key=args.perturbation_element_names_uns_key,
+             gene_name_key=args.gene_name_key,
+             control_substring=args.control_substring,
+@@ -1019,6 +1139,8 @@ def main(argv: list[str] | None = None) -> None:
+                 "perturbation_layer": args.perturbation_layer,
+                 "perturbation_element_varm_key": args.perturbation_element_varm_key,
+                 "perturbation_element_names_uns_key": args.perturbation_element_names_uns_key,
++                "gene_by_element_varm_key": args.gene_by_element_varm_key,
++                "gene_by_element_names_uns_key": args.gene_by_element_names_uns_key,
+                 "control_substring": args.control_substring,
+                 "batch_covariate": batch_covariate,
+                 "size_factor_key": size_factor_key_for_loading,
+diff --git a/src/perturbo/core.py b/src/perturbo/core.py
+index 5bc10fc..9323ff3 100644
+--- a/src/perturbo/core.py
++++ b/src/perturbo/core.py
+@@ -120,6 +120,55 @@ class ControlFit:
+     count_censoring_threshold: jnp.ndarray | None = None
+ 
+ 
++def subset_control_fit_genes(control_fit: ControlFit, gene_indices: np.ndarray) -> ControlFit:
++    """Select the gene axis of a stage-1 fit for a local stage-2 fit.
++
++    Stage 1 is intentionally fit once using all genes.  A cis pair mask can
++    then reuse that fit while stage 2 loads and optimizes only the genes
++    requested by the perturbations in the current chunk.
++    """
++    idx = np.asarray(gene_indices, dtype=int)
++    if idx.ndim != 1 or idx.size == 0:
++        raise ValueError("gene_indices must be a non-empty one-dimensional array.")
++
++    def first_axis(value):
++        return None if value is None else value[idx]
++
++    def last_axis(value):
++        return None if value is None else value[..., idx]
++
++    baseline = control_fit.baseline_posterior
++    if baseline is not None:
++        baseline = BaselinePosteriorSummary(
++            beta_0_loc=first_axis(baseline.beta_0_loc),
++            beta_0_scale=first_axis(baseline.beta_0_scale),
++            theta_log_loc=first_axis(baseline.theta_log_loc),
++            theta_log_scale=first_axis(baseline.theta_log_scale),
++        )
++
++    return ControlFit(
++        beta_0=first_axis(control_fit.beta_0),
++        theta=first_axis(control_fit.theta),
++        noise_scale=first_axis(control_fit.noise_scale),
++        factor_loadings=last_axis(control_fit.factor_loadings),
++        factor_scores=control_fit.factor_scores,
++        factor_center=first_axis(control_fit.factor_center),
++        pca_loadings=last_axis(control_fit.pca_loadings),
++        size_factors=control_fit.size_factors,
++        losses=control_fit.losses,
++        svi_result=control_fit.svi_result,
++        baseline_posterior=baseline,
++        pi_outlier=first_axis(control_fit.pi_outlier),
++        theta_outlier=first_axis(control_fit.theta_outlier),
++        outlier_mean_shift=first_axis(control_fit.outlier_mean_shift),
++        covariate_coef=last_axis(control_fit.covariate_coef),
++        guide_random_effect_tau=first_axis(control_fit.guide_random_effect_tau),
++        guide_random_effect_log_tau_loc=control_fit.guide_random_effect_log_tau_loc,
++        guide_random_effect_log_tau_scale=control_fit.guide_random_effect_log_tau_scale,
++        count_censoring_threshold=first_axis(control_fit.count_censoring_threshold),
++    )
++
++
+ @dataclass
+ class BetaFit:
+     posterior_mean: jnp.ndarray
+@@ -1569,6 +1618,7 @@ def load_analysis_cells(
+     gene_name_key: str | None = None,
+     device: str | Any | None = None,
+     selected_perturbations: list[str] | None = None,
++    selected_gene_indices: np.ndarray | None = None,
+     cell_keep_mask: np.ndarray | None = None,
+     clip_gene_expression_percentile: float | None = None,
+     winsorize_gene_expression: bool = False,
+@@ -1654,8 +1704,20 @@ def load_analysis_cells(
+             mask = working_obs[perturbation_key].astype(str).isin(selected_perturbations).values
+             obs_idx = obs_idx[mask]
+ 
+-    # Single slice: for backed data this is one targeted disk read.
+-    adata = adata[obs_idx]
++    if selected_gene_indices is None:
++        var_idx = np.arange(adata.n_vars)
++    else:
++        var_idx = np.asarray(selected_gene_indices, dtype=int)
++        if var_idx.ndim != 1 or var_idx.size == 0:
++            raise ValueError("selected_gene_indices must be a non-empty one-dimensional array.")
++        if np.any(var_idx < 0) or np.any(var_idx >= adata.n_vars):
++            raise ValueError("selected_gene_indices contains an index outside the analysis gene axis.")
++        if np.unique(var_idx).size != var_idx.size:
++            raise ValueError("selected_gene_indices must not contain duplicate indexes.")
++
++    # Single slice: for backed data this is one targeted disk read. Selecting
++    # both axes together also avoids AnnData's unsupported backed view-of-view.
++    adata = adata[obs_idx, var_idx]
+     if is_backed:
+         adata = adata.to_memory()
+ 
+@@ -1670,7 +1732,10 @@ def load_analysis_cells(
+         )
+     counts = _to_dense(adata.X)
+     if winsorize_gene_expression:
+-        counts = _winsorize_counts_to_gene_thresholds(counts, gene_clip_thresholds)
++        selected_thresholds = gene_clip_thresholds
++        if gene_clip_thresholds is not None and selected_gene_indices is not None:
++            selected_thresholds = np.asarray(gene_clip_thresholds)[var_idx]
++        counts = _winsorize_counts_to_gene_thresholds(counts, selected_thresholds)
+     count_dtype = _select_count_dtype(counts)
+ 
+     print(f"[perturbo] Analysis cells loaded: {adata.n_obs} cells, {adata.n_vars} genes")
+diff --git a/src/perturbo/results.py b/src/perturbo/results.py
+index c40ed2f..6132d0f 100644
+--- a/src/perturbo/results.py
++++ b/src/perturbo/results.py
+@@ -8,6 +8,7 @@ from math import erf
+ 
+ import numpy as np
+ import pandas as pd
++from scipy import sparse
+ 
+ from ._statistics import empirical_pvals_from_tnull_fixed0, z_to_two_sided_pvalues
+ 
+@@ -115,6 +116,7 @@ def build_standard_element_effects_df(
+     element_names: list[str],
+     gene_names: list[str],
+     null_z_values: np.ndarray | None = None,
++    tested_pairs_mask: np.ndarray | sparse.spmatrix | None = None,
+ ) -> pd.DataFrame:
+     loc = np.asarray(effect_loc, dtype=float)
+     scale = np.clip(np.asarray(effect_scale, dtype=float), a_min=1e-6, a_max=None)
+@@ -127,29 +129,48 @@ def build_standard_element_effects_df(
+         )
+ 
+     z = loc / scale
+-    posterior_prob = z_to_two_sided_pvalues(z.reshape(-1))
++    if tested_pairs_mask is None:
++        element_idx = np.repeat(np.arange(len(element_names)), len(gene_names))
++        gene_idx = np.tile(np.arange(len(gene_names)), len(element_names))
++    elif sparse.issparse(tested_pairs_mask):
++        mask = tested_pairs_mask.tocoo()
++        if mask.shape != loc.shape:
++            raise ValueError(f"tested_pairs_mask shape mismatch: {mask.shape} vs {loc.shape}")
++        keep = np.asarray(mask.data, dtype=bool)
++        element_idx = np.asarray(mask.row[keep], dtype=int)
++        gene_idx = np.asarray(mask.col[keep], dtype=int)
++    else:
++        mask = np.asarray(tested_pairs_mask, dtype=bool)
++        if mask.shape != loc.shape:
++            raise ValueError(f"tested_pairs_mask shape mismatch: {mask.shape} vs {loc.shape}")
++        element_idx, gene_idx = np.nonzero(mask)
++
++    selected_loc = loc[element_idx, gene_idx]
++    selected_scale = scale[element_idx, gene_idx]
++    selected_z = z[element_idx, gene_idx]
++    posterior_prob = z_to_two_sided_pvalues(selected_z)
+     empirical_p_value: np.ndarray
+     if null_z_values is None:
+-        empirical_p_value = np.full(z.size, np.nan, dtype=float)
++        empirical_p_value = np.full(selected_z.size, np.nan, dtype=float)
+     else:
+         null_arr = np.asarray(null_z_values, dtype=float).reshape(-1)
+         null_arr = null_arr[np.isfinite(null_arr)]
+         if null_arr.size == 0:
+-            empirical_p_value = np.full(z.size, np.nan, dtype=float)
++            empirical_p_value = np.full(selected_z.size, np.nan, dtype=float)
+         else:
+             empirical_p_value = np.asarray(
+-                empirical_pvals_from_tnull_fixed0(null_arr, z.reshape(-1), return_params=False),
++                empirical_pvals_from_tnull_fixed0(null_arr, selected_z, return_params=False),
+                 dtype=float,
+             )
+ 
+     return pd.DataFrame(
+         {
+             "method": method,
+-            "element": np.repeat(np.asarray(element_names, dtype=str), len(gene_names)),
+-            "gene": np.tile(np.asarray(gene_names, dtype=str), len(element_names)),
+-            "posterior_mean": loc.reshape(-1).astype(np.float32, copy=False),
+-            "posterior_scale": scale.reshape(-1).astype(np.float32, copy=False),
+-            "z_value": z.reshape(-1).astype(np.float32, copy=False),
++            "element": np.asarray(element_names, dtype=str)[element_idx],
++            "gene": np.asarray(gene_names, dtype=str)[gene_idx],
++            "posterior_mean": selected_loc.astype(np.float32, copy=False),
++            "posterior_scale": selected_scale.astype(np.float32, copy=False),
++            "z_value": selected_z.astype(np.float32, copy=False),
+             "posterior_prob": posterior_prob.astype(np.float32, copy=False),
+             "empirical_p_value": empirical_p_value.astype(np.float32, copy=False),
+         }
