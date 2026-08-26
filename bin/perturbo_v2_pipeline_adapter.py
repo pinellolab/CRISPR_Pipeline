@@ -35,10 +35,6 @@ ELEMENT_MAP_KEY = "perturbo_v2_intended_targets"
 ELEMENT_NAMES_KEY = "perturbo_v2_intended_target_names"
 GUIDE_MAP_KEY = "perturbo_v2_guides"
 GUIDE_NAMES_KEY = "perturbo_v2_guide_names"
-ELEMENT_PAIR_MASK_KEY = "perturbo_v2_element_pairs"
-ELEMENT_PAIR_NAMES_KEY = "perturbo_v2_element_pair_names"
-GUIDE_PAIR_MASK_KEY = "perturbo_v2_guide_pairs"
-GUIDE_PAIR_NAMES_KEY = "perturbo_v2_guide_pair_names"
 CONTROL_SUBSTRING = "non-targeting"
 
 
@@ -153,15 +149,14 @@ def _covariate_has_control_variance(input_path: Path, map_key: str, names_key: s
     return bool(np.nanstd(control_values) > 1e-8)
 
 
-def _build_gene_pair_mask(
+def _build_native_pairs_to_test(
     mdata: md.MuData,
     *,
     pair_element_column: str,
     element_names: list[str],
-    mask_key: str,
-    mask_names_key: str,
     guide_name_map: dict[str, str] | None = None,
-) -> None:
+) -> pd.DataFrame:
+    """Build PerTurbo's native two-column ``element,gene`` restriction table."""
     pairs = mdata.uns.get("pairs_to_test")
     if pairs is None:
         raise KeyError("pairs_to_test not found in MuData; local PerTurbo fitting requires explicit pairs.")
@@ -169,9 +164,8 @@ def _build_gene_pair_mask(
     if pair_element_column == "intended_target_key" and pair_element_column not in pairs.columns:
         pairs = enrich_pairs_with_target_metadata(pairs, pd.DataFrame(mdata[GUIDE_MODALITY].var))
 
-    gene_names = mdata[GENE_MODALITY].var_names.astype(str).tolist()
-    gene_index = {name: i for i, name in enumerate(gene_names)}
-    element_index = {name: i for i, name in enumerate(element_names)}
+    gene_names = set(mdata[GENE_MODALITY].var_names.astype(str))
+    element_name_set = set(element_names)
     if guide_name_map is None:
         pair_element_names = pairs[pair_element_column].astype(str)
     else:
@@ -179,8 +173,8 @@ def _build_gene_pair_mask(
         pair_element_names = pairs[pair_element_column].astype(str).map(output_name_by_guide)
 
     pair_gene_names = pairs["gene_id"].astype(str)
-    missing_genes = sorted(set(pair_gene_names) - set(gene_index))
-    missing_elements = sorted(set(pair_element_names.dropna()) - set(element_index))
+    missing_genes = sorted(set(pair_gene_names) - gene_names)
+    missing_elements = sorted(set(pair_element_names.dropna()) - element_name_set)
     unmapped_elements = pairs.loc[pair_element_names.isna(), pair_element_column].astype(str).drop_duplicates().tolist()
     if missing_genes or missing_elements or unmapped_elements:
         messages = []
@@ -190,33 +184,33 @@ def _build_gene_pair_mask(
             messages.append(f"{len(missing_elements)} elements absent from mapping: {', '.join(missing_elements[:10])}")
         if unmapped_elements:
             messages.append(f"{len(unmapped_elements)} guide IDs could not be mapped: {', '.join(unmapped_elements[:10])}")
-        raise ValueError("Cannot construct PerTurbo local pair mask; " + "; ".join(messages))
+        raise ValueError("Cannot construct PerTurbo local pairs-to-test table; " + "; ".join(messages))
 
-    pair_rows = pair_gene_names.map(gene_index).to_numpy(dtype=int)
-    pair_cols = pair_element_names.map(element_index).to_numpy(dtype=int)
-    control_cols = np.asarray(
-        [i for i, name in enumerate(element_names) if CONTROL_SUBSTRING in name.lower()],
-        dtype=int,
-    )
-    if control_cols.size:
-        control_rows = np.repeat(np.arange(len(gene_names), dtype=int), control_cols.size)
-        repeated_control_cols = np.tile(control_cols, len(gene_names))
-        rows = np.concatenate([pair_rows, control_rows])
-        cols = np.concatenate([pair_cols, repeated_control_cols])
+    requested = pd.DataFrame(
+        {
+            "element": pair_element_names.to_numpy(dtype=str),
+            "gene": pair_gene_names.to_numpy(dtype=str),
+        }
+    ).drop_duplicates(ignore_index=True)
+
+    # PerTurbo uses fitted control-element z-values to calibrate empirical
+    # p-values. Include every non-targeting element for each gene in the
+    # requested hypothesis set, without expanding back to all RNA genes.
+    control_elements = [name for name in element_names if CONTROL_SUBSTRING in name.lower()]
+    tested_genes = requested["gene"].drop_duplicates().tolist()
+    if control_elements:
+        controls = pd.MultiIndex.from_product(
+            [control_elements, tested_genes], names=["element", "gene"]
+        ).to_frame(index=False)
+        native_pairs = pd.concat([requested, controls], ignore_index=True).drop_duplicates(ignore_index=True)
     else:
-        rows, cols = pair_rows, pair_cols
-    mask = sparse.coo_matrix(
-        (np.ones(rows.size, dtype=np.bool_), (rows, cols)),
-        shape=(len(gene_names), len(element_names)),
-    ).tocsr()
-    mask.sum_duplicates()
-    mask.data[:] = True
-    mdata[GENE_MODALITY].varm[mask_key] = mask
-    mdata[GENE_MODALITY].uns[mask_names_key] = element_names
+        native_pairs = requested
     print(
-        f"Prepared {mask_key}: {len(pairs):,} requested pairs plus "
-        f"{len(gene_names) * control_cols.size:,} control-null pairs ({mask.nnz:,} unique total)."
+        f"Prepared native PerTurbo pairs-to-test table: {len(requested):,} requested pairs plus "
+        f"{len(control_elements) * len(tested_genes):,} control-null pairs "
+        f"({len(native_pairs):,} unique total)."
     )
+    return native_pairs
 
 
 def prepare_mudata_for_perturbo_v2(
@@ -231,26 +225,10 @@ def prepare_mudata_for_perturbo_v2(
         raise KeyError("Expected MuData modalities named 'gene' and 'guide'.")
     _ensure_library_size(mdata)
     _ensure_covariates(mdata)
-    element_mapping = _build_element_mapping(mdata)
+    _build_element_mapping(mdata)
     guide_name_map = _build_guide_identity_mapping(mdata)
-    if not test_all_pairs:
-        element_names = element_mapping.columns.astype(str).tolist()
-        guide_names = [str(x) for x in mdata[GUIDE_MODALITY].uns[GUIDE_NAMES_KEY]]
-        _build_gene_pair_mask(
-            mdata,
-            pair_element_column="intended_target_key",
-            element_names=element_names,
-            mask_key=ELEMENT_PAIR_MASK_KEY,
-            mask_names_key=ELEMENT_PAIR_NAMES_KEY,
-        )
-        _build_gene_pair_mask(
-            mdata,
-            pair_element_column="guide_id",
-            element_names=guide_names,
-            mask_key=GUIDE_PAIR_MASK_KEY,
-            mask_names_key=GUIDE_PAIR_NAMES_KEY,
-            guide_name_map=guide_name_map,
-        )
+    if not test_all_pairs and "pairs_to_test" not in mdata.uns:
+        raise KeyError("pairs_to_test not found in MuData; local PerTurbo fitting requires explicit pairs.")
     mdata.write(output_path)
     return guide_name_map
 
@@ -344,8 +322,7 @@ def _run_perturbo(
     *,
     map_key: str,
     names_key: str,
-    pair_mask_key: str | None,
-    pair_names_key: str | None,
+    pairs_to_test_path: Path | None,
     gpu_id: str | None,
     phase: str,
     args: argparse.Namespace,
@@ -390,10 +367,8 @@ def _run_perturbo(
         args.device,
         "--no-progress-bar",
     ]
-    if pair_mask_key is not None:
-        cmd.extend(["--gene-by-element-varm-key", pair_mask_key])
-        if pair_names_key is not None:
-            cmd.extend(["--gene-by-element-names-uns-key", pair_names_key])
+    if pairs_to_test_path is not None:
+        cmd.extend(["--pairs-to-test", str(pairs_to_test_path)])
     if _covariate_has_control_variance(input_path, map_key, names_key):
         cmd.extend(["--continuous-covariates", "log1p_total_guide_umis_centered"])
     else:
@@ -457,6 +432,24 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
             test_all_pairs=args.test_all_pairs,
         )
 
+        element_pairs_path: Path | None = None
+        guide_pairs_path: Path | None = None
+        if not args.test_all_pairs:
+            prepared_mdata = md.read_h5mu(prepared)
+            element_pairs_path = tmp_dir / "element_pairs_to_test.parquet"
+            guide_pairs_path = tmp_dir / "guide_pairs_to_test.parquet"
+            _build_native_pairs_to_test(
+                prepared_mdata,
+                pair_element_column="intended_target_key",
+                element_names=[str(x) for x in prepared_mdata[GUIDE_MODALITY].uns[ELEMENT_NAMES_KEY]],
+            ).to_parquet(element_pairs_path, index=False)
+            _build_native_pairs_to_test(
+                prepared_mdata,
+                pair_element_column="guide_id",
+                element_names=[str(x) for x in prepared_mdata[GUIDE_MODALITY].uns[GUIDE_NAMES_KEY]],
+                guide_name_map=guide_name_map,
+            ).to_parquet(guide_pairs_path, index=False)
+
         element_dir = tmp_dir / "element_fit"
         guide_dir = tmp_dir / "guide_fit"
         element_process = _run_perturbo(
@@ -464,8 +457,7 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
             element_dir,
             map_key=ELEMENT_MAP_KEY,
             names_key=ELEMENT_NAMES_KEY,
-            pair_mask_key=None if args.test_all_pairs else ELEMENT_PAIR_MASK_KEY,
-            pair_names_key=None if args.test_all_pairs else ELEMENT_PAIR_NAMES_KEY,
+            pairs_to_test_path=element_pairs_path,
             gpu_id=args.element_gpu if args.parallel_fits else None,
             phase="element",
             args=args,
@@ -477,8 +469,7 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
             guide_dir,
             map_key=GUIDE_MAP_KEY,
             names_key=GUIDE_NAMES_KEY,
-            pair_mask_key=None if args.test_all_pairs else GUIDE_PAIR_MASK_KEY,
-            pair_names_key=None if args.test_all_pairs else GUIDE_PAIR_NAMES_KEY,
+            pairs_to_test_path=guide_pairs_path,
             gpu_id=args.guide_gpu if args.parallel_fits else None,
             phase="guide",
             args=args,
@@ -514,6 +505,12 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
         if args.v2_artifact_dir:
             artifact_dir = Path(args.v2_artifact_dir)
             artifact_dir.mkdir(parents=True, exist_ok=True)
+            for name, source in {
+                "element_pairs_to_test.parquet": element_pairs_path,
+                "guide_pairs_to_test.parquet": guide_pairs_path,
+            }.items():
+                if source is not None:
+                    shutil.copy2(source, artifact_dir / name)
             for name, source in {"element": element_dir, "guide": guide_dir}.items():
                 target = artifact_dir / name
                 if target.exists():

@@ -75,18 +75,38 @@ def test_prepare_mudata_adds_v2_metadata_and_control_guide_names(tmp_path):
     assert adapter.ELEMENT_NAMES_KEY in guide.uns
     assert adapter.GUIDE_MAP_KEY in guide.varm
     assert adapter.GUIDE_NAMES_KEY in guide.uns
-    assert adapter.ELEMENT_PAIR_MASK_KEY in gene.varm
-    assert adapter.GUIDE_PAIR_MASK_KEY in gene.varm
     assert "total_gene_umis" in gene.obs
     assert "log1p_total_guide_umis_centered" in gene.obs
     assert any(str(name).startswith("non-targeting|") for name in guide.uns[adapter.GUIDE_NAMES_KEY])
     assert guide_name_map["non-targeting|nt1"] == "nt1"
-    element_mask = sparse.csr_matrix(gene.varm[adapter.ELEMENT_PAIR_MASK_KEY])
-    guide_mask = sparse.csr_matrix(gene.varm[adapter.GUIDE_PAIR_MASK_KEY])
-    assert element_mask.shape[0] == gene.n_vars
-    assert guide_mask.shape[0] == gene.n_vars
-    assert element_mask.nnz >= 3
-    assert guide_mask.nnz >= 3
+
+
+def test_build_native_pairs_to_test_uses_requested_genes_and_controls(tmp_path):
+    input_path = tmp_path / "input.h5mu"
+    prepared_path = tmp_path / "prepared.h5mu"
+    _make_mudata().write(input_path)
+    guide_name_map = adapter.prepare_mudata_for_perturbo_v2(input_path, prepared_path)
+    prepared = mu.read_h5mu(prepared_path)
+
+    element_pairs = adapter._build_native_pairs_to_test(
+        prepared,
+        pair_element_column="intended_target_key",
+        element_names=[str(x) for x in prepared["guide"].uns[adapter.ELEMENT_NAMES_KEY]],
+    )
+    guide_pairs = adapter._build_native_pairs_to_test(
+        prepared,
+        pair_element_column="guide_id",
+        element_names=[str(x) for x in prepared["guide"].uns[adapter.GUIDE_NAMES_KEY]],
+        guide_name_map=guide_name_map,
+    )
+
+    assert list(element_pairs.columns) == ["element", "gene"]
+    assert list(guide_pairs.columns) == ["element", "gene"]
+    assert set(element_pairs["gene"]) == {"GENE1", "GENE2"}
+    assert set(guide_pairs["gene"]) == {"GENE1", "GENE2"}
+    assert {"gA", "gB", "non-targeting|nt1"}.issubset(set(guide_pairs["element"]))
+    control_pairs = guide_pairs[guide_pairs["element"] == "non-targeting|nt1"]
+    assert set(control_pairs["gene"]) == {"GENE1", "GENE2"}
 
 
 def test_convert_element_effects_maps_metadata_and_filters_pairs(tmp_path):
@@ -154,6 +174,58 @@ def test_convert_guide_effects_restores_control_guide_ids_and_filters_pairs(tmp_
     assert np.isclose(observed.loc[1, "p_value"], 0.9)
 
 
+@pytest.mark.parametrize("with_pairs", [False, True])
+def test_run_perturbo_uses_only_native_pairs_to_test_flag(tmp_path, monkeypatch, with_pairs):
+    input_path = tmp_path / "input.h5mu"
+    prepared_path = tmp_path / "prepared.h5mu"
+    _make_mudata().write(input_path)
+    adapter.prepare_mudata_for_perturbo_v2(input_path, prepared_path)
+    pairs_path = tmp_path / "pairs.parquet"
+    pd.DataFrame({"element": ["gA"], "gene": ["GENE1"]}).to_parquet(
+        pairs_path, index=False
+    )
+    captured = {}
+
+    class FakeProcess:
+        args = []
+
+    def fake_popen(cmd, env):
+        captured["cmd"] = cmd
+        captured["env"] = env
+        return FakeProcess()
+
+    monkeypatch.setattr(adapter, "_covariate_has_control_variance", lambda *args: False)
+    monkeypatch.setattr(adapter.subprocess, "Popen", fake_popen)
+    args = adapter.build_parser().parse_args(
+        [
+            "--input", str(input_path),
+            "--per-element-output", str(tmp_path / "element.tsv.gz"),
+            "--per-guide-output", str(tmp_path / "guide.tsv.gz"),
+            "--device", "cpu",
+            "--no-save-model-params",
+        ]
+    )
+    adapter._run_perturbo(
+        prepared_path,
+        tmp_path / "fit",
+        map_key=adapter.GUIDE_MAP_KEY,
+        names_key=adapter.GUIDE_NAMES_KEY,
+        pairs_to_test_path=pairs_path if with_pairs else None,
+        gpu_id=None,
+        phase="smoke",
+        args=args,
+    )
+
+    cmd = captured["cmd"]
+    assert "--gene-by-element-varm-key" not in cmd
+    assert "--gene-by-element-names-uns-key" not in cmd
+    if with_pairs:
+        index = cmd.index("--pairs-to-test")
+        assert cmd[index + 1] == str(pairs_path)
+    else:
+        assert "--pairs-to-test" not in cmd
+
+
 @pytest.mark.parametrize(
     ("test_all_pairs", "analysis_prefix"),
     [(False, "local_analysis"), (True, "global_analysis")],
@@ -197,8 +269,15 @@ def test_run_pipeline_adapter_patches_uns_without_rewriting_x(
         }
     )
 
-    def fake_run_perturbo(input_path, out_dir, *, map_key, names_key, args, **kwargs):
+    observed_native_pairs = []
+
+    def fake_run_perturbo(
+        input_path, out_dir, *, map_key, names_key, pairs_to_test_path, args, **kwargs
+    ):
         out_dir.mkdir(parents=True, exist_ok=True)
+        observed_native_pairs.append(
+            None if pairs_to_test_path is None else pd.read_parquet(pairs_to_test_path)
+        )
         effects = element_effects if map_key == adapter.ELEMENT_MAP_KEY else guide_effects
         effects.to_parquet(out_dir / "element_effects.parquet", index=False)
         return object()
@@ -212,6 +291,7 @@ def test_run_pipeline_adapter_patches_uns_without_rewriting_x(
         "--per-element-output", str(tmp_path / "per_element.tsv.gz"),
         "--per-guide-output", str(tmp_path / "per_guide.tsv.gz"),
         "--output-mudata", str(output_mudata),
+        "--v2-artifact-dir", str(tmp_path / "artifacts"),
     ]
     if test_all_pairs:
         cli_args.append("--test-all-pairs")
@@ -229,3 +309,13 @@ def test_run_pipeline_adapter_patches_uns_without_rewriting_x(
     assert f"{analysis_prefix}_per_element_results" in result.uns
     assert f"{analysis_prefix}_per_guide_results" in result.uns
     assert list(pd.DataFrame(result.uns["per_element_results"])["gene_id"]) == ["GENE1", "GENE2"]
+    if test_all_pairs:
+        assert observed_native_pairs == [None, None]
+        assert not (tmp_path / "artifacts/element_pairs_to_test.parquet").exists()
+        assert not (tmp_path / "artifacts/guide_pairs_to_test.parquet").exists()
+    else:
+        assert len(observed_native_pairs) == 2
+        assert all(list(frame.columns) == ["element", "gene"] for frame in observed_native_pairs)
+        assert all(any(frame["element"].str.contains("non-targeting")) for frame in observed_native_pairs)
+        assert (tmp_path / "artifacts/element_pairs_to_test.parquet").exists()
+        assert (tmp_path / "artifacts/guide_pairs_to_test.parquet").exists()

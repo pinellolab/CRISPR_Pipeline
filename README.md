@@ -197,7 +197,7 @@ The complete machine-readable QC output catalog is available as
 | `INFERENCE_PERTURBO_DEVICE` | `gpu` | `gpu`, `cpu` | Device requested for PerTurbo v2 inference. |
 | `INFERENCE_PERTURBO_MAX_CHUNK_CELLS` | `20000` | Integer `>= 1` | Maximum cells sent to a PerTurbo v2 fit at once. This is the primary GPU-memory knob for local and global runs; PerTurbo minibatching is intentionally disabled by the pipeline. |
 | `INFERENCE_PERTURBO_LOCAL_MAX_CHUNK_CELLS` | `20000` | Integer `>= 1` | Local/cis-only chunk cap. Use this to increase local GPU utilization without changing or invalidating global/trans inference. |
-| `INFERENCE_PERTURBO_LOCAL_PARALLEL_FITS` | `false` | Boolean | Fit the local/cis element and guide models concurrently. Enable only when two GPUs are visible. Local/cis fitting applies `pairs_to_test` as a gene-by-element mask before optimization; global/trans fitting remains all-by-all. |
+| `INFERENCE_PERTURBO_LOCAL_PARALLEL_FITS` | `false` | Boolean | Fit the local/cis element and guide models concurrently. Enable only when two GPUs are visible. Local/cis fitting passes `pairs_to_test` through PerTurbo's native `--pairs-to-test` interface; global/trans omits the option and remains all-by-all. |
 | `INFERENCE_PERTURBO_ELEMENT_GPU` | `0` | CUDA device ID | GPU assigned to the local/cis element fit in parallel mode. |
 | `INFERENCE_PERTURBO_GUIDE_GPU` | `1` | CUDA device ID | GPU assigned to the local/cis guide fit in parallel mode. |
 | `INFERENCE_PERTURBO_JAX_CACHE_DIR` | `.perturbo_jax_cache` | Directory | Persistent JAX compilation-cache root. Element and guide fits use separate subdirectories. |
@@ -301,8 +301,8 @@ containers {
    base     = 'ghcr.io/pinellolab/crispr_pipeline/conda-docker'
    cleanser = 'ghcr.io/gersbachlab-bioinformatics/cleanser:1.2.1'
    sceptre  = 'sjiang9/sceptre-igvf:0.1'
-   // One image supports masked local/cis and unmasked global/trans inference.
-   perturbo = 'ghcr.io/pinellolab/crispr_pipeline/perturbo:v2-cis-mask'
+   // Native --pairs-to-test restricts local/cis; global/trans remains unmasked.
+   perturbo = 'ghcr.io/pinellolab/perturbo:sha-a9d696e'
 }
 ```
 
