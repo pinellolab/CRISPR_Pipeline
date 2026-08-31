@@ -10,19 +10,39 @@ workflow prepare_mapping_pipeline {
     // Prepare covariate list from the samples channel
     covariate_list = ch_samples
         .map { meta, _reads ->
-            [meta.measurement_sets]
+            [
+                modality: meta.modality.toString().toLowerCase(),
+                batch: meta.measurement_sets.toString()
+            ]
         }
-        .unique()
+        .unique { row -> "${row.modality}:${row.batch}" }
         // .groupTuple()
-        .map { measurement_sets ->
-            [batch: measurement_sets]
-        }
         .collect()
         .map { it ->
-            def sorted_covariates = it.sort { a, b ->
-                a.batch.toString() <=> b.batch.toString()
+            def batches_by_modality = [:].withDefault { [] }
+            it.each { row ->
+                if (!batches_by_modality[row.modality].contains(row.batch)) {
+                    batches_by_modality[row.modality] << row.batch
+                }
             }
-            def json = groovy.json.JsonOutput.toJson([batch: sorted_covariates.batch.flatten()])
+
+            // Pair modality-specific measurement set IDs by their input order.
+            def batch_to_concat_batch = [:]
+            batches_by_modality.each { modality, batches ->
+                batches.eachWithIndex { batch, idx ->
+                    if (!batch_to_concat_batch.containsKey(batch)) {
+                        batch_to_concat_batch[batch] = "sample_${idx}"
+                    }
+                }
+            }
+
+            def sorted_batches = batch_to_concat_batch.keySet().toList().sort { a, b ->
+                a.toString() <=> b.toString()
+            }
+            def json = groovy.json.JsonOutput.toJson([
+                batch: sorted_batches,
+                concat_batch: sorted_batches.collect { batch_to_concat_batch[it] }
+            ])
             return json
         }
         .view {"Covariate_list: $it"}

@@ -173,7 +173,6 @@ def run_perturbo(
 
     model = perturbo.PERTURBO(
         mdata,
-        control_guides=control_guides,
         likelihood="nb",
         efficiency_mode=efficiency_mode,
         fit_guide_efficacy=fit_guide_efficacy,

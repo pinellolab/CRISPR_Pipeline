@@ -21,12 +21,17 @@ workflow mapping_rna_pipeline {
 
     DownloadRefResult = downloadReference(params.REFERENCE_transcriptome, params.use_igvf_reference)
 
+    bc_replacement_ch = params.replace_barcodes ? Channel.fromPath(params.bc_replacement_file).collect() : Channel.fromPath("dummy_bc_replacement.txt").collect()
+
     MappingOut = mappingscRNA(
         ch_rna,
         DownloadRefResult.transcriptome_idx,
         DownloadRefResult.t2g_transcriptome_index,
+        DownloadRefResult.cdna,
+        DownloadRefResult.nascent_index,
         SeqSpecResult.parsed_seqspec,
-        SeqSpecResult.barcode_file
+        SeqSpecResult.barcode_file,
+        bc_replacement_ch
     )
 
     ks_transcripts_out_dir_collected = MappingOut.ks_transcripts_out_dir

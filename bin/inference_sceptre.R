@@ -15,6 +15,8 @@ if (getRversion() >= "2.15.1") {
       "response_id",
       "grna_target",
       "p_value",
+      "fold_change",
+      "se_fold_change",
       "log_2_fold_change",
       "gene_id",
       "intended_target_name",
@@ -310,7 +312,7 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
   # get union (per-element) results
   union_results <- sceptre_object |>
     sceptre::get_result(analysis = "run_discovery_analysis") |>
-    dplyr::select(response_id, grna_target, p_value, log_2_fold_change) |>
+    dplyr::select(response_id, grna_target, p_value, fold_change, se_fold_change, log_2_fold_change) |>
     dplyr::rename(
       gene_id = response_id,
       intended_target_key = grna_target,
@@ -323,6 +325,8 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
       intended_target_chr,
       intended_target_start,
       intended_target_end,
+      fold_change,
+      se_fold_change,
       log2_fc,
       p_value
     )
@@ -373,7 +377,7 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
   # extract singleton (per-guide) results, preserve grna_id and rename to guide_id
   singleton_results <- sceptre_object |>
     sceptre::get_result(analysis = "run_discovery_analysis") |>
-    dplyr::select(response_id, grna_id, p_value, log_2_fold_change) |>
+    dplyr::select(response_id, grna_id, p_value, fold_change, se_fold_change, log_2_fold_change) |>
     dplyr::rename(
       gene_id = response_id,
       guide_id = grna_id,

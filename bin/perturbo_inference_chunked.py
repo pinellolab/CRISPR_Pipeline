@@ -4,7 +4,6 @@ Run PerTurbo inference on balanced gene chunks and concatenate TSV outputs.
 """
 
 import argparse
-import os
 import shutil
 import subprocess
 import sys
@@ -133,10 +132,17 @@ def run_perturbo_chunked(
     test_all_pairs=False,
     num_workers=None,
 ):
+    """
+    Run PerTurbo inference on chunks of genes by calling perturbo_inference.py.
+    """
+
     script_dir = Path(__file__).resolve().parent
     perturbo_script = script_dir / "perturbo_inference.py"
 
     n_genes = get_gene_count(mdata_input_fp, gene_modality_name)
+    print(f"Starting chunked PerTurbo inference on {mdata_input_fp}...")
+    print(f"Detected {n_genes} genes in modality '{gene_modality_name}'.")
+
     if not should_chunk(n_genes, chunk_size):
         if chunk_size <= 0:
             print(
@@ -188,9 +194,9 @@ def run_perturbo_chunked(
 
         result_files = []
         for chunk_index, chunk_file in enumerate(chunk_files, start=1):
-            chunk_result = os.path.splitext(chunk_file)[0] + ".tsv.gz"
+            chunk_result = str(Path(chunk_file).with_suffix(".tsv.gz"))
             print(
-                f"Starting chunk {chunk_index}/{total_chunks}: {os.path.basename(chunk_file)}"
+                f"Starting chunk {chunk_index}/{total_chunks}: {Path(chunk_file).name}"
             )
             run_command(
                 build_perturbo_command(
@@ -214,7 +220,7 @@ def run_perturbo_chunked(
             )
             result_files.append(chunk_result)
             print(
-                f"Finished chunk {chunk_index}/{total_chunks}: {os.path.basename(chunk_file)}"
+                f"Finished chunk {chunk_index}/{total_chunks}: {Path(chunk_file).name}"
             )
 
         if not result_files:
@@ -322,8 +328,9 @@ def main():
     parser.add_argument(
         "--inference_type",
         type=str,
+        choices=["guide", "element"],
         default="element",
-        help="Unit to test for effects on each gene: 'guide' or 'element'",
+        help="Unit to test for effects on each gene",
     )
     parser.add_argument(
         "--test_all_pairs",

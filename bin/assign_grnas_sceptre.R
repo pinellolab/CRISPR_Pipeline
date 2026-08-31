@@ -67,6 +67,7 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 
   if(!is.null(SummarizedExperiment::colData(mudata))){
     covariates <- SummarizedExperiment::colData(mudata) |> as.data.frame()
+    covariates <- covariates[, setdiff(colnames(covariates), "corrected_barcode"), drop = FALSE]
     covariates[] <- lapply(covariates, as.factor)
     # Check and remove factor variables with fewer than two levels
     number_of_levels <- sapply(covariates, function(x) length(unique(x)))
