@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import math
 import os
 from pathlib import Path
@@ -36,6 +37,18 @@ ELEMENT_NAMES_KEY = "perturbo_v2_intended_target_names"
 GUIDE_MAP_KEY = "perturbo_v2_guides"
 GUIDE_NAMES_KEY = "perturbo_v2_guide_names"
 CONTROL_SUBSTRING = "non-targeting"
+
+
+@contextmanager
+def _open_mudata(path: str | Path, *, backed: str | None = None):
+    """Open MuData and deterministically release its HDF5 file handle."""
+    mdata = md.read_h5mu(path, backed=backed)
+    try:
+        yield mdata
+    finally:
+        file_manager = getattr(mdata, "file", None)
+        if file_manager is not None:
+            file_manager.close()
 
 
 def _bh_adjust(pvalues: pd.Series) -> pd.Series:
@@ -125,28 +138,28 @@ def _build_guide_identity_mapping(mdata: md.MuData) -> dict[str, str]:
 
 
 def _covariate_has_control_variance(input_path: Path, map_key: str, names_key: str) -> bool:
-    mdata = md.read_h5mu(input_path, backed="r")
-    values = pd.to_numeric(
-        mdata[GENE_MODALITY].obs["log1p_total_guide_umis_centered"],
-        errors="coerce",
-    ).to_numpy(dtype=float)
-    guide = mdata[GUIDE_MODALITY]
-    mapping = guide.varm[map_key]
-    names = [str(x) for x in guide.uns[names_key]]
-    control_idx = [i for i, name in enumerate(names) if CONTROL_SUBSTRING in name.lower()]
-    if not control_idx:
-        return False
-    if isinstance(mapping, pd.DataFrame):
-        mapping = mapping.to_numpy()
-    control_guides = np.asarray(mapping[:, control_idx].sum(axis=1)).ravel() > 0
-    if not np.any(control_guides):
-        return False
-    assignment = _get_assignment_matrix(mdata)
-    control_cells = np.asarray((assignment[:, control_guides] > 0).sum(axis=1)).ravel() > 0
-    control_values = values[control_cells & np.isfinite(values)]
-    if control_values.size < 2:
-        return False
-    return bool(np.nanstd(control_values) > 1e-8)
+    with _open_mudata(input_path, backed="r") as mdata:
+        values = pd.to_numeric(
+            mdata[GENE_MODALITY].obs["log1p_total_guide_umis_centered"],
+            errors="coerce",
+        ).to_numpy(dtype=float)
+        guide = mdata[GUIDE_MODALITY]
+        mapping = guide.varm[map_key]
+        names = [str(x) for x in guide.uns[names_key]]
+        control_idx = [i for i, name in enumerate(names) if CONTROL_SUBSTRING in name.lower()]
+        if not control_idx:
+            return False
+        if isinstance(mapping, pd.DataFrame):
+            mapping = mapping.to_numpy()
+        control_guides = np.asarray(mapping[:, control_idx].sum(axis=1)).ravel() > 0
+        if not np.any(control_guides):
+            return False
+        assignment = _get_assignment_matrix(mdata)
+        control_cells = np.asarray((assignment[:, control_guides] > 0).sum(axis=1)).ravel() > 0
+        control_values = values[control_cells & np.isfinite(values)]
+        if control_values.size < 2:
+            return False
+        return bool(np.nanstd(control_values) > 1e-8)
 
 
 def _build_native_pairs_to_test(
@@ -220,29 +233,31 @@ def prepare_mudata_for_perturbo_v2(
     test_all_pairs: bool = False,
 ) -> dict[str, str]:
     """Write a PerTurbo v2-ready MuData and return guide output-name remapping."""
-    mdata = md.read_h5mu(input_path)
-    if GENE_MODALITY not in mdata.mod or GUIDE_MODALITY not in mdata.mod:
-        raise KeyError("Expected MuData modalities named 'gene' and 'guide'.")
-    _ensure_library_size(mdata)
-    _ensure_covariates(mdata)
-    _build_element_mapping(mdata)
-    guide_name_map = _build_guide_identity_mapping(mdata)
-    if not test_all_pairs and "pairs_to_test" not in mdata.uns:
-        raise KeyError("pairs_to_test not found in MuData; local PerTurbo fitting requires explicit pairs.")
-    mdata.write(output_path)
+    with _open_mudata(input_path) as mdata:
+        if GENE_MODALITY not in mdata.mod or GUIDE_MODALITY not in mdata.mod:
+            raise KeyError("Expected MuData modalities named 'gene' and 'guide'.")
+        _ensure_library_size(mdata)
+        _ensure_covariates(mdata)
+        _build_element_mapping(mdata)
+        guide_name_map = _build_guide_identity_mapping(mdata)
+        if not test_all_pairs and "pairs_to_test" not in mdata.uns:
+            raise KeyError("pairs_to_test not found in MuData; local PerTurbo fitting requires explicit pairs.")
+        mdata.write(output_path)
     return guide_name_map
 
 
 def _maybe_filter_pairs(df: pd.DataFrame, prepared_mudata_path: str | Path, *, inference_type: str, test_all_pairs: bool) -> pd.DataFrame:
     if test_all_pairs:
         return df
-    mdata = md.read_h5mu(prepared_mudata_path, backed="r")
-    if "pairs_to_test" not in mdata.uns:
-        raise KeyError("pairs_to_test not found in MuData; use --test-all-pairs to disable pair filtering.")
-    pairs = mdata.uns["pairs_to_test"]
-    if not isinstance(pairs, pd.DataFrame):
-        pairs = pd.DataFrame(pairs)
-    guide_var = pd.DataFrame(mdata[GUIDE_MODALITY].var)
+    with _open_mudata(prepared_mudata_path, backed="r") as mdata:
+        if "pairs_to_test" not in mdata.uns:
+            raise KeyError("pairs_to_test not found in MuData; use --test-all-pairs to disable pair filtering.")
+        pairs = mdata.uns["pairs_to_test"]
+        if not isinstance(pairs, pd.DataFrame):
+            pairs = pd.DataFrame(pairs)
+        else:
+            pairs = pairs.copy()
+        guide_var = pd.DataFrame(mdata[GUIDE_MODALITY].var).copy()
     if inference_type == "element":
         if "intended_target_key" not in pairs.columns:
             pairs = enrich_pairs_with_target_metadata(pairs, guide_var)
@@ -258,8 +273,8 @@ def convert_element_effects(
     *,
     test_all_pairs: bool,
 ) -> pd.DataFrame:
-    mdata = md.read_h5mu(prepared_mudata_path, backed="r")
-    target_lookup = get_target_lookup(pd.DataFrame(mdata[GUIDE_MODALITY].var))
+    with _open_mudata(prepared_mudata_path, backed="r") as mdata:
+        target_lookup = get_target_lookup(pd.DataFrame(mdata[GUIDE_MODALITY].var).copy())
     out = _convert_common_effect_columns(effects).rename(columns={"element": "intended_target_key"})
     out = _maybe_filter_pairs(out, prepared_mudata_path, inference_type="element", test_all_pairs=test_all_pairs)
     out = out.merge(target_lookup, on="intended_target_key", how="left")
@@ -376,7 +391,9 @@ def _run_perturbo(
             "Skipping log1p_total_guide_umis_centered covariate because it has "
             "zero variance in PerTurbo control cells for this run."
         )
-    if "batch" in md.read_h5mu(input_path, backed="r")[GENE_MODALITY].obs.columns:
+    with _open_mudata(input_path, backed="r") as mdata:
+        has_batch = "batch" in mdata[GENE_MODALITY].obs.columns
+    if has_batch:
         cmd.extend(["--batch-covariate", "batch"])
     if not args.save_model_params:
         cmd.append("--no-save-model-params")
@@ -435,20 +452,20 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
         element_pairs_path: Path | None = None
         guide_pairs_path: Path | None = None
         if not args.test_all_pairs:
-            prepared_mdata = md.read_h5mu(prepared)
-            element_pairs_path = tmp_dir / "element_pairs_to_test.parquet"
-            guide_pairs_path = tmp_dir / "guide_pairs_to_test.parquet"
-            _build_native_pairs_to_test(
-                prepared_mdata,
-                pair_element_column="intended_target_key",
-                element_names=[str(x) for x in prepared_mdata[GUIDE_MODALITY].uns[ELEMENT_NAMES_KEY]],
-            ).to_parquet(element_pairs_path, index=False)
-            _build_native_pairs_to_test(
-                prepared_mdata,
-                pair_element_column="guide_id",
-                element_names=[str(x) for x in prepared_mdata[GUIDE_MODALITY].uns[GUIDE_NAMES_KEY]],
-                guide_name_map=guide_name_map,
-            ).to_parquet(guide_pairs_path, index=False)
+            with _open_mudata(prepared) as prepared_mdata:
+                element_pairs_path = tmp_dir / "element_pairs_to_test.parquet"
+                guide_pairs_path = tmp_dir / "guide_pairs_to_test.parquet"
+                _build_native_pairs_to_test(
+                    prepared_mdata,
+                    pair_element_column="intended_target_key",
+                    element_names=[str(x) for x in prepared_mdata[GUIDE_MODALITY].uns[ELEMENT_NAMES_KEY]],
+                ).to_parquet(element_pairs_path, index=False)
+                _build_native_pairs_to_test(
+                    prepared_mdata,
+                    pair_element_column="guide_id",
+                    element_names=[str(x) for x in prepared_mdata[GUIDE_MODALITY].uns[GUIDE_NAMES_KEY]],
+                    guide_name_map=guide_name_map,
+                ).to_parquet(guide_pairs_path, index=False)
 
         element_dir = tmp_dir / "element_fit"
         guide_dir = tmp_dir / "guide_fit"

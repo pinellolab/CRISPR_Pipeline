@@ -60,6 +60,17 @@ def _make_mudata():
     return mdata
 
 
+def test_open_mudata_closes_backed_file_manager(tmp_path):
+    input_path = tmp_path / "input.h5mu"
+    _make_mudata().write(input_path)
+
+    with adapter._open_mudata(input_path, backed="r") as mdata:
+        file_manager = mdata.file
+        assert file_manager.is_open
+
+    assert not file_manager.is_open
+
+
 def test_prepare_mudata_adds_v2_metadata_and_control_guide_names(tmp_path):
     input_path = tmp_path / "input.h5mu"
     prepared_path = tmp_path / "prepared.h5mu"
