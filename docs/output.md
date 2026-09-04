@@ -8,6 +8,10 @@ All paths are relative to the directory supplied with `--outdir`.
 
 The final inference artifacts are written once, under `pipeline_outputs/`. The dashboard directory contains only visualization files and supporting assets; it does not include duplicate copies of the final MuData or local/global analysis TSV outputs.
 
+See the [MuData field reference](mudata_schema.md) for the internal schema of
+`inference_mudata.h5mu` and descriptions of its modalities, matrices,
+annotations, assignment layers, and inference-result fields.
+
 ## Pipeline overview
 
 The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes data using the following steps:

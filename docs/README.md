@@ -8,6 +8,8 @@ The nf-core/crispr documentation is split into the following pages:
   - An overview of the different results produced by the pipeline and how to interpret them.
 - [Filtering and MuData assembly](filtering_workflow.md)
   - The filtering, barcode intersection, guide assignment, and concatenation order for multiple measurement sets.
+- [MuData field reference](mudata_schema.md)
+  - Field-level data dictionary for the final MuData object, including modalities, cell and feature annotations, assignment layers, optional hashing fields, and inference result tables.
 - [Interactive filtering workflow](filtering_workflow.html)
   - Standalone HTML with rendered Mermaid diagrams, implementation snippets, and the active CC configuration.
 - [Parameter reference](index.html)
