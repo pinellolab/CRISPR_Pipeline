@@ -771,6 +771,43 @@ The pipeline generates these outputs upon completion:
 - `pipeline_dashboard`: Houses interactive visualization reports and supporting assets only
 - `pipeline_dashboard.tar.gz`: Compressed archive of `pipeline_dashboard`
 
+### Live Axiom telemetry
+
+The normal HTML dashboard is still generated at the end of the workflow. For a
+live operational dashboard, source a shell environment containing the token and
+launch Nextflow through the fail-open telemetry wrapper:
+
+```bash
+source ~/.bashrc
+export AXIOM_OUTDIR=/absolute/path/to/results
+export AXIOM_RUN_NAME=tapseq_chr8_$(date -u +%Y%m%dT%H%M%SZ)
+
+bin/run_with_axiom.sh nextflow run main.nf \
+  -profile local \
+  -params-file /absolute/path/to/params.json \
+  --outdir "$AXIOM_OUTDIR" \
+  -resume
+```
+
+`conf/axiom.config` documents every telemetry setting. By default it reads the
+token from `AXIOM_IGVF`, writes events to the `crispr_pipeline` Axiom dataset,
+creates one shared dashboard per UUID/date/run name, refreshes every 60 seconds,
+and hard-caps attempted event data at 20 MB. It sends compact lifecycle,
+per-process runtime/resource, heartbeat, tool/stage, and final numeric QC metric
+events; it never sends task scripts, environment variables, FASTQ contents, or
+unbounded stdout/stderr.
+
+The default ingest endpoint is Axiom US East. Set `AXIOM_INGEST_URL` to
+`https://eu-central-1.aws.edge.axiom.co/v1/ingest/{dataset}` when the dataset is
+hosted in Axiom EU Central. Dashboard creation requires an advanced API token
+with dashboard create/update access in addition to ingest permission.
+
+Nextflow's native trace observer supplies process completion and resource data,
+the DAG report preserves process dependencies, and `onComplete`/`onError` hooks
+write a small local handoff consumed by the sidecar. All Axiom HTTP and dashboard
+errors are warnings: the wrapper returns the Nextflow exit code and telemetry
+cannot terminate an otherwise healthy pipeline.
+
 ### Troubleshooting
 If you encounter any issues during testing:
 1. Review log files and intermediate results in the `work/` directory

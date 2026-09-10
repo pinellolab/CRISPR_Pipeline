@@ -524,6 +524,27 @@
                 }
             }
         },
+        "telemetry_options": {
+            "title": "Axiom telemetry options",
+            "type": "object",
+            "fa_icon": "fas fa-chart-line",
+            "description": "Optional fail-open, per-process telemetry for live Axiom dashboards. Launch through bin/run_with_axiom.sh and keep the token only in the named environment variable.",
+            "properties": {
+                "AXIOM_enabled": {"type": "boolean", "default": false, "description": "Enable Axiom lifecycle hook events."},
+                "AXIOM_dataset": {"type": "string", "default": "crispr_pipeline", "description": "Axiom event dataset."},
+                "AXIOM_token_env": {"type": "string", "default": "AXIOM_IGVF", "description": "Environment-variable name containing the Axiom token; never the token itself."},
+                "AXIOM_ingest_url": {"type": "string", "default": "https://us-east-1.aws.edge.axiom.co/v1/ingest/{dataset}", "description": "Axiom ingest URL template. Set the host to the dataset's edge deployment (for example eu-central-1.aws.edge.axiom.co)."},
+                "AXIOM_api_url": {"type": "string", "default": "https://api.axiom.co", "description": "Base URL for dashboard management."},
+                "AXIOM_create_dashboard": {"type": "boolean", "default": true, "description": "Create an idempotent dashboard scoped to this run UUID."},
+                "AXIOM_max_bytes": {"type": "integer", "default": 20000000, "maximum": 20000000, "minimum": 1, "description": "Hard cap on serialized events attempted per run (20 MB maximum)."},
+                "AXIOM_max_event_bytes": {"type": "integer", "default": 8192, "maximum": 65536, "minimum": 512, "description": "Maximum serialized size of one telemetry event."},
+                "AXIOM_poll_seconds": {"type": "number", "default": 2, "minimum": 0.25, "description": "Seconds between Nextflow trace checks."},
+                "AXIOM_heartbeat_seconds": {"type": "number", "default": 60, "minimum": 10, "description": "Seconds between live run heartbeats."},
+                "AXIOM_run_id": {"type": "string", "default": "", "description": "Wrapper-generated UUID that partitions events and dashboards by execution."},
+                "AXIOM_run_name": {"type": "string", "default": "", "description": "Human-readable execution name used in Axiom."},
+                "AXIOM_event_file": {"type": "string", "default": "", "description": "Run-local JSONL handoff written by Nextflow onComplete/onError hooks."}
+            }
+        },
         "network_options": {
             "title": "Network plot options",
             "type": "object",
@@ -565,6 +586,9 @@
         },
         {
             "$ref": "#/$defs/benchmark_options"
+        },
+        {
+            "$ref": "#/$defs/telemetry_options"
         },
         {
             "$ref": "#/$defs/network_options"
