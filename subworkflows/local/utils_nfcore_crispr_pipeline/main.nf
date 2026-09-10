@@ -159,13 +159,17 @@ workflow PIPELINE_COMPLETION {
     // Completion email and summary
     //
     workflow.onComplete {
-        def axiomSuccess = workflow?.success == true
-        def axiomError = workflow?.errorMessage ?: 'unknown error'
-        writeAxiomLifecycleEvent(
-            'workflow_hook_complete',
-            axiomSuccess ? 'SUCCEEDED' : 'FAILED',
-            axiomSuccess ? 'Nextflow onComplete hook fired' : "Nextflow onComplete hook fired after failure: ${axiomError}"
-        )
+        try {
+            def axiomSuccess = workflow?.success == true
+            def axiomError = workflow?.errorMessage ?: 'unknown error'
+            writeAxiomLifecycleEvent(
+                'workflow_hook_complete',
+                axiomSuccess ? 'SUCCEEDED' : 'FAILED',
+                axiomSuccess ? 'Nextflow onComplete hook fired' : "Nextflow onComplete hook fired after failure: ${axiomError}"
+            )
+        } catch (Exception error) {
+            log.warn("Unable to evaluate optional telemetry completion event; pipeline continues: ${error.message}")
+        }
         if (demo_mode) {
             log.warn '''
 ================================================================================
@@ -196,12 +200,16 @@ See DEMO_MODE_WARNING.txt in the output directory.
     }
 
     workflow.onError {
-        def axiomError = workflow?.errorMessage ?: 'unknown error'
-        writeAxiomLifecycleEvent(
-            'workflow_hook_error',
-            'FAILED',
-            "Nextflow onError hook fired: ${axiomError}"
-        )
+        try {
+            def axiomError = workflow?.errorMessage ?: 'unknown error'
+            writeAxiomLifecycleEvent(
+                'workflow_hook_error',
+                'FAILED',
+                "Nextflow onError hook fired: ${axiomError}"
+            )
+        } catch (Exception error) {
+            log.warn("Unable to evaluate optional telemetry error event; pipeline continues: ${error.message}")
+        }
         log.error "Pipeline failed. Please refer to troubleshooting docs: https://nf-co.re/docs/usage/troubleshooting"
     }
 }

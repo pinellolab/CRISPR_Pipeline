@@ -98,3 +98,11 @@ def test_live_qc_discovers_inputs_seqspec_and_image_inventory(tmp_path):
     assert ("seqspec.HitRatio", 0.1) in metrics
     assert any(event.get("artifact_name") == "seqSpec_check_plots.png" for event in events)
     assert telemetry.discover_live_qc(tmp_path, run_name, {"run_id": "abc"}, seen) == []
+
+
+def test_lifecycle_property_access_is_inside_fail_open_guard():
+    source = (Path(__file__).parents[1] / "subworkflows/local/utils_nfcore_crispr_pipeline/main.nf").read_text()
+    complete = source[source.index("workflow.onComplete"):source.index("workflow.onError")]
+    error = source[source.index("workflow.onError"):source.index("// The sidecar tails")]
+    assert complete.index("try {") < complete.index("workflow?.success") < complete.index("catch (Exception error)")
+    assert error.index("try {") < error.index("workflow?.errorMessage") < error.index("catch (Exception error)")
