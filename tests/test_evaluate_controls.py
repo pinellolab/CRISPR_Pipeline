@@ -55,6 +55,37 @@ def test_binary_evaluation_skips_empty_input(tmp_path):
     assert "valid_rows=0" in marker.read_text()
 
 
+def test_control_evaluation_matches_symbol_target_to_ensembl_result(tmp_path, monkeypatch):
+    obs = pd.DataFrame(index=["cell1"])
+    gene = ad.AnnData(X=np.ones((1, 1)), obs=obs.copy(), var=pd.DataFrame(index=["ENSG1"]))
+    guide_var = pd.DataFrame(
+        {
+            "guide_id": ["targeting-guide", "control-guide"],
+            "intended_target_name": ["GENE1", "non-targeting"],
+            "targeting": [True, False],
+        },
+        index=["targeting-guide", "control-guide"],
+    )
+    guide = ad.AnnData(X=np.ones((1, 2)), obs=obs.copy(), var=guide_var)
+    mdata = mu.MuData({"gene": gene, "guide": guide})
+    mdata.uns["global_analysis_per_guide_results"] = pd.DataFrame(
+        {
+            "guide_id": ["targeting-guide", "control-guide"],
+            "gene_id": ["ENSG1", "ENSG1"],
+            "gene_name": ["GENE1", "GENE1"],
+            "perturbo_log2_fc": [-1.0, 0.0],
+            "perturbo_p_value": [0.01, 0.9],
+        }
+    )
+    monkeypatch.setattr("evaluate_controls.plot_volcano", lambda *args, **kwargs: None)
+    monkeypatch.setattr("evaluate_controls.perform_binary_evaluation", lambda *args, **kwargs: True)
+    monkeypatch.setattr("evaluate_controls.savefig", lambda *args, **kwargs: None)
+
+    run_evaluation_controls(mdata, outdir=tmp_path)
+
+    assert not (tmp_path / "controls_evaluation_skipped.txt").exists()
+
+
 def test_control_evaluation_skips_cleanly_without_global_results(tmp_path):
     class LocalOnlyResult:
         uns = {"local_analysis_per_guide_results": pd.DataFrame()}

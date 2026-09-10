@@ -51,6 +51,7 @@ def test_render_builds_clickable_family_dashboard(tmp_path):
     assert "42" in result
     assert "data:image/png;base64," in result
     assert "No credentials, FASTQs or unbounded task logs embedded" in result
+    assert "location.hash.slice(1)" in result
 
 
 def test_processes_are_mapped_to_expected_families():
@@ -106,3 +107,40 @@ def test_qc_catalog_and_sanitized_failure_evidence_are_embedded(tmp_path):
     assert "API_TOKEN=&lt;redacted&gt;" in result
     assert "Final cells" in result and "123" in result
     assert "Assignment rate" in result and "0.800" in result
+
+
+def test_final_dashboard_inference_tables_are_bounded_and_searchable(tmp_path):
+    final_dashboard = tmp_path / "dashboard.html"
+    rows = "".join(
+        f"<tr><td>GENE{i}</td><td>guide{i}</td><td>{i / 100}</td><td>{i / 1000}</td></tr>"
+        for i in range(40)
+    )
+    final_dashboard.write_text(
+        '<h3 id="local">Guide Inference</h3><p>Local Analysis</p><table>'
+        '<thead><tr><th>gene_name</th><th>guide_id</th><th>sceptre_log2_fc</th>'
+        f'<th>sceptre_p_value</th></tr></thead><tbody>{rows}</tbody></table>',
+        encoding="utf-8",
+    )
+
+    result = dashboard.final_inference_content(final_dashboard, limit=25)
+
+    assert "Local Analysis: top guide–gene pairs" in result
+    assert "Filter the 25 mirrored rows" in result
+    assert "GENE24" in result
+    assert "GENE25" not in result
+    assert 'id="inference-0"' in result
+
+
+def test_evaluation_skip_reason_and_artifacts_are_visible(tmp_path):
+    evaluation = tmp_path / "evaluation_output"
+    evaluation.mkdir()
+    (evaluation / "controls_evaluation_skipped.txt").write_text(
+        "Benchmark disabled because no validation set was supplied.\n", encoding="utf-8"
+    )
+    (evaluation / "local_analysis_sceptre.bedpe").write_text("chr8\t1\t2\n", encoding="utf-8")
+
+    result = dashboard.evaluation_artifact_content(tmp_path)
+
+    assert "Benchmark disabled" in result
+    assert "local_analysis_sceptre.bedpe" in result
+    assert "BEDPE" in result

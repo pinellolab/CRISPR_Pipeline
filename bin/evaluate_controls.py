@@ -10,6 +10,8 @@ import seaborn as sns
 import argparse
 import os
 
+from inference_target_matching import direct_target_mask
+
 
 def select_inference_columns(df):
     """Return log2 fold-change and p-value columns available in inference output."""
@@ -178,22 +180,18 @@ def run_evaluation_controls(md_read, outdir):
     md_read.uns[col_used]['intended_target_name'] = md_read.uns[col_used]['guide_id'].map(intended_dict)
 
     selecting_to_plot = md_read.uns[col_used].copy()
-    selecting_to_plot_final = selecting_to_plot[
-        selecting_to_plot.apply(lambda x: x['gene_id'] == x['intended_target_name'], axis=1)
-    ].drop_duplicates()
+    direct_mask = direct_target_mask(selecting_to_plot)
+    selecting_to_plot_final = selecting_to_plot[direct_mask].drop_duplicates()
 
-    dict_targeting_or_no = md_read['guide'].var['targeting'].to_dict()
+    dict_targeting_or_no = md_read['guide'].var.set_index('guide_id')['targeting'].to_dict()
     selecting_to_plot['targeting_genes'] = selecting_to_plot['guide_id'].map(dict_targeting_or_no)
 
-    all_targets = selecting_to_plot.query('targeting_genes == True')['intended_target_name'].drop_duplicates()
+    all_targets = selecting_to_plot_final['gene_id'].dropna().drop_duplicates()
     print (f"all targets: {all_targets.shape[0]}")
     non_target_controls = selecting_to_plot.query("targeting_genes == False")
     using_random_sample = ''
     matching_non_target_controls = non_target_controls[
-        non_target_controls.apply(
-            lambda x: x['gene_id'] in all_targets.values,
-            axis=1,
-        )
+        non_target_controls['gene_id'].isin(all_targets)
     ]
     if matching_non_target_controls.shape[0] > 0:
 
@@ -213,9 +211,7 @@ def run_evaluation_controls(md_read, outdir):
     non_target_controls['direct_target'] = 0
     print (f"Number of non-targeting control guides selected for evaluation: {non_target_controls.shape[0]}")
 
-    table_to_test_cis = md_read.uns[col_used][
-        md_read.uns[col_used].apply(lambda x: x['gene_id'] == x['intended_target_name'], axis=1)
-    ].drop_duplicates().copy()
+    table_to_test_cis = selecting_to_plot_final.copy()
     print (md_read.uns[col_used].head(5).values)
 
     table_to_test_cis['direct_target'] = 1

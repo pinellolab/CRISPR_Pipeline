@@ -37,6 +37,7 @@ def discovered_paths(outdir: Path, run_name: str) -> dict[str, Path]:
         "seqspec_image": first_file(outdir, ["pipeline_outputs/seqspeccheck/**/*seqSpec*plots.png"]),
         "qc_metrics_json": first_file(outdir, ["pipeline_qc_metrics.json"]),
         "artifact_dir": outdir / "pipeline_dashboard",
+        "final_dashboard_html": outdir / "pipeline_dashboard" / "dashboard.html",
     }
 
 
@@ -72,6 +73,7 @@ def render_snapshot(args: argparse.Namespace, status: str, final: bool) -> int:
         seqspec_image=paths["seqspec_image"] if final else None,
         qc_metrics_json=paths["qc_metrics_json"],
         artifact_dir=paths["artifact_dir"] if final else None,
+        final_dashboard_html=paths["final_dashboard_html"] if final else None,
         nextflow_log=args.nextflow_log,
         tail_lines=args.tail_lines,
         max_image_bytes=args.max_image_bytes,

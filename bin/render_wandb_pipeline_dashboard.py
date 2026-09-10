@@ -141,6 +141,18 @@ def data_table(rows: list[dict[str, Any]], columns: list[tuple[str, str]], limit
     return f'<div class="table-wrap"><table><thead><tr>{header}</tr></thead><tbody>{"".join(body)}</tbody></table></div>'
 
 
+def searchable_table(
+    rows: list[dict[str, Any]], columns: list[tuple[str, str]], table_id: str, limit: int = 25
+) -> str:
+    if not rows:
+        return '<div class="empty">Inference results are not available yet.</div>'
+    table = data_table(rows, columns, limit=limit).replace("<table>", f'<table id="{html.escape(table_id)}">', 1)
+    return (
+        f'<input class="table-search" type="search" placeholder="Filter the {len(rows[:limit])} mirrored rows" '
+        f'oninput="filterTable(\'{html.escape(table_id)}\',this.value)">' + table
+    )
+
+
 def overall_row(section: dict[str, Any]) -> dict[str, Any]:
     rows = section.get("rows", []) if isinstance(section, dict) else []
     return next((row for row in rows if row.get("batch") == "all"), rows[0] if rows else {})
@@ -239,11 +251,35 @@ def qc_metrics_content(data: dict[str, Any], family: str) -> str:
             metric_card("Global AUROC", display_value(global_qc.get("auroc")), "validated links"),
             metric_card("Global AUPRC", display_value(global_qc.get("auprc")), "validated links"),
         ]
-        rows = [{"analysis": "Intended target", **intended}, {"analysis": "Global", **global_qc}]
-        return '<h3>Effect and control evaluation</h3><div class="metrics">' + "".join(cards) + "</div>" + data_table(
-            rows, [("analysis", "Analysis"), ("n_guides_tested", "Guides tested"),
-            ("n_significant", "Significant"), ("median_log2fc", "Median log2FC"),
-            ("auroc", "AUROC"), ("auprc", "AUPRC")])
+        intended_columns = [
+            ("n_guides_total", "Guides total"), ("n_guides_tested", "Guides tested"),
+            ("fc_threshold", "FC threshold"), ("log2fc_threshold", "log2FC threshold"),
+            ("pval_threshold", "P threshold"), ("n_strong_knockdowns", "Strong KD"),
+            ("n_significant", "Significant"), ("n_strong_and_significant", "Strong + significant"),
+            ("frac_strong_knockdowns", "Strong KD fraction"), ("frac_significant", "Significant fraction"),
+            ("median_log2fc", "Median log2FC"), ("mean_log2fc", "Mean log2FC"),
+            ("auroc", "AUROC"), ("auprc", "AUPRC"),
+            ("n_eval_positives", "Eval positives"), ("n_eval_negatives", "Eval negatives"),
+        ]
+        global_columns = [
+            ("n_guides_tested", "Guides tested"), ("n_targeting_guides", "Targeting"),
+            ("n_non_targeting_guides", "Non-targeting"),
+            ("median_significant_per_guide_targeting", "Median sig/targeting guide"),
+            ("mean_significant_per_guide_targeting", "Mean sig/targeting guide"),
+            ("median_significant_per_guide_nt", "Median sig/NT guide"),
+            ("mean_significant_per_guide_nt", "Mean sig/NT guide"),
+            ("total_significant_tests", "Significant tests"),
+            ("median_genome_log2fc_targeting", "Median targeting log2FC"),
+            ("median_genome_log2fc_nt", "Median NT log2FC"), ("fdr_method", "FDR method"),
+            ("auroc", "AUROC"), ("auprc", "AUPRC"),
+            ("n_validated_links", "Validated links"),
+            ("n_eval_positives", "Eval positives"), ("n_eval_negatives", "Eval negatives"),
+        ]
+        return (
+            '<h3>Effect and control evaluation</h3><div class="metrics">' + "".join(cards) + "</div>"
+            '<h3>Intended-target QC details</h3>' + data_table([intended] if intended else [], intended_columns)
+            + '<h3>Global-analysis QC details</h3>' + data_table([global_qc] if global_qc else [], global_columns)
+        )
 
     if family == "final":
         sources = data.get("sources", {})
@@ -296,6 +332,77 @@ def image_gallery(images: list[tuple[Path, str]]) -> str:
         for path, encoded in images
     )
     return f'<h3>QC visualizations</h3><div class="gallery">{figures}</div>'
+
+
+def clean_html_cell(value: str) -> str:
+    return html.unescape(re.sub(r"<[^>]+>", "", value)).strip()
+
+
+def final_inference_content(path: Path | None, limit: int = 25) -> str:
+    """Mirror bounded top inference rows already selected by the final dashboard."""
+    if not path or not path.is_file():
+        return '<h3>Inference results</h3><div class="empty">Result tables will appear after the final dashboard selects the lowest-p-value pairs.</div>'
+    source = path.read_text(encoding="utf-8", errors="replace")
+    marker = re.compile(r'<h3[^>]*>Guide Inference</h3>', re.I)
+    sections = []
+    preferred = [
+        "gene_name", "gene_id", "guide_id", "intended_target_name", "nPerturbedCells",
+        "sceptre_log2_fc", "sceptre_p_value", "sceptre_q_value",
+        "perturbo_log2_fc", "perturbo_p_value", "perturbo_q_value",
+    ]
+    for index, match in enumerate(marker.finditer(source)):
+        start = match.end()
+        table_start = source.find("<table", start)
+        if table_start < 0:
+            continue
+        opening_end = source.find(">", table_start) + 1
+        cursor = opening_end
+        for _ in range(limit + 1):
+            found = source.find("</tr>", cursor)
+            if found < 0:
+                break
+            cursor = found + len("</tr>")
+        fragment = source[opening_end:cursor]
+        columns = [clean_html_cell(cell) for cell in re.findall(r"<th[^>]*>(.*?)</th>", fragment, re.I | re.S)]
+        rows = []
+        for row_html in re.findall(r"<tr[^>]*>(.*?)</tr>", fragment, re.I | re.S):
+            cells = [clean_html_cell(cell) for cell in re.findall(r"<td[^>]*>(.*?)</td>", row_html, re.I | re.S)]
+            if cells and len(cells) == len(columns):
+                rows.append(dict(zip(columns, cells)))
+        label_match = re.search(r"<p[^>]*>\s*(Local Analysis|Global Analysis)\s*</p>", source[start:table_start], re.I)
+        label = label_match.group(1) if label_match else f"Inference {index + 1}"
+        selected = [(column, column.replace("_", " ")) for column in preferred if column in columns]
+        sections.append(
+            f'<div class="result-block"><h3>{html.escape(label)}: top guide–gene pairs</h3>'
+            f'<p>Bounded mirror of the lowest-p-value rows selected by the pipeline final dashboard; {len(rows)} rows shown.</p>'
+            + searchable_table(rows, selected, f"inference-{index}", limit=limit) + "</div>"
+        )
+    if not sections:
+        return '<h3>Inference results</h3><div class="empty">No Guide Inference tables were found in the final dashboard.</div>'
+    return "".join(sections)
+
+
+def evaluation_artifact_content(root: Path | None) -> str:
+    if not root:
+        return ""
+    evaluation = root / "evaluation_output"
+    if not evaluation.is_dir():
+        return '<h3>Evaluation outputs</h3><div class="empty">Evaluation artifacts are not available yet.</div>'
+    rows = []
+    skip_notes = []
+    for path in sorted(evaluation.iterdir()):
+        if not path.is_file():
+            continue
+        if path.suffix == ".txt" and "skipped" in path.name:
+            note = sanitized_tail(path, 20)
+            if note:
+                skip_notes.append(f'<div class="qc-callout"><strong>{html.escape(path.name)}</strong><pre>{html.escape(note)}</pre></div>')
+        kind = path.suffix.lstrip(".").upper() or "file"
+        rows.append({"artifact": path.name, "kind": kind, "bytes": path.stat().st_size})
+    return (
+        '<h3>Evaluation outputs and benchmark status</h3>' + "".join(skip_notes)
+        + data_table(rows, [("artifact", "Artifact"), ("kind", "Type"), ("bytes", "Bytes")])
+    )
 
 
 def sanitized_tail(path: Path, lines: int) -> str:
@@ -424,6 +531,10 @@ def render(args: argparse.Namespace) -> str:
         if family == "seqspec":
             seqspec_image = None if getattr(args, "artifact_dir", None) else args.seqspec_image
             extra += seqspec_content(args.seqspec_table, seqspec_image)
+        if family == "inference":
+            extra += final_inference_content(getattr(args, "final_dashboard_html", None))
+        if family == "evaluation":
+            extra += evaluation_artifact_content(getattr(args, "artifact_dir", None))
         extra += image_gallery(artifact_images.get(family, []))
         sections.append(
             f'<section id="family-{family}" class="family-panel"><div class="family-heading">'
@@ -449,14 +560,14 @@ def render(args: argparse.Namespace) -> str:
 .graph-card,.family-panel{{background:rgba(13,27,45,.92);border:1px solid var(--line);border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 18px 55px #0004}} .graph-head{{display:flex;justify-content:space-between;align-items:center}} .graph{{display:flex;align-items:stretch;overflow-x:auto;padding:20px 2px 10px}} .node{{position:relative;flex:0 0 145px;min-height:132px;text-align:left;color:var(--text);background:#102036;border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:.18s}} .node:hover,.node.active{{transform:translateY(-3px);border-color:var(--cyan);box-shadow:0 0 0 2px #46d9ff22}} .node:not(:last-child){{margin-right:29px}} .node:not(:last-child):after{{content:'→';position:absolute;right:-23px;top:49px;color:#55708d;font-size:22px}} .node strong,.node small,.node-count{{display:block}} .node strong{{margin-top:18px}} .node small{{color:var(--muted);font-size:11px;min-height:34px}} .node-count{{font-size:10px;color:#7890aa;margin-top:7px}} .node-index{{font:600 10px ui-monospace,monospace;color:#6c86a1}} .node-status{{position:absolute;right:12px;top:12px;width:10px;height:10px;border-radius:50%;background:var(--grey)}}
 .node.completed .node-status,.completed.status-badge{{background:var(--green)}} .node.running .node-status,.running.status-badge{{background:var(--cyan);box-shadow:0 0 12px var(--cyan)}} .node.failed .node-status,.failed.status-badge{{background:var(--red)}} .node.pending{{opacity:.65}} .family-panel{{display:none}} .family-panel.active{{display:block}} .family-heading{{display:flex;justify-content:space-between;align-items:flex-start}} .status-badge{{border-radius:99px;padding:5px 10px;text-transform:uppercase;font-size:10px;font-weight:800;color:#06121e;background:var(--grey)}}
 .table-wrap{{overflow:auto;border:1px solid var(--line);border-radius:10px}} table{{border-collapse:collapse;width:100%;min-width:700px}} th,td{{text-align:left;padding:10px 12px;border-bottom:1px solid #20364f}} th{{color:#8fa9c3;background:#0b1828;font-size:11px;text-transform:uppercase;letter-spacing:.06em}} td{{font-family:ui-monospace,monospace;font-size:12px}} .pill{{padding:3px 7px;border-radius:99px;background:#31445a;font-size:10px}} .pill.completed,.pill.cached{{background:#123f37;color:#7ff0c1}} .pill.failed,.pill.aborted{{background:#4d1f2b;color:#ff93a4}} figure{{margin:18px 0;background:#fff;border-radius:12px;padding:10px}} figure img{{display:block;max-width:100%;margin:auto}} figcaption{{color:#50647b;padding:8px 4px 2px}} .empty{{color:var(--muted);border:1px dashed var(--line);border-radius:10px;padding:20px}} footer{{color:#607994;font-size:11px;margin:20px 2px}}
-.gallery{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}} .gallery figure{{margin:0;min-width:0}} .failure-evidence{{background:#24131c;border:1px solid #733044;border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 18px 55px #0004}} details{{background:#120f18;border:1px solid #4c2936;border-radius:10px;margin-top:10px;padding:10px 12px}} summary{{cursor:pointer;font-weight:700;color:#ff9bab}} pre{{white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;background:#080d16;border-radius:8px;padding:12px;color:#d8e5f5;font:11px/1.45 ui-monospace,monospace}} .evidence-note{{color:var(--amber)}}
+.gallery{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}} .gallery figure{{margin:0;min-width:0}} .failure-evidence{{background:#24131c;border:1px solid #733044;border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 18px 55px #0004}} details{{background:#120f18;border:1px solid #4c2936;border-radius:10px;margin-top:10px;padding:10px 12px}} summary{{cursor:pointer;font-weight:700;color:#ff9bab}} pre{{white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;background:#080d16;border-radius:8px;padding:12px;color:#d8e5f5;font:11px/1.45 ui-monospace,monospace}} .evidence-note{{color:var(--amber)}} .table-search{{width:min(520px,100%);background:#081523;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin:0 0 10px}} .result-block{{border-top:1px solid var(--line);margin-top:22px;padding-top:2px}} .qc-callout{{border:1px solid #6e5524;background:#211b10;border-radius:10px;padding:12px;margin:10px 0}}
 @media(max-width:700px){{.shell{{padding:15px}}header{{display:block}}.live{{margin-top:12px;width:max-content}}}}
 </style></head><body><div class="shell">
 <header><div><span class="eyebrow">CRISPR Pipeline · execution dashboard</span><h1>{html.escape(args.run_name)}</h1><div class="run-id">{html.escape(args.run_id)}</div></div><div class="live {html.escape(args.status.lower())}"><i></i><span>{html.escape(args.status.upper())}</span></div></header>
 <div class="summary">{metric_card("Completed", counts["COMPLETED"] + counts["CACHED"], "tasks")}{metric_card("Failed", counts["FAILED"] + counts["ABORTED"], "tasks")}{metric_card("Cached", counts["CACHED"], "tasks")}{metric_card("Task runtime", fmt_seconds(total_runtime), "aggregate")}{metric_card("Guides", guide.get("row_count", "—"), "validated")}</div>
 <div class="graph-card"><div class="graph-head"><div><span class="eyebrow">Live dependency view</span><h2>Pipeline execution</h2></div><p>Click a family to inspect its QC and tasks</p></div><nav class="graph">{"".join(graph_nodes)}</nav></div>
 {failures}{"".join(sections)}<footer>Generated {generated} · Self-contained W&amp;B HTML media · No credentials, FASTQs or unbounded task logs embedded</footer></div>
-<script>function selectFamily(id){{document.querySelectorAll('.node,.family-panel').forEach(x=>x.classList.remove('active'));document.querySelector('[data-family="'+id+'"]').classList.add('active');document.getElementById('family-'+id).classList.add('active');}}selectFamily('{current}');</script>
+<script>function selectFamily(id){{const node=document.querySelector('[data-family="'+id+'"]'),panel=document.getElementById('family-'+id);if(!node||!panel)return;document.querySelectorAll('.node,.family-panel').forEach(x=>x.classList.remove('active'));node.classList.add('active');panel.classList.add('active');if(location.hash!=='#'+id)history.replaceState(null,'','#'+id);}}function filterTable(id,q){{q=q.toLowerCase();document.querySelectorAll('#'+id+' tbody tr').forEach(r=>r.style.display=r.textContent.toLowerCase().includes(q)?'':'none');}}selectFamily(location.hash.slice(1)||'{current}');window.addEventListener('hashchange',()=>selectFamily(location.hash.slice(1)));</script>
 </body></html>'''
 
 
@@ -471,6 +582,7 @@ def main() -> int:
     parser.add_argument("--seqspec-image", type=Path)
     parser.add_argument("--qc-metrics-json", type=Path)
     parser.add_argument("--artifact-dir", type=Path)
+    parser.add_argument("--final-dashboard-html", type=Path)
     parser.add_argument("--nextflow-log", type=Path)
     parser.add_argument("--tail-lines", type=int, default=30)
     parser.add_argument("--max-image-bytes", type=int, default=10_000_000)

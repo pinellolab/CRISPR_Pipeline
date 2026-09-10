@@ -23,7 +23,7 @@ Data structures used:
 Processing steps:
   1. Load global_analysis_per_guide_results from mdata.uns
   2. Map intended_target_name from guide.var into results via guide_id
-  3. Filter to "intended target" tests where gene_id == intended_target_name
+  3. Filter to intended-target tests by Ensembl gene ID or gene symbol
   5. Compute knockdown metrics (strong knockdowns, significant tests)
   6. Compute AUROC/AUPRC using targeting vs non-targeting guides
   7. Generate volcano plots, ROC/PR curves, and summary tables
@@ -62,6 +62,8 @@ import scanpy as sc
 from anndata import AnnData
 from mudata import MuData
 from sklearn.metrics import precision_recall_curve, roc_curve, auc
+
+from inference_target_matching import direct_target_mask
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -249,7 +251,7 @@ def filter_to_intended_targets(
 
     Processing steps:
       1. Map intended_target_name from guide.var into results via guide_id
-      2. Keep rows where gene_id == intended_target_name
+      2. Keep rows where the target matches gene_id or gene_name
 
     Parameters
     ----------
@@ -278,7 +280,7 @@ def filter_to_intended_targets(
     results["intended_target_name"] = results["guide_id"].map(intended_map)
 
     # Filter to intended targets only
-    intended = results[results["gene_id"] == results["intended_target_name"]].copy()
+    intended = results[direct_target_mask(results)].copy()
 
     # Deduplicate by guide_id + gene_id
     intended = intended.drop_duplicates(subset=["guide_id", "gene_id"])
@@ -418,23 +420,22 @@ def build_evaluation_table(
 
     # -------------------------------------------------------------------------
     # Positive controls: guide tests its own intended target gene
-    # gene_id == intended_target_name
+    # The guide target may be an Ensembl ID or a gene symbol.
     # -------------------------------------------------------------------------
     positives = results[
-        (results["gene_id"] == results["intended_target_name"]) &
-        (results[pvalue_col].notna())
+        direct_target_mask(results) & results[pvalue_col].notna()
     ].copy()
     positives["direct_target"] = 1
 
     # -------------------------------------------------------------------------
     # Negative controls: non-targeting guides tested against intended target genes
-    # targeting == False AND gene_id is in all targeting intended_target_name values
+    # targeting == False AND gene_id is one of the matched positive genes.
     # -------------------------------------------------------------------------
-    all_targets = results.loc[results["targeting"] == True, "intended_target_name"].dropna().unique()
+    all_target_gene_ids = positives["gene_id"].dropna().unique()
 
     negatives = results[
         (results["targeting"] == False) &
-        (results["gene_id"].isin(all_targets)) &
+        (results["gene_id"].isin(all_target_gene_ids)) &
         (results[pvalue_col].notna())
     ].copy()
     negatives["direct_target"] = 0
