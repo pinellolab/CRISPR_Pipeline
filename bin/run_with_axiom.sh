@@ -30,11 +30,13 @@ NEXTFLOW_BIN="$1"
 shift
 DASHBOARD_FLAG="--create-dashboard"
 [[ "${AXIOM_CREATE_DASHBOARD:-true}" == "true" ]] || DASHBOARD_FLAG="--no-create-dashboard"
+INGEST_URL="${AXIOM_INGEST_URL:-}"
+[[ -n "$INGEST_URL" ]] || INGEST_URL='https://us-east-1.aws.edge.axiom.co/v1/ingest/{dataset}'
 
 exec python "$PIPELINE_DIR/bin/axiom_telemetry.py" run \
   --dataset "${AXIOM_DATASET:-crispr-pipeline}" \
   --token-env "${AXIOM_TOKEN_ENV:-AXIOM_IGVF}" \
-  --ingest-url "${AXIOM_INGEST_URL:-https://us-east-1.aws.edge.axiom.co/v1/ingest/{dataset}}" \
+  --ingest-url "$INGEST_URL" \
   --api-url "${AXIOM_API_URL:-https://api.axiom.co}" \
   --max-bytes "${AXIOM_MAX_BYTES:-20000000}" \
   --run-id "$RUN_ID" --run-name "$RUN_NAME" \
