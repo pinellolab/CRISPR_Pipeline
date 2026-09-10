@@ -815,6 +815,34 @@ write a small local handoff consumed by the sidecar. All Axiom HTTP and dashboar
 errors are warnings: the wrapper returns the Nextflow exit code and telemetry
 cannot terminate an otherwise healthy pipeline.
 
+### Interactive W&B execution dashboard prototype
+
+W&B can render the QC images and self-contained HTML that Axiom only inventories.
+`bin/render_wandb_pipeline_dashboard.py` builds one clickable execution page from
+the live Nextflow trace, grouping tasks into Input QC, SeqSpec, Mapping,
+Preprocessing, MuData, Guide assignment, Inference, Evaluation, and Final
+dashboard families. Selecting a family shows its current state, aggregate task
+metrics, process table, and any family-specific QC that is already available.
+
+```bash
+python bin/render_wandb_pipeline_dashboard.py \
+  --trace /path/to/nextflow_trace.tsv \
+  --run-id "$RUN_ID" \
+  --run-name "$RUN_NAME" \
+  --status running \
+  --guide-report /path/to/guide_metadata.validation.json \
+  --seqspec-table /path/to/guide_position_table.csv \
+  --seqspec-image /path/to/seqSpec_check_plots.png \
+  --output /path/to/pipeline_execution.html
+```
+
+The HTML contains no credentials, FASTQs, or task logs. Small QC images are
+embedded so the page remains portable; an image larger than 4 MB is omitted.
+The renderer is deliberately independent of the scientific processes. A live
+publisher can call it whenever the trace changes and update a single
+`pipeline/main_execution` W&B media key; rendering or upload failures must be
+treated as warnings and cannot change the Nextflow exit code.
+
 ### Troubleshooting
 If you encounter any issues during testing:
 1. Review log files and intermediate results in the `work/` directory
