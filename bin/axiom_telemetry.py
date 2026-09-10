@@ -447,9 +447,19 @@ def emit_event(args: argparse.Namespace) -> int:
             "run_name": args.run_name or os.environ.get("AXIOM_RUN_NAME", "unknown")}
     client = AxiomClient(args.dataset, args.token_env, args.ingest_url, args.api_url,
                          args.timeout, args.max_bytes, args.max_event_bytes, Path(args.state_dir))
-    client.ingest([{**base, "_time": utc_now(), "event_type": args.event_type,
-                    "status": args.status, "message": safe_text(args.message)}])
-    return 0
+    success = client.ingest([{**base, "_time": utc_now(), "event_type": args.event_type,
+                              "status": args.status, "message": safe_text(args.message)}])
+    return 1 if args.strict and not success else 0
+
+
+def provision_dashboard(args: argparse.Namespace) -> int:
+    client = AxiomClient(args.dataset, args.token_env, args.ingest_url, args.api_url,
+                         args.timeout, args.max_bytes, args.max_event_bytes, Path(args.state_dir))
+    uid = client.create_dashboard(args.run_id, args.run_name)
+    if uid:
+        print(uid)
+        return 0
+    return 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -482,16 +492,24 @@ def build_parser() -> argparse.ArgumentParser:
     emit.add_argument("--event-type", required=True)
     emit.add_argument("--status", required=True)
     emit.add_argument("--message", default="")
+    emit.add_argument("--strict", action="store_true", help="Return non-zero when the smoke event is rejected.")
+    dashboard = subparsers.add_parser("dashboard", parents=[common])
+    dashboard.add_argument("--run-id", required=True)
+    dashboard.add_argument("--run-name", required=True)
     return parser
 
 
 def main() -> int:
     args = build_parser().parse_args()
     try:
-        return run_command(args) if args.subcommand == "run" else emit_event(args)
+        if args.subcommand == "run":
+            return run_command(args)
+        if args.subcommand == "dashboard":
+            return provision_dashboard(args)
+        return emit_event(args)
     except Exception as exc:
         print(f"WARN: Axiom telemetry wrapper failed open: {safe_text(exc)}", file=sys.stderr)
-        return 1 if args.subcommand == "run" else 0
+        return 1 if args.subcommand in {"run", "dashboard"} or getattr(args, "strict", False) else 0
 
 
 if __name__ == "__main__":
