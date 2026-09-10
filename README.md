@@ -833,11 +833,35 @@ python bin/render_wandb_pipeline_dashboard.py \
   --guide-report /path/to/guide_metadata.validation.json \
   --seqspec-table /path/to/guide_position_table.csv \
   --seqspec-image /path/to/seqSpec_check_plots.png \
+  --qc-metrics-json /path/to/pipeline_qc_metrics.json \
+  --artifact-dir /path/to/pipeline_dashboard \
+  --nextflow-log /path/to/nextflow.log \
   --output /path/to/pipeline_execution.html
 ```
 
-The HTML contains no credentials, FASTQs, or task logs. Small QC images are
-embedded so the page remains portable; an image larger than 4 MB is omitted.
+The HTML contains no credentials, FASTQs, command scripts, or unbounded task
+logs. Small QC images are embedded so the page remains portable; duplicate
+images and images larger than 3 MB are omitted. The total HTML is hard-capped at
+20 MB. Failed and aborted trace rows include a short, sanitized tail from
+`.command.err` and `.command.out`, plus a bounded Nextflow log tail when supplied.
+Tokens and common secret assignments are redacted before HTML escaping.
+
+The metric catalog is mapped to its owning process family: mapping yield and
+on-list rates; cell filtering and RNA QC; MuData dimensions and modality
+intersection; guide-assignment coverage; intended-target and global-effect QC;
+and the final metric/source manifest. The accompanying publisher intentionally
+uploads only this page, rather than creating separate W&B scalar, table, or image
+panels:
+
+```bash
+python bin/wandb_qc_smoke.py \
+  --entity your-wandb-entity \
+  --project crispr-pipeline \
+  --run-name "$RUN_NAME" \
+  --source-run-id "$RUN_ID" \
+  --dashboard-html /path/to/pipeline_execution.html
+```
+
 The renderer is deliberately independent of the scientific processes. A live
 publisher can call it whenever the trace changes and update a single
 `pipeline/main_execution` W&B media key; rendering or upload failures must be

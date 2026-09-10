@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Publish a small, clearly labelled CRISPR Pipeline QC smoke run to W&B."""
+"""Publish one self-contained CRISPR Pipeline execution dashboard to W&B."""
 
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import os
 from pathlib import Path
@@ -16,9 +15,9 @@ def main() -> int:
     parser.add_argument("--entity", default="")
     parser.add_argument("--run-name", required=True)
     parser.add_argument("--token-env", default="WB_IGVF")
-    parser.add_argument("--guide-report", type=Path, required=True)
-    parser.add_argument("--seqspec-table", type=Path, required=True)
-    parser.add_argument("--seqspec-image", type=Path, required=True)
+    parser.add_argument("--dashboard-html", type=Path, required=True)
+    parser.add_argument("--source-run-id", default="")
+    parser.add_argument("--max-bytes", type=int, default=20_000_000)
     args = parser.parse_args()
 
     token = os.environ.get(args.token_env, "")
@@ -28,43 +27,28 @@ def main() -> int:
 
     import wandb
 
-    guide = json.loads(args.guide_report.read_text(encoding="utf-8"))
-    with args.seqspec_table.open(newline="", encoding="utf-8") as handle:
-        winners = [row for row in csv.DictReader(handle) if row.get("IsWinner", "").lower() == "true"]
+    if not args.dashboard_html.is_file():
+        raise SystemExit(f"dashboard HTML does not exist: {args.dashboard_html}")
+    dashboard_bytes = args.dashboard_html.stat().st_size
+    if dashboard_bytes > args.max_bytes:
+        raise SystemExit(f"dashboard HTML exceeds --max-bytes ({args.max_bytes})")
 
     run = wandb.init(
         project=args.project,
         entity=args.entity or None,
         name=args.run_name,
-        job_type="telemetry-smoke-test",
-        tags=["crispr-pipeline", "tapseq", "chr8", "qc", "smoke-test"],
-        config={"dataset": "TAP-seq chr8 public dataset", "test_only": True},
+        job_type="pipeline-execution-dashboard",
+        tags=["crispr-pipeline", "html-dashboard"],
+        config={"telemetry_layout": "single-html", "source_run_id": args.source_run_id},
     )
     run.log({
-        "pipeline/completed_tasks": 57,
-        "pipeline/failed_tasks": 0,
-        "input/guide_rows": guide["row_count"],
-        "input/targeting_guides": guide["targeting_rows"],
-        "input/control_guides": guide["control_rows"],
+        "pipeline/main_execution": wandb.Html(str(args.dashboard_html), inject=False),
     }, step=0)
-
-    columns = ["Sample", "Config", "TotalHits", "HitRatio", "PosPurity", "FlankPurity", "Gini", "FinalScore"]
-    table = wandb.Table(columns=columns)
-    for row in winners:
-        table.add_data(
-            row["Sample"], row["Config"], int(row["TotalHits"]), float(row["HitRatio"]),
-            float(row["PosPurity"]), float(row["FlankPurity"]), float(row["Gini"]),
-            float(row["FinalScore"]),
-        )
-    run.log({
-        "seqspec/winner_metrics": table,
-        "seqspec/qc_image": wandb.Image(str(args.seqspec_image), caption="TAP-seq chr8 SeqSpec QC"),
-        "seqspec/winner_samples": len(winners),
-    }, step=1)
-    run.summary["smoke_test_status"] = "PASSED"
-    run.summary["source_image_bytes"] = args.seqspec_image.stat().st_size
+    run.summary["dashboard_status"] = "PUBLISHED"
+    run.summary["dashboard_bytes"] = dashboard_bytes
+    run.summary["source_run_id"] = args.source_run_id
     print(json.dumps({"run_id": run.id, "run_url": run.url, "entity": run.entity,
-                      "project": run.project, "winner_samples": len(winners)}))
+                      "project": run.project, "dashboard_bytes": dashboard_bytes}))
     run.finish()
     return 0
 
