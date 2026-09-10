@@ -434,6 +434,17 @@
                     "default": "normal",
                     "description": "Perturbation-effect prior passed to PerTurbo v2."
                 },
+                "INFERENCE_PERTURBO_CRT": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run PerTurbo's conditional randomization test beside the Bayesian effect estimates; its p-value becomes perturbo_p_value."
+                },
+                "INFERENCE_PERTURBO_CRT_POOL": {
+                    "type": "string",
+                    "default": "from-moi",
+                    "enum": ["from-moi", "auto", "all-cells", "control-anchored"],
+                    "description": "Cells a perturbation is tested against. from-moi follows Multiplicity_of_infection (high: every cell, each element a marginal association; low: the pure control cells plus the perturbation's own). auto lets PerTurbo measure the design from the median guides per cell."
+                },
                 "INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT": {
                     "type": "string",
                     "default": "parquet",
