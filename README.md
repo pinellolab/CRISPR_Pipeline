@@ -863,9 +863,36 @@ python bin/wandb_qc_smoke.py \
 ```
 
 The renderer is deliberately independent of the scientific processes. A live
-publisher can call it whenever the trace changes and update a single
-`pipeline/main_execution` W&B media key; rendering or upload failures must be
-treated as warnings and cannot change the Nextflow exit code.
+sidecar calls it whenever the trace changes and updates only the
+`pipeline/main_execution` W&B media key. Live updates omit images to preserve
+the upload budget; the final update embeds the available plots. The sidecar
+reserves two thirds of the 20 MB budget for the final page and falls back to a
+metrics-only final page if the image-rich page does not fit.
+
+Launch it with the wrapper after the dataset-specific provenance `prepare` and
+`check` steps have succeeded:
+
+```bash
+source ~/.bashrc
+export WANDB_OUTDIR=/absolute/path/to/results
+export WANDB_ENTITY=your-wandb-entity
+export WANDB_RUN_NAME=dataset_$(date -u +%Y%m%dT%H%M%SZ)
+# Optional when W&B is installed outside the active Nextflow environment:
+export WANDB_PYTHON=/absolute/path/to/wandb/environment/bin/python
+
+bin/run_with_wandb.sh nextflow run main.nf \
+  -profile local \
+  -params-file /absolute/path/to/params.json \
+  --outdir "$WANDB_OUTDIR" \
+  -resume
+```
+
+`conf/wandb.config` documents the matching project, entity, token environment,
+refresh interval, byte budget, and single-HTML layout. The wrapper always
+returns the Nextflow exit code. Missing credentials, missing W&B dependencies,
+rendering errors, network errors, and publisher failures only produce warnings.
+For multi-hour local runs, start this wrapper in a detached `screen` session so
+closing an IDE or terminal cannot deliver `SIGHUP` to Nextflow.
 
 ### Troubleshooting
 If you encounter any issues during testing:
