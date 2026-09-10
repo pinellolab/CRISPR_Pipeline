@@ -465,7 +465,7 @@ def provision_dashboard(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--dataset", default="crispr_pipeline")
+    common.add_argument("--dataset", default="crispr-pipeline")
     common.add_argument("--token-env", default="AXIOM_IGVF")
     common.add_argument("--ingest-url", default="https://us-east-1.aws.edge.axiom.co/v1/ingest/{dataset}")
     common.add_argument("--api-url", default="https://api.axiom.co")

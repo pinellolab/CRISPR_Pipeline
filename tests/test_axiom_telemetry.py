@@ -29,7 +29,7 @@ def test_nextflow_timestamp_becomes_rfc3339_utc():
 
 
 def test_dashboard_is_run_scoped_and_layout_matches_charts():
-    dashboard = telemetry.dashboard_document("crispr_pipeline", "run-123", "chr8")
+    dashboard = telemetry.dashboard_document("crispr-pipeline", "run-123", "chr8")
     assert dashboard["refreshTime"] == 60
     assert dashboard["owner"] == "X-AXIOM-EVERYONE"
     assert {item["i"] for item in dashboard["layout"]} == {item["id"] for item in dashboard["charts"]}

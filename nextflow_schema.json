@@ -531,7 +531,7 @@
             "description": "Optional fail-open, per-process telemetry for live Axiom dashboards. Launch through bin/run_with_axiom.sh and keep the token only in the named environment variable.",
             "properties": {
                 "AXIOM_enabled": {"type": "boolean", "default": false, "description": "Enable Axiom lifecycle hook events."},
-                "AXIOM_dataset": {"type": "string", "default": "crispr_pipeline", "description": "Axiom event dataset."},
+                "AXIOM_dataset": {"type": "string", "default": "crispr-pipeline", "pattern": "^[A-Za-z0-9-]{1,128}$", "description": "Axiom event dataset. Axiom dataset names permit alphanumeric characters and hyphens, not underscores."},
                 "AXIOM_token_env": {"type": "string", "default": "AXIOM_IGVF", "description": "Environment-variable name containing the Axiom token; never the token itself."},
                 "AXIOM_ingest_url": {"type": "string", "default": "https://us-east-1.aws.edge.axiom.co/v1/ingest/{dataset}", "description": "Axiom ingest URL template. Set the host to the dataset's edge deployment (for example eu-central-1.aws.edge.axiom.co)."},
                 "AXIOM_api_url": {"type": "string", "default": "https://api.axiom.co", "description": "Base URL for dashboard management."},

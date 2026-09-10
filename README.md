@@ -790,7 +790,8 @@ bin/run_with_axiom.sh nextflow run main.nf \
 ```
 
 `conf/axiom.config` documents every telemetry setting. By default it reads the
-token from `AXIOM_IGVF`, writes events to the `crispr_pipeline` Axiom dataset,
+token from `AXIOM_IGVF`, writes events to the `crispr-pipeline` Axiom dataset
+(Axiom dataset names do not permit underscores),
 creates one shared dashboard per UUID/date/run name, refreshes every 60 seconds,
 and hard-caps attempted event data at 20 MB. It sends compact lifecycle,
 per-process runtime/resource, heartbeat, tool/stage, and final numeric QC metric
