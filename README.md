@@ -794,9 +794,15 @@ token from `AXIOM_IGVF`, writes events to the `crispr-pipeline` Axiom dataset
 (Axiom dataset names do not permit underscores),
 creates one shared dashboard per UUID/date/run name, refreshes every 60 seconds,
 and hard-caps attempted event data at 20 MB. It sends compact lifecycle,
-per-process runtime/resource, heartbeat, tool/stage, and final numeric QC metric
-events; it never sends task scripts, environment variables, FASTQ contents, or
-unbounded stdout/stderr.
+per-process runtime/resource, heartbeat, tool/stage, and incremental numeric QC
+events. Input/guide validation and SeqSpec QC appear as soon as their bounded
+CSV/JSON artifacts are published; final biological metrics are added when
+`pipeline_qc_metrics.json` becomes available. The dashboard also inventories QC
+image/report filenames, paths, media types, and sizes. Axiom is not an artifact
+store, so local PNG/SVG/HTML contents are not uploaded or rendered; serve those
+artifacts from an authenticated HTTP object store if inline images are required.
+Telemetry never sends task scripts, environment variables, FASTQ contents,
+binary images, or unbounded stdout/stderr.
 
 The default ingest endpoint is Axiom US East. Set `AXIOM_INGEST_URL` to
 `https://eu-central-1.aws.edge.axiom.co/v1/ingest/{dataset}` when the dataset is

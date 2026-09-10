@@ -35,6 +35,9 @@ def test_dashboard_is_run_scoped_and_layout_matches_charts():
     assert {item["i"] for item in dashboard["layout"]} == {item["id"] for item in dashboard["charts"]}
     queries = [chart["query"]["apl"] for chart in dashboard["charts"] if "query" in chart]
     assert all('run_id == "run-123"' in query for query in queries)
+    assert {"Input and guide QC", "SeqSpec QC by sample", "QC images and reports generated"} <= {
+        chart["name"] for chart in dashboard["charts"]
+    }
 
 
 def test_trace_reader_deduplicates_terminal_rows(tmp_path):
@@ -67,3 +70,31 @@ def test_dependency_events_extract_graphviz_edges(tmp_path):
     assert [(event["upstream_process"], event["downstream_process"]) for event in events] == [
         ("mappingGuide", "CreateMuData")
     ]
+
+
+def test_live_qc_discovers_inputs_seqspec_and_image_inventory(tmp_path):
+    run_name = "chr8"
+    info = tmp_path / "pipeline_info" / run_name
+    seqspec = tmp_path / "pipeline_outputs" / "seqspeccheck"
+    plots = seqspec / "guide_seqSpec_plots"
+    info.mkdir(parents=True)
+    plots.mkdir(parents=True)
+    (tmp_path / "pipeline_info" / "original_samplesheet.csv").write_text(
+        "file_modality,measurement_sets\nscRNA,set1\ngRNA,set1\nscRNA,set2\n", encoding="utf-8"
+    )
+    (info / "guide_metadata.validation.json").write_text(
+        json.dumps({"row_count": 12, "control_rows": 2, "valid": True}), encoding="utf-8"
+    )
+    (seqspec / "guide_position_table.csv").write_text(
+        "Sample,Config,TotalHits,HitRatio,PosPurity,FlankPurity,Gini,FinalScore,IsWinner\n"
+        "s1,R2_Fwd,100,0.1,0.9,0.8,0.7,3.4,True\n", encoding="utf-8"
+    )
+    (plots / "seqSpec_check_plots.png").write_bytes(b"png")
+    seen = {}
+    events = telemetry.discover_live_qc(tmp_path, run_name, {"run_id": "abc"}, seen)
+    metrics = {(event.get("metric"), event.get("value")) for event in events if event["event_type"] == "qc_metric"}
+    assert ("input.samplesheet_rows", 3) in metrics
+    assert ("guide_metadata.row_count", 12) in metrics
+    assert ("seqspec.HitRatio", 0.1) in metrics
+    assert any(event.get("artifact_name") == "seqSpec_check_plots.png" for event in events)
+    assert telemetry.discover_live_qc(tmp_path, run_name, {"run_id": "abc"}, seen) == []

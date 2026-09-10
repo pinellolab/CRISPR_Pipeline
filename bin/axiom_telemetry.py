@@ -249,14 +249,21 @@ def dashboard_document(dataset: str, run_id: str, run_name: str) -> dict[str, An
          "query": {"apl": prefix + " | where event_type == \"process_completed\" | summarize tasks=count(), mean_seconds=avg(duration_ms) / 1000, max_seconds=max(duration_ms) / 1000 by process_leaf, tool | top 15 by max_seconds desc"}},
         {"id": "resources", "name": "Peak memory by process", "type": "Table", "customUnits": "GB",
          "query": {"apl": prefix + " | where event_type == \"process_completed\" | summarize peak_gb=max(peak_rss_bytes) / 1000000000, cpu_percent=avg(cpu_percent) by process_leaf | top 15 by peak_gb desc"}},
-        {"id": "qc-metrics", "name": "Pipeline QC metrics", "type": "Table",
-         "query": {"apl": prefix + " | where event_type == \"qc_metric\" | project metric, value, unit, source | take 200"}},
+        {"id": "input-qc", "name": "Input and guide QC", "type": "Table",
+         "query": {"apl": prefix + " | where event_type == \"qc_metric\" and qc_stage in (\"input\", \"guide-metadata\") | summarize arg_max(_time, value, unit, source) by metric | project metric, value, unit, source | order by metric asc"}},
+        {"id": "seqspec-qc", "name": "SeqSpec QC by sample", "type": "Table",
+         "query": {"apl": prefix + " | where event_type == \"qc_metric\" and qc_stage == \"seqspec\" | summarize arg_max(_time, value, unit, config) by sample, metric | project sample, config, metric, value, unit | order by sample asc, metric asc"}},
+        {"id": "qc-metrics", "name": "Pipeline biological QC metrics", "type": "Table",
+         "query": {"apl": prefix + " | where event_type == \"qc_metric\" | summarize arg_max(_time, value, unit, source, qc_stage) by metric, sample | project qc_stage, sample, metric, value, unit, source | order by qc_stage asc, metric asc | take 500"}},
+        {"id": "qc-artifacts", "name": "QC images and reports generated", "type": "Table",
+         "query": {"apl": prefix + " | where event_type == \"qc_artifact\" | summarize arg_max(_time, artifact_path, artifact_bytes, media_type) by artifact_name | project artifact_name, media_type, artifact_bytes, artifact_path | order by artifact_name asc"}},
         {"id": "dependencies", "name": "Process dependencies", "type": "Table",
          "query": {"apl": prefix + " | where event_type == \"process_dependency\" | distinct upstream_process, downstream_process | take 200"}},
         {"id": "event-log", "name": "Run event log", "type": "LogStream",
          "query": {"apl": prefix + " | project _time, event_type, status, stage, process_leaf, message | take 300"}},
     ]
-    sizes = [(12, 2), (3, 3), (3, 3), (6, 4), (6, 5), (6, 5), (6, 5), (6, 5), (6, 5), (12, 6)]
+    sizes = [(12, 2), (3, 3), (3, 3), (6, 4), (6, 5), (6, 5), (6, 5),
+             (6, 5), (6, 5), (12, 6), (12, 5), (6, 5), (12, 6)]
     layout, x, y, row_h = [], 0, 0, 0
     for chart, (width, height) in zip(charts, sizes):
         if x + width > 12:
@@ -329,13 +336,130 @@ def flatten_qc_metrics(path: Path, base: dict[str, Any]) -> list[dict[str, Any]]
                 walk(child, f"{key}.{child_key}".strip("."))
         elif isinstance(value, (int, float, bool)) and not isinstance(value, str):
             event = dict(base)
-            event.update({"_time": utc_now(), "event_type": "qc_metric", "status": "available",
+            event.update({"_time": utc_now(), "event_type": "qc_metric", "status": "AVAILABLE",
+                          "qc_stage": "pipeline-final",
                           "metric": key, "value": value, "unit": "", "source": path.name,
                           "message": f"QC metric {key}"})
             events.append(event)
 
     walk(payload)
     return events
+
+
+def numeric_json_events(path: Path, base: dict[str, Any], prefix: str, stage: str) -> list[dict[str, Any]]:
+    """Convert a small validation JSON into bounded numeric QC events."""
+    events = flatten_qc_metrics(path, base)
+    for event in events:
+        event["metric"] = f"{prefix}.{event['metric']}"
+        event["qc_stage"] = stage
+        event["message"] = f"{stage} QC metric {event['metric']}"
+    return events
+
+
+def samplesheet_qc_events(path: Path, base: dict[str, Any]) -> list[dict[str, Any]]:
+    if not path.exists() or path.stat().st_size > 5_000_000:
+        return []
+    try:
+        with path.open(newline="", encoding="utf-8", errors="replace") as handle:
+            rows = list(csv.DictReader(handle))
+    except (OSError, csv.Error):
+        return []
+    modalities = {row.get("file_modality", "") for row in rows if row.get("file_modality")}
+    measurement_sets = {row.get("measurement_sets", "") for row in rows if row.get("measurement_sets")}
+    values = {
+        "input.samplesheet_rows": len(rows),
+        "input.measurement_sets": len(measurement_sets),
+        "input.modalities": len(modalities),
+    }
+    return [{**base, "_time": utc_now(), "event_type": "qc_metric", "status": "AVAILABLE",
+             "qc_stage": "input", "metric": metric, "value": value, "unit": "count",
+             "source": path.name, "message": f"Input QC metric {metric}"}
+            for metric, value in values.items()]
+
+
+def seqspec_qc_events(path: Path, base: dict[str, Any]) -> list[dict[str, Any]]:
+    if not path.exists() or path.stat().st_size > 5_000_000:
+        return []
+    try:
+        with path.open(newline="", encoding="utf-8", errors="replace") as handle:
+            rows = list(csv.DictReader(handle))
+    except (OSError, csv.Error):
+        return []
+    columns = {
+        "TotalHits": "count", "HitRatio": "ratio", "PosPurity": "ratio",
+        "FlankPurity": "ratio", "Gini": "ratio", "FinalScore": "score",
+    }
+    events: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("IsWinner", "")).lower() != "true":
+            continue
+        for column, unit in columns.items():
+            value = to_number(row.get(column))
+            if value is None:
+                continue
+            metric = f"seqspec.{column}"
+            events.append({**base, "_time": utc_now(), "event_type": "qc_metric",
+                           "status": "AVAILABLE", "qc_stage": "seqspec", "metric": metric,
+                           "value": value, "unit": unit, "sample": safe_text(row.get("Sample", ""), 256),
+                           "config": safe_text(row.get("Config", ""), 64), "source": path.name,
+                           "message": f"SeqSpec QC metric {metric}"})
+    return events[:500]
+
+
+def qc_artifact_events(outdir: Path, base: dict[str, Any]) -> list[dict[str, Any]]:
+    """Inventory bounded QC/report artifacts without ingesting binary contents."""
+    patterns = ("*.png", "*.svg", "*.html", "*.json")
+    paths: list[Path] = []
+    for pattern in patterns:
+        paths.extend(outdir.glob(f"pipeline_dashboard/**/{pattern}"))
+        paths.extend(outdir.glob(f"pipeline_outputs/seqspeccheck/**/{pattern}"))
+    media = {".png": "image/png", ".svg": "image/svg+xml", ".html": "text/html", ".json": "application/json"}
+    events = []
+    for path in sorted(set(paths))[:200]:
+        try:
+            size = path.stat().st_size
+            relative = str(path.relative_to(outdir))
+        except OSError:
+            continue
+        events.append({**base, "_time": utc_now(), "event_type": "qc_artifact", "status": "AVAILABLE",
+                       "qc_stage": "artifact", "artifact_name": path.name,
+                       "artifact_path": relative, "artifact_bytes": size,
+                       "media_type": media.get(path.suffix.lower(), "application/octet-stream"),
+                       "message": f"QC artifact available: {relative}"})
+    return events
+
+
+def discover_live_qc(outdir: Path, run_name: str, base: dict[str, Any],
+                     seen: dict[str, tuple[int, int]]) -> list[dict[str, Any]]:
+    """Read newly created or changed bounded QC artifacts during execution."""
+    candidates: list[tuple[Path, Any]] = [
+        (outdir / "pipeline_info" / "original_samplesheet.csv", samplesheet_qc_events),
+        (outdir / "pipeline_info" / run_name / "guide_metadata.validation.json",
+         lambda path, event_base: numeric_json_events(path, event_base, "guide_metadata", "guide-metadata")),
+        (outdir / "pipeline_outputs" / "seqspeccheck" / "guide_position_table.csv", seqspec_qc_events),
+        (outdir / "pipeline_qc_metrics.json", flatten_qc_metrics),
+        (outdir / "pipeline_dashboard" / "pipeline_qc_metrics.json", flatten_qc_metrics),
+    ]
+    events: list[dict[str, Any]] = []
+    for path, reader in candidates:
+        try:
+            stamp = (path.stat().st_size, path.stat().st_mtime_ns)
+        except OSError:
+            continue
+        key = str(path)
+        if seen.get(key) == stamp:
+            continue
+        parsed = reader(path, base)
+        if parsed:
+            events.extend(parsed)
+            seen[key] = stamp
+    for event in qc_artifact_events(outdir, base):
+        key = f"artifact:{event['artifact_path']}"
+        stamp = (int(event["artifact_bytes"]), 0)
+        if seen.get(key) != stamp:
+            events.append(event)
+            seen[key] = stamp
+    return events[:1000]
 
 
 def dependency_events(path: Path, base: dict[str, Any]) -> list[dict[str, Any]]:
@@ -393,6 +517,7 @@ def run_command(args: argparse.Namespace) -> int:
     client.ingest([{**base, "_time": utc_now(), "event_type": "run_started", "status": "RUNNING",
                     "message": f"Nextflow run {run_name} started", "dashboard_uid": dashboard_uid or ""}])
     seen: set[tuple[str, str, str]] = set()
+    seen_qc: dict[str, tuple[int, int]] = {}
     hook_offset = 0
     last_heartbeat = 0.0
     return_code = 1
@@ -404,6 +529,9 @@ def run_command(args: argparse.Namespace) -> int:
             hook_events, hook_offset = read_new_hook_events(hook_path, hook_offset, base)
             if hook_events:
                 client.ingest(hook_events)
+            qc_events = discover_live_qc(outdir, run_name, base, seen_qc)
+            if qc_events:
+                client.ingest(qc_events)
             now = time.monotonic()
             if now - last_heartbeat >= args.heartbeat_seconds:
                 client.ingest([{**base, "_time": utc_now(), "event_type": "heartbeat", "status": "RUNNING",
@@ -422,10 +550,7 @@ def run_command(args: argparse.Namespace) -> int:
         hook_events, hook_offset = read_new_hook_events(hook_path, hook_offset, base)
         if hook_events:
             client.ingest(hook_events)
-        qc_path = outdir / "pipeline_qc_metrics.json"
-        if not qc_path.exists():
-            qc_path = outdir / "pipeline_dashboard" / "pipeline_qc_metrics.json"
-        client.ingest(flatten_qc_metrics(qc_path, base))
+        client.ingest(discover_live_qc(outdir, run_name, base, seen_qc))
         client.ingest(dependency_events(dag_path, base))
         client.ingest([{**base, "_time": utc_now(), "event_type": "run_completed",
                         "status": "SUCCEEDED" if return_code == 0 else "FAILED",
@@ -462,6 +587,18 @@ def provision_dashboard(args: argparse.Namespace) -> int:
     return 1
 
 
+def publish_qc_snapshot(args: argparse.Namespace) -> int:
+    base = {"service": "crispr_pipeline", "dataset": args.dataset, "run_id": args.run_id,
+            "run_name": args.run_name, "execution_date": utc_now()[:10],
+            "pipeline_revision": args.pipeline_revision or "unknown"}
+    client = AxiomClient(args.dataset, args.token_env, args.ingest_url, args.api_url,
+                         args.timeout, args.max_bytes, args.max_event_bytes, Path(args.state_dir))
+    events = discover_live_qc(Path(args.outdir).resolve(), args.run_name, base, {})
+    success = client.ingest(events)
+    print(f"published_qc_events={len(events) if success else 0}")
+    return 0 if success or not events else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     common = argparse.ArgumentParser(add_help=False)
@@ -496,6 +633,11 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard = subparsers.add_parser("dashboard", parents=[common])
     dashboard.add_argument("--run-id", required=True)
     dashboard.add_argument("--run-name", required=True)
+    snapshot = subparsers.add_parser("qc-snapshot", parents=[common])
+    snapshot.add_argument("--run-id", required=True)
+    snapshot.add_argument("--run-name", required=True)
+    snapshot.add_argument("--pipeline-revision", default="")
+    snapshot.add_argument("--outdir", required=True)
     return parser
 
 
@@ -506,6 +648,8 @@ def main() -> int:
             return run_command(args)
         if args.subcommand == "dashboard":
             return provision_dashboard(args)
+        if args.subcommand == "qc-snapshot":
+            return publish_qc_snapshot(args)
         return emit_event(args)
     except Exception as exc:
         print(f"WARN: Axiom telemetry wrapper failed open: {safe_text(exc)}", file=sys.stderr)

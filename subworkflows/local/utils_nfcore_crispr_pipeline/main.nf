@@ -159,10 +159,12 @@ workflow PIPELINE_COMPLETION {
     // Completion email and summary
     //
     workflow.onComplete {
+        def axiomSuccess = workflow?.success == true
+        def axiomError = workflow?.errorMessage ?: 'unknown error'
         writeAxiomLifecycleEvent(
             'workflow_hook_complete',
-            workflow.success ? 'SUCCEEDED' : 'FAILED',
-            workflow.success ? 'Nextflow onComplete hook fired' : "Nextflow onComplete hook fired after failure: ${workflow.errorMessage ?: 'unknown error'}"
+            axiomSuccess ? 'SUCCEEDED' : 'FAILED',
+            axiomSuccess ? 'Nextflow onComplete hook fired' : "Nextflow onComplete hook fired after failure: ${axiomError}"
         )
         if (demo_mode) {
             log.warn '''
@@ -194,10 +196,11 @@ See DEMO_MODE_WARNING.txt in the output directory.
     }
 
     workflow.onError {
+        def axiomError = workflow?.errorMessage ?: 'unknown error'
         writeAxiomLifecycleEvent(
             'workflow_hook_error',
             'FAILED',
-            "Nextflow onError hook fired: ${workflow.errorMessage ?: 'unknown error'}"
+            "Nextflow onError hook fired: ${axiomError}"
         )
         log.error "Pipeline failed. Please refer to troubleshooting docs: https://nf-co.re/docs/usage/troubleshooting"
     }
