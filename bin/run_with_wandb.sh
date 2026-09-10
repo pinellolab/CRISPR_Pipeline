@@ -3,15 +3,15 @@
 set -Eeuo pipefail
 
 PIPELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON_BIN="${WANDB_PYTHON:-python}"
 RUN_NAME="${WANDB_RUN_NAME:-crispr_$(date -u +%Y%m%dT%H%M%SZ)}"
-RUN_ID="${WANDB_SOURCE_RUN_ID:-$(python -c 'import uuid; print(uuid.uuid4())')}"
+RUN_ID="${WANDB_SOURCE_RUN_ID:-$("$PYTHON_BIN" -c 'import uuid; print(uuid.uuid4())')}"
 STATE_DIR="${WANDB_STATE_DIR:-$PWD/.wandb_telemetry/$RUN_ID}"
 OUTDIR="${WANDB_OUTDIR:?Set WANDB_OUTDIR to the same output directory passed to Nextflow}"
 TRACE_FILE="$STATE_DIR/nextflow_trace.tsv"
 NEXTFLOW_LOG="$STATE_DIR/nextflow.log"
 STATUS_FILE="$STATE_DIR/status.json"
 DASHBOARD_HTML="$STATE_DIR/pipeline_execution.html"
-PYTHON_BIN="${WANDB_PYTHON:-python}"
 
 mkdir -p "$STATE_DIR"
 [[ $# -ge 2 && "$(basename "$1")" == "nextflow" ]] || {
@@ -57,7 +57,7 @@ finish_monitor() {
 trap finish_monitor EXIT
 
 set +e
-"$NEXTFLOW_BIN" -log "$NEXTFLOW_LOG" "$@" -with-trace "$TRACE_FILE"
+"$NEXTFLOW_BIN" -log "$NEXTFLOW_LOG" -c "$PIPELINE_DIR/conf/wandb.config" "$@" -with-trace "$TRACE_FILE"
 NEXTFLOW_EXIT=$?
 set -e
 
