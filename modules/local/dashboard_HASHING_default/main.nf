@@ -85,6 +85,9 @@ EOF_DASHBOARD_PARAMS
         if [[ -L input_additional_qc ]]; then
             cp -rL input_additional_qc/* additional_qc/ 2>/dev/null || true
         fi
+        # Never package the optional full guide-by-gene export in a dashboard.
+        # Metrics, significant hits, summaries, and plots remain available.
+        rm -f additional_qc/global_analysis/global_analysis_results.tsv
         if [[ -L input_benchmark_output ]]; then
             cp -rL input_benchmark_output/* benchmark_output/ 2>/dev/null || true
         fi
