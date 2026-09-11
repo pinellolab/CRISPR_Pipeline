@@ -10,9 +10,16 @@ frame was empty on the pipeline's own inputs, so SCEPTRE conditioned on nothing
 beyond its two automatic depth terms while PerTurbo conditioned on depth, guide
 counts and batch.
 
-The library size is deliberately absent: PerTurbo already takes it as an offset and
-SCEPTRE adds ``log(response_n_umis)`` itself, so including it again would be
-collinear with both.
+The set is deliberately small, matching the runs this method was validated on: the
+production Replogle analyses conditioned on the sequencing batch alone, with the
+library size carried as an offset. The library size is therefore absent here,
+since PerTurbo takes it as an offset and SCEPTRE adds ``log(response_n_umis)``
+itself, and adding it again would be collinear with both. Cell-quality terms such
+as the mitochondrial fraction are absent for the same reason: the validated runs
+did not use them. The guide-UMI term the adapter used to pass unilaterally is gone
+too, because the analyses this method is trusted on did not condition on it.
+
+Adding a covariate means adding one line here, and both methods pick it up.
 
 SCEPTRE drops any factor with fifteen or more levels
 (``MAX_N_LEVELS_ALLOWED`` in its formula builder), so on a screen with many
@@ -25,9 +32,6 @@ from __future__ import annotations
 # (column, kind). "continuous" columns go to PerTurbo's --continuous-covariates;
 # a "categorical" column goes to --batch-covariate.
 CANONICAL_COVARIATES: tuple[tuple[str, str], ...] = (
-    ("log1p_total_guide_umis_centered", "continuous"),
-    ("percent_mito", "continuous"),
-    ("pct_counts_ribo", "continuous"),
     ("batch", "categorical"),
 )
 

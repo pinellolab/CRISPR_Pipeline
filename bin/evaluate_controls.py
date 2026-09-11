@@ -38,13 +38,33 @@ def savefig(path):
     print(f"✔ Saved plot:", path)
 
 
+def keep_scorable_rows(df, p_col):
+    """Rows the curves can score, and how many were dropped.
+
+    A pair the conditional randomization test did not test carries no p-value.
+    Such a row cannot be scored, and dropping it after the classes have been
+    matched below would move the precision-recall baseline off the intended
+    1:1 prevalence, so both classes are filtered before they are counted.
+    """
+    values = pd.to_numeric(df[p_col], errors="coerce").astype(float)
+    finite = np.isfinite(values.to_numpy())
+    return df.loc[finite].copy(), int((~finite).sum())
+
+
 def perform_binary_evaluation(label_controls, infered_significance_col, outdir, plot=True, evaluation_tag=''):
     evaluation_input = pd.DataFrame(
         {
             "label": label_controls,
             "p_value": pd.to_numeric(infered_significance_col, errors="coerce"),
         }
-    ).dropna()
+    )
+    scorable = evaluation_input.dropna()
+    unscorable = len(evaluation_input) - len(scorable)
+    if unscorable:
+        print(
+            f"Dropped {unscorable} row(s) with a missing label or p-value before scoring."
+        )
+    evaluation_input = scorable
     true_label = evaluation_input["label"].astype(int)
     pred_value = evaluation_input["p_value"]
 
@@ -64,14 +84,37 @@ def perform_binary_evaluation(label_controls, infered_significance_col, outdir, 
             handle.write(f"classes={sorted(true_label.unique().tolist())}\n")
         return False
 
+    # 1 - p is the score, so a small p-value ranks as more likely a true
+    # positive. The column must therefore be a p-value, never a q-value.
     pre, rec, _ = precision_recall_curve(true_label, 1-pred_value)
     auprc = auc(rec, pre)
 
     fpr, tpr, _ = roc_curve(true_label, 1-pred_value)
     auroc = auc(fpr, tpr)
 
+    n_positive = int(true_label.sum())
+    n_negative = int(len(true_label) - n_positive)
+    positive_rate = n_positive / len(true_label)
+    print(
+        f"Scored {len(true_label)} rows: {n_positive} direct-target, "
+        f"{n_negative} non-targeting (positive rate {positive_rate:.3f})"
+    )
     print(f"Area under Precision-Recall Curve : {auprc:.3f}")
     print(f"Area under Receiver-Operating Curve: {auroc:.3f}")
+
+    # The precision-recall baseline is the positive rate, so the class counts
+    # the curves were actually built from belong beside the areas.
+    with open(
+        os.path.join(outdir, "controls_evaluation_summary.txt"),
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        handle.write(f"direct_target_rows={n_positive}\n")
+        handle.write(f"non_targeting_rows={n_negative}\n")
+        handle.write(f"unscorable_rows_dropped={unscorable}\n")
+        handle.write(f"positive_rate={positive_rate:.6f}\n")
+        handle.write(f"auprc={auprc:.6f}\n")
+        handle.write(f"auroc={auroc:.6f}\n")
 
     if plot:
         fig, axes = plt.subplots(1, 2, figsize=(10, 4), dpi=130)
@@ -216,12 +259,30 @@ def run_evaluation_controls(md_read, outdir):
 
     table_to_test_cis['direct_target'] = 1
     print (f"Number of targeting guides for direct targets: {table_to_test_cis.shape[0]}")
+
+    # Both classes are cut down to the rows that carry a finite p-value before
+    # they are counted or matched. Since the conditional randomization test
+    # stopped passing the posterior probability off as a p-value, an untested
+    # pair is missing rather than filled, and matching the classes on counts
+    # that include unscorable rows would leave the curves unbalanced.
+    table_to_test_cis, dropped_targets = keep_scorable_rows(table_to_test_cis, p_col)
+    non_target_controls, dropped_controls = keep_scorable_rows(non_target_controls, p_col)
+    if dropped_targets or dropped_controls:
+        print(
+            f"Rows without a finite {p_col} dropped before matching: "
+            f"{dropped_targets} direct-target, {dropped_controls} non-targeting."
+        )
+        print(
+            f"Scorable rows: {table_to_test_cis.shape[0]} direct-target, "
+            f"{non_target_controls.shape[0]} non-targeting."
+        )
+
     if table_to_test_cis.empty or non_target_controls.empty:
         missing_group = "direct-target rows" if table_to_test_cis.empty else "non-targeting guides"
         reason = (
-            f"Controls evaluation skipped: no {missing_group} are present in the "
-            "inference results, so AUROC/AUPRC and matched-control plots cannot "
-            "be calculated."
+            f"Controls evaluation skipped: no {missing_group} with a finite "
+            f"{p_col} are present in the inference results, so AUROC/AUPRC and "
+            "matched-control plots cannot be calculated."
         )
         print(reason)
         with open(
