@@ -206,24 +206,20 @@ def _build_native_pairs_to_test(
         }
     ).drop_duplicates(ignore_index=True)
 
-    # PerTurbo uses fitted control-element z-values to calibrate empirical
-    # p-values. Include every non-targeting element for each gene in the
-    # requested hypothesis set, without expanding back to all RNA genes.
-    control_elements = [name for name in element_names if CONTROL_SUBSTRING in name.lower()]
-    tested_genes = requested["gene"].drop_duplicates().tolist()
-    if control_elements:
-        controls = pd.MultiIndex.from_product(
-            [control_elements, tested_genes], names=["element", "gene"]
-        ).to_frame(index=False)
-        native_pairs = pd.concat([requested, controls], ignore_index=True).drop_duplicates(ignore_index=True)
-    else:
-        native_pairs = requested
-    print(
-        f"Prepared native PerTurbo pairs-to-test table: {len(requested):,} requested pairs plus "
-        f"{len(control_elements) * len(tested_genes):,} control-null pairs "
-        f"({len(native_pairs):,} unique total)."
-    )
-    return native_pairs
+    # The requested pairs alone, deliberately. Earlier versions added every
+    # non-targeting element crossed with every tested gene, because the fit was
+    # restricted to the requested pairs and PerTurbo calibrated empirical p-values
+    # against fitted control-element z-values, so the controls had to be requested
+    # too. Neither holds now: the fit covers every pair and the p-value comes from
+    # the conditional randomization test. What the augmentation did do was put those
+    # control pairs in this table's Benjamini-Hochberg family - on the Replogle
+    # screen 2,623,521 of 2,714,942 rows, 96.6% - which made the local q-values far
+    # more conservative than SCEPTRE's over the same hypotheses (SCEPTRE corrects
+    # over the 91,421 requested pairs alone). Control pairs are still tested and
+    # still present in the transcriptome-wide table, which is what the control
+    # evaluation step reads.
+    print(f"Prepared native PerTurbo pairs-to-test table: {len(requested):,} requested pairs.")
+    return requested
 
 
 def prepare_mudata_for_perturbo_v2(
