@@ -84,7 +84,8 @@ workflow inference_pipeline {
             SceptreResults.per_element_output,
             PerturboResults.local_per_guide_output,
             PerturboResults.local_per_element_output,
-            mudata_input
+            mudata_input,
+            true  // this workflow ends here, so it needs the MuData
         )
         FinalInference = MergedInference.inference_mudata
     }
@@ -110,7 +111,8 @@ workflow inference_pipeline {
             SceptreResults_local.per_element_output,
             PerturboResults.local_per_guide_output,
             PerturboResults.local_per_element_output,
-            PrepareInference.mudata_inference_input
+            PrepareInference.mudata_inference_input,
+            false  // mergeMudata assembles the published MuData from these tables
         )
 
         MergedInference = mergeMudata(
