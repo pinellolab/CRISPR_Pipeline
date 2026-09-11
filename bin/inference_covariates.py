@@ -32,20 +32,23 @@ That is a property of SCEPTRE, not something to hide by withholding the column.
 
 from __future__ import annotations
 
-# (column, kind). "continuous" columns go to PerTurbo's --continuous-covariates;
-# a "categorical" column goes to --batch-covariate.
-CANONICAL_COVARIATES: tuple[tuple[str, str], ...] = (
-    ("percent_mito", "continuous"),
-    ("batch", "categorical"),
+# (column, kind, aliases). "continuous" columns go to PerTurbo's --continuous-covariates;
+# a "categorical" column goes to --batch-covariate. The aliases are the names the same
+# quantity carries in other preprocessing conventions; the first one present is copied
+# under the canonical name, so both methods see one column whatever the input called it.
+CANONICAL_COVARIATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("percent_mito", "continuous", ("percent_mito", "pct_counts_mt", "percent.mito", "pct_mito", "mito_frac")),
+    ("batch", "categorical", ("batch",)),
 )
 
 
-def _first_source(mdata, column):
-    """The modality frame holding ``column``, preferring the analysed modality."""
-    for mod in ("gene", "guide"):
-        if mod in mdata.mod and column in mdata[mod].obs.columns:
-            return mdata[mod].obs[column]
-    return None
+def _first_source(mdata, aliases):
+    """The first alias present on a modality frame, preferring the analysed modality."""
+    for column in aliases:
+        for mod in ("gene", "guide"):
+            if mod in mdata.mod and column in mdata[mod].obs.columns:
+                return column, mdata[mod].obs[column]
+    return None, None
 
 
 def materialize_shared_covariates(mdata, columns=CANONICAL_COVARIATES) -> list[str]:
@@ -56,14 +59,20 @@ def materialize_shared_covariates(mdata, columns=CANONICAL_COVARIATES) -> list[s
     makes SCEPTRE's regression singular.
     """
     written: list[str] = []
-    for column, _kind in columns:
-        values = _first_source(mdata, column)
+    for column, _kind, aliases in columns:
+        source, values = _first_source(mdata, aliases)
         if values is None:
             continue
         if values.nunique(dropna=False) < 2:
             print(f"Skipping covariate {column!r}: constant across cells.")
             continue
         mdata.obs[column] = values.to_numpy()
+        # PerTurbo reads the analysed modality's obs by name, so the canonical name
+        # has to exist there too when the input used an alias.
+        if "gene" in mdata.mod and column not in mdata["gene"].obs.columns:
+            mdata["gene"].obs[column] = values.reindex(mdata["gene"].obs_names).to_numpy()
+        if source != column:
+            print(f"Covariate {column!r} taken from column {source!r}.")
         written.append(column)
     print(f"Shared covariates written to the MuData's top-level obs: {written or 'none'}")
     return written
@@ -71,7 +80,7 @@ def materialize_shared_covariates(mdata, columns=CANONICAL_COVARIATES) -> list[s
 
 def perturbo_covariate_arguments(available: list[str]) -> tuple[list[str], str | None]:
     """The same covariates, split the way PerTurbo's command line takes them."""
-    kinds = dict(CANONICAL_COVARIATES)
+    kinds = {name: kind for name, kind, _aliases in CANONICAL_COVARIATES}
     continuous = [c for c in available if kinds.get(c) == "continuous"]
     categorical = [c for c in available if kinds.get(c) == "categorical"]
     return continuous, (categorical[0] if categorical else None)

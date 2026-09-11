@@ -481,7 +481,7 @@ def _run_perturbo(
     # preparation step writes them into the MuData's top-level obs for SCEPTRE and
     # leaves them on the modalities for PerTurbo.
     with _open_mudata(input_path, backed="r") as mdata:
-        present = [c for c, _ in CANONICAL_COVARIATES if c in mdata[GENE_MODALITY].obs.columns]
+        present = [c for c, _kind, _aliases in CANONICAL_COVARIATES if c in mdata[GENE_MODALITY].obs.columns]
     continuous, batch = perturbo_covariate_arguments(present)
     if "log1p_total_guide_umis_centered" in continuous and not _covariate_has_control_variance(
         input_path, map_key, names_key
