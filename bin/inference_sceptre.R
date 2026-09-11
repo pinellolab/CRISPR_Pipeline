@@ -342,6 +342,21 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
       dplyr::filter(!is.na(grna_target), !is.na(response_id)) |>
       dplyr::distinct()
 
+    if (observed_low_moi) {
+      # Under the non-targeting-cell contrast the control gRNAs are the reference
+      # population, and SCEPTRE refuses them as discovery targets ("To test
+      # non-targeting gRNAs against responses, run the calibration check"). Their
+      # buckets were also collapsed above, so a bucketed pair would name a target
+      # that no longer exists. Drop them and say so.
+      is_nt_pair <- grepl("non-targeting", discovery_pairs$grna_target)
+      if (any(is_nt_pair)) {
+        message(sprintf(
+          "Low-MOI screen: dropping %d requested pair(s) on non-targeting pseudo-elements; they are the control population under control_group='nt_cells'.",
+          sum(is_nt_pair)
+        ))
+        discovery_pairs <- discovery_pairs[!is_nt_pair, , drop = FALSE]
+      }
+    }
     args_list[["discovery_pairs"]] <- discovery_pairs
   } else {
     # No pairs_to_test found - use SCEPTRE's construct_trans_pairs for trans analysis
