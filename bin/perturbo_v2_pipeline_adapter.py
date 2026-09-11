@@ -432,9 +432,15 @@ def _run_perturbo(
         # transcriptome-wide tables together.
         cmd.extend(["--pairs-to-test", str(pairs_to_test_path)])
     if args.crt:
+        # The same CRT configuration as the production Gasperini runs: the baseline is
+        # polished onto the control null mode by Fisher scoring, and the null-mode guard
+        # is advisory rather than fatal. On a full gene panel the guard's percentile is
+        # dominated by genes with almost no control counts, which the polish cannot
+        # move and the test cannot resolve anyway.
         cmd.extend([
             "--crt", "--crt-mechanism", "propensity", "--crt-tail-families", "saddlepoint",
-            "--crt-saddlepoint-only", "--crt-polish-baseline", "--crt-pool", args.resolved_crt_pool,
+            "--crt-saddlepoint-only", "--crt-polish-baseline", "--crt-allow-unconverged-baseline",
+            "--crt-pool", args.resolved_crt_pool,
         ])
     if _covariate_has_control_variance(input_path, map_key, names_key):
         cmd.extend(["--continuous-covariates", "log1p_total_guide_umis_centered"])
