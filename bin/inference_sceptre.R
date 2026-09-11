@@ -194,13 +194,20 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
   # only a low-MOI object can be compared against the non-targeting cells, which is
   # the contrast PerTurbo's low-MOI path uses. Getting this wrong silently forces
   # the complement contrast and makes the two methods answer different questions.
+  # The same rule PerTurbo's adapter applies: a screen whose cells each carry at
+  # most one gRNA is low-MOI whatever was declared; otherwise the declared setting
+  # stands. Under a declared "low" with a few multi-gRNA cells, SCEPTRE's low-MOI
+  # QC sets those cells aside, exactly as PerTurbo's control-anchored pool does.
   guides_per_cell <- Matrix::colSums(grna_matrix > 0)
-  observed_low_moi <- length(guides_per_cell) > 0 && max(guides_per_cell) <= 1
+  observed_singleton <- length(guides_per_cell) > 0 && max(guides_per_cell) <= 1
+  declared_low <- !is.null(declared_moi) && tolower(trimws(as.character(declared_moi)[1])) == "low"
+  observed_low_moi <- observed_singleton || declared_low
   moi <- if (observed_low_moi) "low" else "high"
   message(sprintf(
-    "MOI: declared '%s', observed max %s gRNA(s) per cell -> using '%s'.",
+    "MOI: declared '%s', observed max %s gRNA(s) per cell (%d of %d cells carry more than one) -> using '%s'.",
     if (is.null(declared_moi)) "unset" else as.character(declared_moi),
-    if (length(guides_per_cell)) max(guides_per_cell) else NA, moi
+    if (length(guides_per_cell)) max(guides_per_cell) else NA,
+    sum(guides_per_cell > 1), length(guides_per_cell), moi
   ))
 
   if (!observed_low_moi && any(guide_row_data$intended_target_name == "non-targeting", na.rm = TRUE)) {
