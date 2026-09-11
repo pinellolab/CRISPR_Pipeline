@@ -136,7 +136,7 @@ prepare_extra_covariates <- function(mudata, remove_collinear_covariates = TRUE)
 }
 convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE) {
   # extract information from MuData
-  moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
+  declared_moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
   if (is.null(SummarizedExperiment::assayNames(mudata[["gene"]]))) {
     SummarizedExperiment::assayNames(mudata[["gene"]]) <- "counts"
   } else {
@@ -189,7 +189,21 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
     ))
   }
 
-  if (any(guide_row_data$intended_target_name == "non-targeting", na.rm = TRUE)) {
+  # The screen's own assignments decide the MOI, not the declared setting. A cell
+  # carrying at most one gRNA is a low-MOI cell whatever the samplesheet says, and
+  # only a low-MOI object can be compared against the non-targeting cells, which is
+  # the contrast PerTurbo's low-MOI path uses. Getting this wrong silently forces
+  # the complement contrast and makes the two methods answer different questions.
+  guides_per_cell <- Matrix::colSums(grna_matrix > 0)
+  observed_low_moi <- length(guides_per_cell) > 0 && max(guides_per_cell) <= 1
+  moi <- if (observed_low_moi) "low" else "high"
+  message(sprintf(
+    "MOI: declared '%s', observed max %s gRNA(s) per cell -> using '%s'.",
+    if (is.null(declared_moi)) "unset" else as.character(declared_moi),
+    if (length(guides_per_cell)) max(guides_per_cell) else NA, moi
+  ))
+
+  if (!observed_low_moi && any(guide_row_data$intended_target_name == "non-targeting", na.rm = TRUE)) {
     stop("Found guides assigned to exact 'non-targeting'. Expected bucketed non-targeting groups (e.g., non-targeting|1).")
   }
 
@@ -199,6 +213,23 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 
   grna_target_data_frame <- guide_row_data |>
     dplyr::transmute(grna_id = grna_id, grna_target = intended_target_key)
+
+  # For the non-targeting-cell contrast, SCEPTRE requires the control gRNAs to carry
+  # the reserved target label "non-targeting" (check_set_analysis_parameters), and it
+  # refuses that label inside the discovery pairs. The pipeline otherwise buckets the
+  # controls as non-targeting|1, |2, ... so the buckets can be tested as pseudo-
+  # elements under the complement contrast. Collapse the buckets only when we are
+  # about to use the non-targeting cells as the control group.
+  if (observed_low_moi) {
+    is_nt <- grepl("non-targeting", as.character(grna_target_data_frame$grna_target))
+    if (any(is_nt)) {
+      grna_target_data_frame$grna_target[is_nt] <- "non-targeting"
+      message(sprintf(
+        "Low-MOI screen: collapsed %d non-targeting gRNA(s) into SCEPTRE's reserved 'non-targeting' group so they can serve as the control cells.",
+        sum(is_nt)
+      ))
+    }
+  }
 
   # assemble information into sceptre object
   sceptre_object <- sceptre::import_data(
@@ -235,10 +266,42 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
 
   args_list <- list(...)
   requested_control_group <- if ("control_group" %in% names(args_list)) as.character(args_list$control_group)[1] else NA_character_
-  if (!is.na(requested_control_group) && requested_control_group != "complement") {
-    warning(sprintf("Overriding control_group='%s' with 'complement' for SCEPTRE DE analysis.", requested_control_group))
+
+  # Which cells a perturbation is compared against. "nt_cells" contrasts it with the
+  # non-targeting cells, which is what PerTurbo's low-MOI path does, so the two
+  # methods answer the same question; "complement" contrasts it with every other
+  # cell, which is the only option SCEPTRE offers at high MOI. The screen decides:
+  # nt_cells needs a low-MOI object (one gRNA per cell) and non-targeting cells to
+  # compare against.
+  object_moi <- tryCatch(sceptre_object@low_moi, error = function(e) NA)
+  is_low_moi <- isTRUE(object_moi)
+  n_nt_cells <- tryCatch({
+    targets <- sceptre_object@grna_target_data_frame
+    nt_ids <- targets$grna_id[grepl("non-targeting", as.character(targets$grna_target))]
+    if (length(nt_ids) == 0) {
+      0L
+    } else {
+      sum(Matrix::colSums(sceptre_object@grna_matrix[nt_ids, , drop = FALSE] > 0) > 0)
+    }
+  }, error = function(e) NA_integer_)
+
+  if (is_low_moi && !is.na(n_nt_cells) && n_nt_cells > 0) {
+    args_list$control_group <- if (!is.na(requested_control_group)) requested_control_group else "nt_cells"
+    message(sprintf(
+      "Low-MOI object with %s non-targeting cells: using control_group='%s'.",
+      format(n_nt_cells, big.mark = ","), args_list$control_group
+    ))
+  } else {
+    if (!is.na(requested_control_group) && requested_control_group != "complement") {
+      warning(sprintf(
+        "Overriding control_group='%s' with 'complement': the object is %s and has %s non-targeting cells.",
+        requested_control_group,
+        if (is_low_moi) "low-MOI" else "high-MOI",
+        if (is.na(n_nt_cells)) "an unknown number of" else format(n_nt_cells, big.mark = ",")
+      ))
+    }
+    args_list$control_group <- "complement"
   }
-  args_list$control_group <- "complement"
 
   # Check if pairs_to_test exists in metadata
   if (!is.null(MultiAssayExperiment::metadata(mudata)$pairs_to_test)) {

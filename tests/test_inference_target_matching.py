@@ -35,6 +35,38 @@ def test_direct_target_matching_is_case_and_whitespace_tolerant():
     assert direct_target_mask(results).tolist() == [True]
 
 
+def test_blank_identifiers_are_missing_rather_than_a_shared_name():
+    # Upstream formatting fills an absent guide target or gene symbol with "".
+    # Two absent names must not be scored as the same gene, which would make
+    # every such pair a direct-target positive in the controls evaluation.
+    results = pd.DataFrame(
+        {
+            "intended_target_name": ["", "   ", "FAM83A"],
+            "gene_id": ["ENSG1", "ENSG2", "ENSG3"],
+            "gene_name": ["", "", "FAM83A"],
+        }
+    )
+
+    assert direct_target_mask(results).tolist() == [False, False, True]
+    assert direct_target_mask(results.astype("category")).tolist() == [
+        False,
+        False,
+        True,
+    ]
+
+
+def test_categorical_path_matches_string_path_on_versioned_duplicates():
+    results = pd.DataFrame(
+        {
+            "intended_target_name": ["ENSG00000104312", "ENSG00000104312"],
+            "gene_id": ["ENSG00000104312", "ENSG00000104312.3"],
+        }
+    )
+
+    assert direct_target_mask(results).tolist() == [True, True]
+    assert direct_target_mask(results.astype("category")).tolist() == [True, True]
+
+
 def test_direct_target_matching_keeps_categorical_columns_compact():
     results = pd.DataFrame(
         {

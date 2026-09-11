@@ -26,6 +26,7 @@ from intended_target_key_utils import (
     get_target_lookup,
 )
 from mudata_uns_io import write_uns_patch
+from inference_covariates import CANONICAL_COVARIATES, perturbo_covariate_arguments
 from result_table_io import write_result_table
 
 
@@ -457,17 +458,26 @@ def _run_perturbo(
             # The control evaluation scores non-targeting pairs against direct-target
             # pairs, so it needs the controls to carry p-values of their own.
             cmd.append("--crt-test-control-elements")
-    if _covariate_has_control_variance(input_path, map_key, names_key):
-        cmd.extend(["--continuous-covariates", "log1p_total_guide_umis_centered"])
-    else:
-        print(
-            "Skipping log1p_total_guide_umis_centered covariate because it has "
-            "zero variance in PerTurbo control cells for this run."
-        )
+    # The same covariates SCEPTRE receives, from the same list, so a difference in
+    # calls is a difference in method rather than in model specification. The
+    # preparation step writes them into the MuData's top-level obs for SCEPTRE and
+    # leaves them on the modalities for PerTurbo.
     with _open_mudata(input_path, backed="r") as mdata:
-        has_batch = "batch" in mdata[GENE_MODALITY].obs.columns
-    if has_batch:
-        cmd.extend(["--batch-covariate", "batch"])
+        present = [c for c, _ in CANONICAL_COVARIATES if c in mdata[GENE_MODALITY].obs.columns]
+    continuous, batch = perturbo_covariate_arguments(present)
+    if "log1p_total_guide_umis_centered" in continuous and not _covariate_has_control_variance(
+        input_path, map_key, names_key
+    ):
+        print(
+            "Dropping log1p_total_guide_umis_centered: it has zero variance in the control cells "
+            "PerTurbo fits its baseline on."
+        )
+        continuous = [c for c in continuous if c != "log1p_total_guide_umis_centered"]
+    if continuous:
+        cmd.extend(["--continuous-covariates", *continuous])
+    if batch:
+        cmd.extend(["--batch-covariate", batch])
+    print(f"Covariates: continuous {continuous or 'none'}; batch {batch or 'none'}.")
     if not args.save_model_params:
         cmd.append("--no-save-model-params")
     out_dir.mkdir(parents=True, exist_ok=True)

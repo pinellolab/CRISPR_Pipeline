@@ -3,6 +3,7 @@
 import argparse
 import pandas as pd
 import mudata as mu
+from inference_covariates import materialize_shared_covariates
 
 from analysis_output_formatting import make_h5mu_safe_dataframe
 from intended_target_key_utils import (
@@ -137,6 +138,10 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
 
     output_file = "mudata_inference_input.h5mu"
     print(f"Saving processed mudata to {output_file}...")
+    # Both inference methods must condition on the same covariates, so write the
+    # agreed set where both look: PerTurbo reads named modality columns, SCEPTRE
+    # reads the top-level frame as colData.
+    materialize_shared_covariates(mudata)
     mudata.write(output_file)
 
 
