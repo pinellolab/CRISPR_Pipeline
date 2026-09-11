@@ -6,7 +6,7 @@ doi: 'XXX'
 date: 15 July 2022
 description: Guide using 10x3'v2
 modalities:
-- guide
+- crispr
 lib_struct: https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium3.html
 sequence_protocol: Not-specified
 sequence_kit: Not-specified
@@ -16,7 +16,7 @@ sequence_spec:
 - !Read
   read_id: guide_R1.fq
   name: Read 1
-  modality: guide
+  modality: crispr
   primer_id: r1_primer
   min_len: 26
   max_len: 26
@@ -24,7 +24,7 @@ sequence_spec:
 - !Read
   read_id: guide_R2.fq
   name: Read 2
-  modality: guide
+  modality: crispr
   primer_id: r2_primer
   min_len: 43
   max_len: 43
@@ -32,7 +32,7 @@ sequence_spec:
 library_spec:
 - !Region
   parent_id: null
-  region_id: guide
+  region_id: crispr
   region_type: null
   name: null
   sequence_type: null
