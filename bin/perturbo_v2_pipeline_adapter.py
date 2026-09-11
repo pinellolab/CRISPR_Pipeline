@@ -365,6 +365,24 @@ def _read_moi(mudata_path: str | Path, override: str | None) -> str | None:
     return text.strip().lower() or None
 
 
+def _observed_singleton(mudata_path: str | Path) -> tuple[bool, int]:
+    """Whether every cell carries at most one perturbation, and how many carry only
+    controls. The assignments decide the design; the declared setting can be wrong."""
+    with _open_mudata(mudata_path, backed="r") as mdata:
+        guide = mdata[GUIDE_MODALITY]
+        matrix = guide.layers[ASSIGNMENT_LAYER] if ASSIGNMENT_LAYER in guide.layers else guide.X
+        matrix = matrix if sparse.issparse(matrix) else sparse.csr_matrix(matrix)
+        per_cell = np.asarray((matrix > 0).sum(axis=1)).ravel()
+        control = _guide_control_mask(pd.DataFrame(guide.var)).to_numpy()
+        control_only = int(
+            (
+                (np.asarray((matrix[:, control] > 0).sum(axis=1)).ravel() > 0)
+                & (np.asarray((matrix[:, ~control] > 0).sum(axis=1)).ravel() == 0)
+            ).sum()
+        )
+    return bool(per_cell.size and per_cell.max() <= 1), control_only
+
+
 def _resolve_crt_pool(requested: str, moi: str | None) -> str:
     """Which cells a perturbation is tested against.
 
@@ -547,6 +565,20 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
         )
 
         args.resolved_crt_pool = _resolve_crt_pool(args.crt_pool, _read_moi(args.input, args.moi))
+        if args.crt_pool == "from-moi":
+            # The assignments outrank the declared setting. A screen whose cells each
+            # carry one perturbation is a low-MOI screen whatever the samplesheet says,
+            # and SCEPTRE's driver reaches the same conclusion from the same matrix, so
+            # both methods contrast against the control cells rather than one against
+            # the complement.
+            singleton, control_only = _observed_singleton(args.input)
+            if singleton and control_only > 0 and args.resolved_crt_pool != "control-anchored":
+                print(
+                    f"Every cell carries at most one perturbation and {control_only:,} carry only "
+                    f"controls: using the control-anchored pool rather than "
+                    f"'{args.resolved_crt_pool}' from the declared MOI."
+                )
+                args.resolved_crt_pool = "control-anchored"
         if args.crt:
             print(f"PerTurbo CRT pool: {args.resolved_crt_pool} (requested {args.crt_pool}).")
         # The requested pairs (a cis window, usually) come from the MuData that
