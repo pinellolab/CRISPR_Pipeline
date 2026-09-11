@@ -409,7 +409,7 @@
                 },
                 "INFERENCE_PERTURBO_NUM_STEPS_BETAS": {
                     "type": "integer",
-                    "default": 2500,
+                    "default": 300,
                     "minimum": 1,
                     "description": "SVI steps for PerTurbo v2 perturbation-effect fits."
                 },
