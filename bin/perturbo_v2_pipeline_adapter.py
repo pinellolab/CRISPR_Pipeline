@@ -268,10 +268,11 @@ def convert_element_effects(
     prepared_mudata_path: str | Path,
     *,
     test_all_pairs: bool,
+    crt: bool = False,
 ) -> pd.DataFrame:
     with _open_mudata(prepared_mudata_path, backed="r") as mdata:
         target_lookup = get_target_lookup(pd.DataFrame(mdata[GUIDE_MODALITY].var).copy())
-    out = _convert_common_effect_columns(effects).rename(columns={"element": "intended_target_key"})
+    out = _convert_common_effect_columns(effects, crt=crt).rename(columns={"element": "intended_target_key"})
     out = _maybe_filter_pairs(out, prepared_mudata_path, inference_type="element", test_all_pairs=test_all_pairs)
     out = out.merge(target_lookup, on="intended_target_key", how="left")
     missing = out["intended_target_name"].isna()
@@ -301,16 +302,17 @@ def convert_guide_effects(
     prepared_mudata_path: str | Path,
     *,
     test_all_pairs: bool,
+    crt: bool = False,
 ) -> pd.DataFrame:
-    out = _convert_common_effect_columns(effects)
+    out = _convert_common_effect_columns(effects, crt=crt)
     out["guide_id"] = out["element"].map(guide_name_map).fillna(out["element"]).astype(str)
     out = _maybe_filter_pairs(out, prepared_mudata_path, inference_type="guide", test_all_pairs=test_all_pairs)
-    out = out[["gene_id", "guide_id", "log2_fc", "perturbo_fc_se", "p_value"]]
+    out = out[["gene_id", "guide_id", "log2_fc", "perturbo_fc_se", "p_value", "perturbo_posterior_prob"]]
     out["perturbo_q_value"] = _bh_adjust(out["p_value"])
     return out
 
 
-def _convert_common_effect_columns(effects: pd.DataFrame) -> pd.DataFrame:
+def _convert_common_effect_columns(effects: pd.DataFrame, *, crt: bool = False) -> pd.DataFrame:
     required = {"element", "gene", "posterior_mean", "posterior_scale", "posterior_prob"}
     missing = sorted(required - set(effects.columns))
     if missing:
@@ -328,7 +330,18 @@ def _convert_common_effect_columns(effects: pd.DataFrame) -> pd.DataFrame:
     else:
         p_value = pd.Series(np.nan, index=out.index, dtype=float)
     posterior = pd.to_numeric(out["posterior_prob"], errors="coerce")
-    out["p_value"] = p_value.where(p_value.notna(), posterior)
+    if crt:
+        # No fallback when the conditional randomization test ran. It does not test
+        # control elements - their cells are the pool it resamples within - so those
+        # rows have no p-value, and filling them with the posterior probability put
+        # two different quantities in one column: on the Replogle screen every one of
+        # 2,623,521 control rows carried a posterior probability while the targeting
+        # rows carried CRT p-values. Anything comparing the two, the pipeline's own
+        # control evaluation included, was comparing incomparable numbers. A missing
+        # p-value stays missing; Benjamini-Hochberg already preserves NaN.
+        out["p_value"] = p_value
+    else:
+        out["p_value"] = p_value.where(p_value.notna(), posterior)
     out["perturbo_posterior_prob"] = posterior
     out["gene_id"] = out["gene"].astype(str)
     out["log2_fc"] = pd.to_numeric(out["posterior_mean"], errors="coerce") / math.log(2.0)
@@ -580,16 +593,16 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
         element_effects = pd.read_parquet(element_dir / "element_effects.parquet")
         guide_effects = pd.read_parquet(guide_dir / "element_effects.parquet")
         # Every pair, one Benjamini-Hochberg family: the transcriptome-wide tables.
-        global_element_df = convert_element_effects(element_effects, prepared, test_all_pairs=True)
-        global_guide_df = convert_guide_effects(guide_effects, guide_name_map, prepared, test_all_pairs=True)
+        global_element_df = convert_element_effects(element_effects, prepared, test_all_pairs=True, crt=args.crt)
+        global_guide_df = convert_guide_effects(guide_effects, guide_name_map, prepared, test_all_pairs=True, crt=args.crt)
         # The requested pairs, corrected within that set alone: the local tables.
         local_element_df = local_guide_df = None
         if wants_local:
             local_element_df = convert_element_effects(
-                _requested_pairs_table(element_dir, element_effects, element_pairs_path), prepared, test_all_pairs=True
+                _requested_pairs_table(element_dir, element_effects, element_pairs_path), prepared, test_all_pairs=True, crt=args.crt
             )
             local_guide_df = convert_guide_effects(
-                _requested_pairs_table(guide_dir, guide_effects, guide_pairs_path), guide_name_map, prepared, test_all_pairs=True
+                _requested_pairs_table(guide_dir, guide_effects, guide_pairs_path), guide_name_map, prepared, test_all_pairs=True, crt=args.crt
             )
         # --per-*-output keep their historical meaning: global with --test-all-pairs,
         # local without. The --local-per-*-output files add the local tables beside
