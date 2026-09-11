@@ -23,7 +23,11 @@ process inference_perturbo {
     val inference_method
 
     output:
-    path "inference_mudata.h5mu", emit: inference_mudata
+    // Optional: writing it byte-copies the input MuData and re-serialises the result
+    // tables, tens of gigabytes on a screen-scale input, and mergeMudata assembles one
+    // from the tables anyway. INFERENCE_PERTURBO_WRITE_MUDATA turns it back on for
+    // consumers that read the intermediate.
+    path "inference_mudata.h5mu", optional: true, emit: inference_mudata
     path "perturbo_local_analysis_per_element_output.tsv.gz", emit: local_per_element_output
     path "perturbo_local_analysis_per_guide_output.tsv.gz", emit: local_per_guide_output
     path "perturbo_global_analysis_per_element_output.*", emit: global_per_element_output
@@ -34,6 +38,7 @@ process inference_perturbo {
         def save_model_params_arg = params.INFERENCE_PERTURBO_SAVE_MODEL_PARAMS ? '--save-model-params' : '--no-save-model-params'
         def parallel_fits_arg = params.INFERENCE_PERTURBO_LOCAL_PARALLEL_FITS ? '--parallel-fits' : '--no-parallel-fits'
         def crt_arg = params.INFERENCE_PERTURBO_CRT ? '--crt' : '--no-crt'
+        def write_mudata_arg = params.INFERENCE_PERTURBO_WRITE_MUDATA ? '--output-mudata inference_mudata.h5mu' : ''
         def results_ext = params.INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT == 'parquet' ? 'parquet' : 'tsv.gz'
         """
         perturbo_v2_pipeline_adapter.py \\
@@ -44,7 +49,7 @@ process inference_perturbo {
             --per-guide-output perturbo_global_analysis_per_guide_output.${results_ext} \\
             --local-per-element-output perturbo_local_analysis_per_element_output.tsv.gz \\
             --local-per-guide-output perturbo_local_analysis_per_guide_output.tsv.gz \\
-            --output-mudata inference_mudata.h5mu \\
+            ${write_mudata_arg} \\
             --v2-artifact-dir perturbo_v2_outputs \\
             ${crt_arg} \\
             --crt-pool ${params.INFERENCE_PERTURBO_CRT_POOL} \\

@@ -439,6 +439,11 @@
                     "default": "normal",
                     "description": "Perturbation-effect prior passed to PerTurbo v2."
                 },
+                "INFERENCE_PERTURBO_WRITE_MUDATA": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Have the PerTurbo step also write inference_mudata.h5mu. Off by default: it byte-copies the input and re-serialises the result tables, and the pipeline assembles a MuData from those tables downstream."
+                },
                 "INFERENCE_PERTURBO_CRT": {
                     "type": "boolean",
                     "default": true,

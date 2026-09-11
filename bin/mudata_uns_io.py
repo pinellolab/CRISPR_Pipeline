@@ -21,6 +21,7 @@ def write_uns_patch(
     output_path: str | Path,
     updates: dict | None = None,
     deletes: Iterable[str] = (),
+    aliases: dict[str, str] | None = None,
 ) -> None:
     """Copy ``input_path`` to ``output_path``, then add/overwrite ``updates``
     and remove ``deletes`` from the file's top-level /uns group.
@@ -50,6 +51,17 @@ def write_uns_patch(
             if key in uns:
                 del uns[key]
             write_elem(uns, key, value)
+        # An alias is an HDF5 hard link, not a second copy: the two names point at
+        # one set of datasets, so a consumer reading either sees the same table and
+        # the file does not carry it twice. A screen-scale result table is gigabytes,
+        # and the generic keys are exactly the same frames as the analysis-qualified
+        # ones, so writing both cost several gigabytes of pure duplication.
+        for alias, target in (aliases or {}).items():
+            if target not in uns:
+                raise KeyError(f"cannot alias {alias!r} to {target!r}: {target!r} is not in /uns")
+            if alias in uns:
+                del uns[alias]
+            uns[alias] = uns[target]
 
 
 def _categorical_code_dtype(category_count: int) -> np.dtype:

@@ -607,20 +607,28 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
         if args.local_per_guide_output:
             write_result_table(local_guide_df, args.local_per_guide_output)
 
+        if not args.output_mudata:
+            print(
+                "No --output-mudata given: the result tables are the published output and no MuData "
+                "is copied. The pipeline's merge step assembles one from these tables."
+            )
         if args.output_mudata:
+            # The analysis-qualified keys carry the tables; the generic keys that
+            # standalone consumers read are hard links to whichever pair is primary.
+            # They are the same frames, and at screen scale a duplicate is gigabytes.
             updates = {
-                # Keep the generic keys used by standalone/single-method consumers,
-                # and expose the analysis-qualified keys consumed by the pipeline's
-                # evaluation and dashboard steps.
-                "per_element_results": make_h5mu_safe_dataframe(primary_element_df),
-                "per_guide_results": make_h5mu_safe_dataframe(primary_guide_df),
                 "global_analysis_per_element_results": make_h5mu_safe_dataframe(global_element_df),
                 "global_analysis_per_guide_results": make_h5mu_safe_dataframe(global_guide_df),
             }
             if local_element_df is not None:
                 updates["local_analysis_per_element_results"] = make_h5mu_safe_dataframe(local_element_df)
                 updates["local_analysis_per_guide_results"] = make_h5mu_safe_dataframe(local_guide_df)
-            write_uns_patch(args.input, args.output_mudata, updates=updates)
+            prefix = "global_analysis" if args.test_all_pairs else "local_analysis"
+            aliases = {
+                "per_element_results": f"{prefix}_per_element_results",
+                "per_guide_results": f"{prefix}_per_guide_results",
+            }
+            write_uns_patch(args.input, args.output_mudata, updates=updates, aliases=aliases)
 
         if args.v2_artifact_dir:
             artifact_dir = Path(args.v2_artifact_dir)
@@ -646,7 +654,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input", required=True, help="Input CRISPR_Pipeline MuData file")
     parser.add_argument("--per-element-output", required=True, help="Output per-element table (.tsv.gz or .parquet, by extension)")
     parser.add_argument("--per-guide-output", required=True, help="Output per-guide table (.tsv.gz or .parquet, by extension)")
-    parser.add_argument("--output-mudata", help="Optional MuData with result tables in .uns")
+    parser.add_argument(
+        "--output-mudata",
+        help=(
+            "Optional MuData with the result tables in .uns. Writing it byte-copies the input and "
+            "re-serialises the tables, which at screen scale is tens of gigabytes; the pipeline "
+            "assembles a MuData again downstream, so skip this unless an intermediate consumer "
+            "needs one."
+        ),
+    )
     parser.add_argument("--v2-artifact-dir", default=None, help="Optional directory for raw PerTurbo v2 artifacts")
     parser.add_argument(
         "--test-all-pairs",
