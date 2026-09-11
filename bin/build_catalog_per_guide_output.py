@@ -33,6 +33,14 @@ OUTPUT_COLUMNS = [
     "sceptre_q_value",
     "sceptre_fc_se",
     "sceptre_negLog10p",
+    # PerTurbo over the same requested pairs SCEPTRE was corrected over, so
+    # perturbo_cis_q_value and sceptre_q_value are directly comparable; the
+    # unprefixed perturbo_q_value is corrected over every pair in the screen.
+    "perturbo_cis_log2_fc",
+    "perturbo_cis_p_value",
+    "perturbo_cis_q_value",
+    "perturbo_cis_fc_se",
+    "perturbo_cis_negLog10p",
     "perturbo_log2_fc",
     "perturbo_p_value",
     "perturbo_q_value",
@@ -241,10 +249,29 @@ def create_catalog_per_guide(
         ["perturbo_fc_se", "log2_fc_std"],
         "global_analysis_per_guide",
     )
+    # mergedResults already put PerTurbo's cis columns in the local table; taking
+    # them keeps a q-value in the catalog that is corrected over the same family
+    # SCEPTRE's is.
+    local_perturbo = None
+    if "perturbo_p_value" in local_analysis_per_guide.columns:
+        local_perturbo = _prepare_metric_subset(
+            local_analysis_per_guide,
+            "perturbo_cis",
+            ["perturbo_log2_fc"],
+            ["perturbo_p_value"],
+            ["perturbo_q_value"],
+            ["perturbo_fc_se"],
+            "local_analysis_per_guide (PerTurbo)",
+        )
     merged = local.merge(global_results, on=JOIN_COLUMNS, how="outer")
+    if local_perturbo is not None:
+        merged = merged.merge(local_perturbo, on=JOIN_COLUMNS, how="outer")
+    else:
+        for column in ("perturbo_cis_log2_fc", "_perturbo_cis_p_value", "perturbo_cis_q_value", "perturbo_cis_fc_se"):
+            merged[column] = np.nan
     merged = merged.merge(_build_guide_metadata(mdata["guide"]), on="guide_id", how="left")
 
-    for method in ("sceptre", "perturbo"):
+    for method in ("sceptre", "perturbo", "perturbo_cis"):
         raw = merged[f"_{method}_p_value"]
         merged[f"{method}_p_value"] = raw
         merged[f"{method}_negLog10p"] = _neg_log10(raw, pvalue_floor)

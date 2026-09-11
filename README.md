@@ -395,6 +395,7 @@ The local-analysis outputs report guide-gene or target-element-gene tests restri
 | `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this local-analysis output table. |
+| `perturbo_cis_q_value` | PerTurbo's q-value over the requested (cis) pairs alone — the family `sceptre_q_value` is corrected over, so these two are directly comparable. `perturbo_q_value` is corrected over every pair in the screen and is therefore stricter. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
 | `guide_sequence` | Guide spacer sequence from guide metadata. |
