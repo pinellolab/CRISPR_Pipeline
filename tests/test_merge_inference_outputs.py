@@ -500,3 +500,37 @@ def test_merge_local_global_results_uses_fast_parquet_path(tmp_path, monkeypatch
     merged = mu.read_h5mu(tmp_path / "inference_mudata.h5mu")
     assert len(merged.uns["global_analysis_per_guide_results"]) == 2
     assert len(merged.uns["global_analysis_per_element_results"]) == 2
+
+
+def test_coordinates_typed_differently_on_the_two_sides_still_merge(tmp_path):
+    """One side complete (int64), the other with a missing coordinate (float64):
+    the same element must still land in one row carrying both methods."""
+    import pandas as pd
+    from merge_method_results import _build_merge_keys, _with_merge_key_columns
+
+    sceptre = pd.DataFrame(
+        {
+            "intended_target_name": ["E1", "E2"],
+            "gene_id": ["G1", "G1"],
+            "intended_target_chr": ["chr1", "chr1"],
+            "intended_target_start": [100, 200],
+            "intended_target_end": [150, 250],
+        }
+    )
+    perturbo = pd.DataFrame(
+        {
+            "intended_target_name": ["E1", "E2"],
+            "gene_id": ["G1", "G1"],
+            "intended_target_chr": ["chr1", "chr1"],
+            "intended_target_start": [100.0, float("nan")],
+            "intended_target_end": [150.0, 250.0],
+        }
+    )
+    keys, _ = _build_merge_keys(sceptre, perturbo)
+    left, merge_cols = _with_merge_key_columns(sceptre, keys)
+    right, _ = _with_merge_key_columns(perturbo, keys)
+    merged = left.merge(right, on=merge_cols, how="outer", suffixes=("_s", "_p"))
+    matched = merged.dropna(subset=["gene_id_s", "gene_id_p"])
+    assert len(matched) == 1 and matched["intended_target_name_s"].iloc[0] == "E1"
+    assert left["__merge_intended_target_start"].tolist() == ["100", "200"]
+    assert right["__merge_intended_target_start"].tolist() == ["100", "__NA__"]

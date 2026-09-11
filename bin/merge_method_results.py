@@ -31,12 +31,25 @@ def _build_merge_keys(sceptre_df: pd.DataFrame, perturbo_df: pd.DataFrame):
     return ELEMENT_BASE_KEYS, False
 
 
+def _merge_key_series(values: pd.Series, col: str) -> pd.Series:
+    """The key as text, with genomic coordinates normalised first.
+
+    ``read_csv`` types a coordinate column as int64 when it is complete and float64
+    when a single value is missing, so the same position was "100" on one side and
+    "100.0" on the other and the outer merge matched nothing. Coordinates go
+    through a nullable integer first; every other key is compared as written.
+    """
+    if col.endswith(("_start", "_end")):
+        values = pd.to_numeric(values, errors="coerce").astype("Int64")
+    return values.astype("string").fillna("__NA__")
+
+
 def _with_merge_key_columns(df: pd.DataFrame, key_cols):
     out = df.copy()
     merge_cols = []
     for col in key_cols:
         merge_col = f"__merge_{col}"
-        out[merge_col] = out[col].astype("string").fillna("__NA__")
+        out[merge_col] = _merge_key_series(out[col], col)
         merge_cols.append(merge_col)
     return out, merge_cols
 
