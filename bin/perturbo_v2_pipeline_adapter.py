@@ -423,6 +423,8 @@ def _run_perturbo(
         str(args.perturbation_chunk_size),
         "--device",
         args.device,
+        "--step-size",
+        str(args.step_size),
         "--no-progress-bar",
     ]
     if pairs_to_test_path is not None:
@@ -670,6 +672,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-steps-control", type=int, default=2500, help="Control-fit SVI steps")
     parser.add_argument(
         "--num-steps-betas", type=int, default=1000, help="Beta-fit SVI steps"
+    )
+    parser.add_argument(
+        "--step-size",
+        type=float,
+        default=0.01,
+        help=(
+            "Adam learning rate for both SVI stages. 0.01 with 500 beta steps recovers simulated effects as "
+            "well as 0.003 with 2,500 (PerTurbo's stage-two sweep, Sep 2026); 0.003 with 300 under-converges."
+        ),
     )
     parser.add_argument("--max-chunk-size", type=int, default=50000, help="PerTurbo v2 max chunk cell count")
     parser.add_argument("--perturbation-chunk-size", type=int, default=0, help="PerTurbo v2 perturbation chunk size")

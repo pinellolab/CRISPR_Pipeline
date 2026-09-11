@@ -53,6 +53,7 @@ process inference_perturbo {
             --batch-size 0 \\
             --num-steps-control ${params.INFERENCE_PERTURBO_NUM_STEPS_CONTROL} \\
             --num-steps-betas ${params.INFERENCE_PERTURBO_NUM_STEPS_BETAS} \\
+            --step-size ${params.INFERENCE_PERTURBO_STEP_SIZE} \\
             --max-chunk-size ${params.INFERENCE_PERTURBO_MAX_CHUNK_CELLS} \\
             --perturbation-chunk-size 0 \\
             ${parallel_fits_arg} \\

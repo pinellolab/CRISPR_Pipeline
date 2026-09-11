@@ -407,9 +407,14 @@
                     "minimum": 1,
                     "description": "SVI steps for the PerTurbo v2 control/baseline fit."
                 },
+                "INFERENCE_PERTURBO_STEP_SIZE": {
+                    "type": "number",
+                    "default": 0.01,
+                    "description": "Adam learning rate for both PerTurbo SVI stages. At 0.01, 500 beta steps recover simulated effects as well as 2,500 at 0.003."
+                },
                 "INFERENCE_PERTURBO_NUM_STEPS_BETAS": {
                     "type": "integer",
-                    "default": 300,
+                    "default": 500,
                     "minimum": 1,
                     "description": "SVI steps for PerTurbo v2 perturbation-effect fits."
                 },
