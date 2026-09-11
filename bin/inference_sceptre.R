@@ -459,6 +459,15 @@ if (!exists(".sourced_from_test")) {
     try(write.table(results$singleton_test_results, file = "per_guide_output.tsv", sep = "\t", row.names = FALSE, quote = FALSE), silent = TRUE)
   }
 
-  # write the modified MuData (contains union results in metadata as 'test_results')
-  try(MuData::writeH5MU(object = results$mudata, file = "inference_mudata.h5mu"), silent = TRUE)
+  # Write the modified MuData (union results in metadata as 'test_results') only when
+  # asked. Chunked runs call this once per chunk and nothing downstream reads those
+  # files -- sceptre_chunk_merge consumes the two tables -- so on a screen-scale input
+  # it was tens of gigabytes of writes per run, competing for the same filesystem as
+  # the analysis. SCEPTRE_WRITE_MUDATA=true restores it.
+  write_mudata <- tolower(Sys.getenv("SCEPTRE_WRITE_MUDATA", "false")) %in% c("true", "1", "yes")
+  if (write_mudata) {
+    try(MuData::writeH5MU(object = results$mudata, file = "inference_mudata.h5mu"), silent = TRUE)
+  } else {
+    message("Skipping inference_mudata.h5mu (SCEPTRE_WRITE_MUDATA is not set); the result tables are the output.")
+  }
 }
