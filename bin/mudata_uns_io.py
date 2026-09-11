@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from polars_compat import lazy_schema
+
 from pathlib import Path
 import shutil
 from typing import Iterable
@@ -94,7 +96,7 @@ def write_parquet_dataframe_to_uns(
     h5mu_path = Path(h5mu_path)
     parquet_path = Path(parquet_path)
     scan = pl.scan_parquet(parquet_path)
-    schema = scan.collect_schema()
+    schema = lazy_schema(scan)
     column_names = schema.names()
     row_count = (
         scan.select(pl.len().alias("rows"))

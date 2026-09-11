@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from polars_compat import lazy_schema
+
 from pathlib import Path
 from typing import Sequence
 
@@ -20,8 +22,8 @@ def _normalize_join_keys(local_scan, global_scan, join_columns, pl):
     Normalize only the key columns and preserve every metric's native dtype.
     """
 
-    local_schema = local_scan.collect_schema()
-    global_schema = global_scan.collect_schema()
+    local_schema = lazy_schema(local_scan)
+    global_schema = lazy_schema(global_scan)
     string_types = (pl.String, pl.Categorical, pl.Enum)
     local_exprs = []
     global_exprs = []
@@ -77,8 +79,8 @@ def try_write_enriched_parquet_catalog(
 
     local_scan = pl.scan_parquet(local_path)
     global_scan = pl.scan_parquet(global_path)
-    local_schema = set(local_scan.collect_schema().names())
-    global_schema = set(global_scan.collect_schema().names())
+    local_schema = set(lazy_schema(local_scan).names())
+    global_schema = set(lazy_schema(global_scan).names())
     local_required = set(join_columns) | set(local_metric_columns)
     global_required = set(join_columns) | set(global_required_columns)
     if not local_required.issubset(local_schema):

@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from polars_compat import lazy_schema
+
 from pathlib import Path
 from typing import Literal
 
@@ -137,10 +139,10 @@ def _prepare_scan(input_path: str | Path):
     import polars as pl
 
     scan = pl.scan_parquet(input_path)
-    schema = scan.collect_schema()
+    schema = lazy_schema(scan)
     schema_names = set(schema.names())
     scan = scan.rename(_rename_columns(schema_names))
-    renamed_schema = scan.collect_schema()
+    renamed_schema = lazy_schema(scan)
     required = {"gene_id", "perturbo_log2_fc", "perturbo_p_value"}
     missing = required.difference(renamed_schema.names())
     if missing:
@@ -154,7 +156,7 @@ def _prepare_scan(input_path: str | Path):
         )
     if "perturbo_fdr_log10_p_value" in renamed_schema.names():
         scan = scan.drop("perturbo_fdr_log10_p_value")
-        renamed_schema = scan.collect_schema()
+        renamed_schema = lazy_schema(scan)
     if "perturbo_fc_se" not in renamed_schema.names():
         scan = scan.with_columns(
             pl.lit(None, dtype=pl.Float64).alias("perturbo_fc_se")
@@ -174,7 +176,7 @@ def _prepare_scan(input_path: str | Path):
             "pandas fallback for this input."
         )
 
-    p_dtype = scan.collect_schema()["perturbo_p_value"]
+    p_dtype = lazy_schema(scan)["perturbo_p_value"]
     scan = scan.with_columns(
         (
             pl.col("perturbo_p_value")
