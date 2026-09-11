@@ -162,18 +162,24 @@ def _prepare_scan(input_path: str | Path):
             pl.lit(None, dtype=pl.Float64).alias("perturbo_fc_se")
         )
 
-    # Current PerTurbo Parquet outputs contain complete q-values. Checking the
-    # single q-value column is cheap compared with constructing 211M enriched
-    # rows and protects the existing fill-missing-q semantics.
-    has_missing_q = (
-        scan.select(pl.col("perturbo_q_value").is_null().any())
+    # The pandas path fills a q-value only where the q is missing but the p is
+    # present, so that is the only case this path cannot reproduce. A pair the
+    # conditional randomization test did not evaluate has neither, and
+    # Benjamini-Hochberg preserves the missingness, so such rows are no reason to
+    # abandon streaming: testing the q column alone sent every run with an
+    # untested pair down the pandas path, which materialises the whole enriched
+    # table (211M rows on a screen-scale input).
+    has_unfillable_q = (
+        scan.select(
+            (pl.col("perturbo_q_value").is_null() & pl.col("perturbo_p_value").is_not_null()).any()
+        )
         .collect(engine="streaming")
         .item()
     )
-    if has_missing_q:
+    if has_unfillable_q:
         raise ValueError(
-            "Fast Parquet enrichment does not fill missing q-values; use the "
-            "pandas fallback for this input."
+            "Fast Parquet enrichment does not fill missing q-values where a p-value is "
+            "present; use the pandas fallback for this input."
         )
 
     p_dtype = lazy_schema(scan)["perturbo_p_value"]
