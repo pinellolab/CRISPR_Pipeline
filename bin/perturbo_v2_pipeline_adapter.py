@@ -453,6 +453,10 @@ def _run_perturbo(
             "--crt-saddlepoint-only", "--crt-polish-baseline", "--crt-allow-unconverged-baseline",
             "--crt-pool", args.resolved_crt_pool,
         ])
+        if args.crt_test_control_elements:
+            # The control evaluation scores non-targeting pairs against direct-target
+            # pairs, so it needs the controls to carry p-values of their own.
+            cmd.append("--crt-test-control-elements")
     if _covariate_has_control_variance(input_path, map_key, names_key):
         cmd.extend(["--continuous-covariates", "log1p_total_guide_umis_centered"])
     else:
@@ -692,6 +696,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Cells a perturbation is tested against; from-moi maps the pipeline's MOI setting (high -> all-cells, low -> control-anchored)",
     )
     parser.add_argument("--moi", default=None, help="Override the MOI setting read from guide.uns['moi']")
+    parser.add_argument(
+        "--crt-test-control-elements",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Test the control elements too, so the control evaluation has p-values to score. "
+            "Their own cells are in the pool they are tested against, which makes them conservative."
+        ),
+    )
     parser.add_argument("--device", default="gpu", help="JAX device for PerTurbo v2, e.g. gpu or cpu")
     parser.add_argument("--batch-size", type=int, default=0, help="SVI minibatch size")
     parser.add_argument("--num-steps-control", type=int, default=2500, help="Control-fit SVI steps")
