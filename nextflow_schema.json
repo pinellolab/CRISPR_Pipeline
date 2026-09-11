@@ -403,7 +403,7 @@
                 },
                 "INFERENCE_PERTURBO_NUM_STEPS_CONTROL": {
                     "type": "integer",
-                    "default": 2500,
+                    "default": 500,
                     "minimum": 1,
                     "description": "SVI steps for the PerTurbo v2 control/baseline fit."
                 },
