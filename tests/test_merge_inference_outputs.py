@@ -108,12 +108,15 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
     _write_tsv(perturbo_element, paths["perturbo_element"])
 
     monkeypatch.chdir(tmp_path)
+    # The intermediate MuData became opt-in, so this test has to ask for the
+    # one it asserts on below, the way the sceptre,perturbo workflow does.
     merge_method_results.merge_method_results(
         str(paths["sceptre_guide"]),
         str(paths["sceptre_element"]),
         str(paths["perturbo_guide"]),
         str(paths["perturbo_element"]),
         str(base_mudata),
+        write_mudata=True,
     )
 
     guide_out = pd.read_csv(tmp_path / "per_guide_output.tsv.gz", sep="\t")
