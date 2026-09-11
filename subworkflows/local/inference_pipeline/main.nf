@@ -7,7 +7,6 @@ include { inference_sceptre } from '../../../modules/local/inference_sceptre'
 include { sceptre_chunk_prepare } from '../../../modules/local/sceptre_chunk_prepare'
 include { sceptre_chunk_merge } from '../../../modules/local/sceptre_chunk_merge'
 include { inference_perturbo } from '../../../modules/local/inference_perturbo'
-include { inference_perturbo_global } from '../../../modules/local/inference_perturbo_global'
 include { mergedResults } from '../../../modules/local/mergedResults'
 include { publishFiles } from '../../../modules/local/publishFiles'
 include { mergeMudata } from '../../../modules/local/mergeMudata'
@@ -67,7 +66,7 @@ workflow inference_pipeline {
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "perturbo"){
-        TestResults = inference_perturbo(mudata_input, params.INFERENCE_method)
+        TestResults = inference_perturbo(mudata_input, mudata_input, params.INFERENCE_method)
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
@@ -79,12 +78,12 @@ workflow inference_pipeline {
             mudata_input,
             SceptreChunkInput.chunk_manifest
         )
-        PerturboResults = inference_perturbo(mudata_input,  "perturbo")
+        PerturboResults = inference_perturbo(mudata_input, mudata_input, "perturbo")
         MergedInference = mergedResults(
             SceptreResults.per_guide_output,
             SceptreResults.per_element_output,
-            PerturboResults.per_guide_output,
-            PerturboResults.per_element_output,
+            PerturboResults.local_per_guide_output,
+            PerturboResults.local_per_element_output,
             mudata_input
         )
         FinalInference = MergedInference.inference_mudata
@@ -102,22 +101,23 @@ workflow inference_pipeline {
             PrepareInference.mudata_inference_input,
             SceptreChunkInput_local.chunk_manifest
         )
-        PerturboResults_local = inference_perturbo(PrepareInference.mudata_inference_input, "perturbo")
+        // One PerTurbo run on every gene of concat_mudata yields both the local
+        // (requested-pair) and the global (transcriptome-wide) tables; the pairs
+        // come from the prepared inference input.
+        PerturboResults = inference_perturbo(mudata_concat, PrepareInference.mudata_inference_input, "perturbo")
         MergedInference_local = mergedResults(
             SceptreResults_local.per_guide_output,
             SceptreResults_local.per_element_output,
-            PerturboResults_local.per_guide_output,
-            PerturboResults_local.per_element_output,
+            PerturboResults.local_per_guide_output,
+            PerturboResults.local_per_element_output,
             PrepareInference.mudata_inference_input
         )
-        // Process global-analysis results - use concat_mudata directly
-        MergedInference_global = inference_perturbo_global(mudata_concat, "perturbo", PerturboResults_local.inference_mudata)
 
         MergedInference = mergeMudata(
             MergedInference_local.per_guide_output,
             MergedInference_local.per_element_output,
-            MergedInference_global.per_guide_output,
-            MergedInference_global.per_element_output,
+            PerturboResults.global_per_guide_output,
+            PerturboResults.global_per_element_output,
             mudata_concat,
         )
         // Catalog construction is intentionally independent from mergeMudata:

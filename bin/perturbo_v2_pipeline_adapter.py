@@ -292,6 +292,7 @@ def convert_element_effects(
             "log2_fc",
             "perturbo_fc_se",
             "p_value",
+            "perturbo_posterior_prob",
         ]
     ]
     out["perturbo_q_value"] = _bh_adjust(out["p_value"])
@@ -319,16 +320,58 @@ def _convert_common_effect_columns(effects: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError("PerTurbo element_effects.parquet is missing columns: " + ", ".join(missing))
     out = effects.copy()
-    if "empirical_p_value" in out.columns:
+    # The conditional randomization test's p-value is the primary significance
+    # measure when the run produced one; the posterior probability is kept beside
+    # it. Without the CRT the previous fallbacks apply unchanged.
+    if "crt_saddlepoint_p_value" in out.columns:
+        p_value = pd.to_numeric(out["crt_saddlepoint_p_value"], errors="coerce")
+    elif "crt_p_value" in out.columns:
+        p_value = pd.to_numeric(out["crt_p_value"], errors="coerce")
+    elif "empirical_p_value" in out.columns:
         p_value = pd.to_numeric(out["empirical_p_value"], errors="coerce")
     else:
         p_value = pd.Series(np.nan, index=out.index, dtype=float)
     posterior = pd.to_numeric(out["posterior_prob"], errors="coerce")
     out["p_value"] = p_value.where(p_value.notna(), posterior)
+    out["perturbo_posterior_prob"] = posterior
     out["gene_id"] = out["gene"].astype(str)
     out["log2_fc"] = pd.to_numeric(out["posterior_mean"], errors="coerce") / math.log(2.0)
     out["perturbo_fc_se"] = pd.to_numeric(out["posterior_scale"], errors="coerce") / math.log(2.0)
     return out
+
+
+def _read_moi(mudata_path: str | Path, override: str | None) -> str | None:
+    """The pipeline's multiplicity-of-infection setting, stored by create_mdata."""
+    if override:
+        return str(override).strip().lower()
+    with _open_mudata(mudata_path, backed="r") as mdata:
+        raw = mdata[GUIDE_MODALITY].uns.get("moi")
+    if raw is None:
+        return None
+    value = np.asarray(raw).ravel()
+    if value.size == 0:
+        return None
+    text = value[0].decode() if isinstance(value[0], (bytes, np.bytes_)) else str(value[0])
+    return text.strip().lower() or None
+
+
+def _resolve_crt_pool(requested: str, moi: str | None) -> str:
+    """Which cells a perturbation is tested against.
+
+    ``from-moi`` keeps the pipeline's own design setting in charge: ``high`` is the
+    all-cells pool (every element a marginal association over all cells, the
+    behaviour the pipeline has always had), ``low`` the control-anchored pool
+    (each perturbation against the pure control cells plus its own). Anything
+    else falls back to PerTurbo measuring the design from the data.
+    """
+    if requested != "from-moi":
+        return requested
+    if moi == "high":
+        return "all-cells"
+    if moi == "low":
+        return "control-anchored"
+    print(f"MOI setting {moi!r} is neither high nor low; letting PerTurbo measure the design (--crt-pool auto).")
+    return "auto"
 
 
 def _run_perturbo(
@@ -380,10 +423,27 @@ def _run_perturbo(
         str(args.perturbation_chunk_size),
         "--device",
         args.device,
+        "--step-size",
+        str(args.step_size),
         "--no-progress-bar",
     ]
     if pairs_to_test_path is not None:
+        # Since PerTurbo 2.0 this does not restrict the fit: it selects the rows of a
+        # second table, element_effects_requested_pairs.parquet, with q-values
+        # corrected within that set. One run yields the cis-scale and the
+        # transcriptome-wide tables together.
         cmd.extend(["--pairs-to-test", str(pairs_to_test_path)])
+    if args.crt:
+        # The same CRT configuration as the production Gasperini runs: the baseline is
+        # polished onto the control null mode by Fisher scoring, and the null-mode guard
+        # is advisory rather than fatal. On a full gene panel the guard's percentile is
+        # dominated by genes with almost no control counts, which the polish cannot
+        # move and the test cannot resolve anyway.
+        cmd.extend([
+            "--crt", "--crt-mechanism", "propensity", "--crt-tail-families", "saddlepoint",
+            "--crt-saddlepoint-only", "--crt-polish-baseline", "--crt-allow-unconverged-baseline",
+            "--crt-pool", args.resolved_crt_pool,
+        ])
     if _covariate_has_control_variance(input_path, map_key, names_key):
         cmd.extend(["--continuous-covariates", "log1p_total_guide_umis_centered"])
     else:
@@ -439,6 +499,20 @@ def _wait_for_fits(processes: dict[str, subprocess.Popen]) -> None:
             time.sleep(1)
 
 
+def _requested_pairs_table(fit_dir: Path, effects: pd.DataFrame, pairs_path: Path | None) -> pd.DataFrame:
+    """PerTurbo's own requested-pairs table, whose q-values are corrected within the
+    requested set; falls back to selecting the rows here when an older PerTurbo did
+    not write it (convert_* recomputes the q-values from p either way)."""
+    written = fit_dir / "element_effects_requested_pairs.parquet"
+    if written.exists():
+        return pd.read_parquet(written)
+    if pairs_path is None:
+        return effects
+    pairs = pd.read_parquet(pairs_path)[["element", "gene"]].astype(str).drop_duplicates()
+    keyed = effects.assign(element=effects["element"].astype(str), gene=effects["gene"].astype(str))
+    return keyed.merge(pairs, on=["element", "gene"], how="inner")
+
+
 def run_pipeline_adapter(args: argparse.Namespace) -> None:
     with tempfile.TemporaryDirectory(prefix="perturbo_v2_pipeline_") as tmp:
         tmp_dir = Path(tmp)
@@ -449,10 +523,24 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
             test_all_pairs=args.test_all_pairs,
         )
 
+        args.resolved_crt_pool = _resolve_crt_pool(args.crt_pool, _read_moi(args.input, args.moi))
+        if args.crt:
+            print(f"PerTurbo CRT pool: {args.resolved_crt_pool} (requested {args.crt_pool}).")
+        # The requested pairs (a cis window, usually) come from the MuData that
+        # carries uns['pairs_to_test']; by default that is the input itself. The fit
+        # is never restricted to them - they select the rows of the local tables.
         element_pairs_path: Path | None = None
         guide_pairs_path: Path | None = None
-        if not args.test_all_pairs:
+        wants_local = (not args.test_all_pairs) or bool(args.local_per_element_output) or bool(args.local_per_guide_output)
+        if wants_local:
+            pairs_source = args.pairs_mudata or args.input
+            with _open_mudata(pairs_source, backed="r") as pairs_mdata:
+                pairs_frame = pairs_mdata.uns.get("pairs_to_test")
+                if pairs_frame is None:
+                    raise KeyError(f"pairs_to_test not found in {pairs_source}; the local tables need it.")
+                pairs_frame = pairs_frame.copy() if isinstance(pairs_frame, pd.DataFrame) else pd.DataFrame(pairs_frame)
             with _open_mudata(prepared) as prepared_mdata:
+                prepared_mdata.uns["pairs_to_test"] = pairs_frame
                 element_pairs_path = tmp_dir / "element_pairs_to_test.parquet"
                 guide_pairs_path = tmp_dir / "guide_pairs_to_test.parquet"
                 _build_native_pairs_to_test(
@@ -495,29 +583,52 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
 
         element_effects = pd.read_parquet(element_dir / "element_effects.parquet")
         guide_effects = pd.read_parquet(guide_dir / "element_effects.parquet")
-        element_df = convert_element_effects(element_effects, prepared, test_all_pairs=args.test_all_pairs)
-        guide_df = convert_guide_effects(guide_effects, guide_name_map, prepared, test_all_pairs=args.test_all_pairs)
-
-        write_result_table(element_df, args.per_element_output)
-        write_result_table(guide_df, args.per_guide_output)
-
-        if args.output_mudata:
-            element_results = make_h5mu_safe_dataframe(element_df)
-            guide_results = make_h5mu_safe_dataframe(guide_df)
-            analysis_prefix = "global_analysis" if args.test_all_pairs else "local_analysis"
-            write_uns_patch(
-                args.input,
-                args.output_mudata,
-                updates={
-                    # Keep the generic keys used by standalone/single-method
-                    # consumers, and also expose the analysis-qualified keys
-                    # consumed by pipeline evaluation and dashboard steps.
-                    "per_element_results": element_results,
-                    "per_guide_results": guide_results,
-                    f"{analysis_prefix}_per_element_results": element_results,
-                    f"{analysis_prefix}_per_guide_results": guide_results,
-                },
+        # Every pair, one Benjamini-Hochberg family: the transcriptome-wide tables.
+        global_element_df = convert_element_effects(element_effects, prepared, test_all_pairs=True)
+        global_guide_df = convert_guide_effects(guide_effects, guide_name_map, prepared, test_all_pairs=True)
+        # The requested pairs, corrected within that set alone: the local tables.
+        local_element_df = local_guide_df = None
+        if wants_local:
+            local_element_df = convert_element_effects(
+                _requested_pairs_table(element_dir, element_effects, element_pairs_path), prepared, test_all_pairs=True
             )
+            local_guide_df = convert_guide_effects(
+                _requested_pairs_table(guide_dir, guide_effects, guide_pairs_path), guide_name_map, prepared, test_all_pairs=True
+            )
+        # --per-*-output keep their historical meaning: global with --test-all-pairs,
+        # local without. The --local-per-*-output files add the local tables beside
+        # the global ones so a single run serves both.
+        primary_element_df = global_element_df if args.test_all_pairs else local_element_df
+        primary_guide_df = global_guide_df if args.test_all_pairs else local_guide_df
+        write_result_table(primary_element_df, args.per_element_output)
+        write_result_table(primary_guide_df, args.per_guide_output)
+        if args.local_per_element_output:
+            write_result_table(local_element_df, args.local_per_element_output)
+        if args.local_per_guide_output:
+            write_result_table(local_guide_df, args.local_per_guide_output)
+
+        if not args.output_mudata:
+            print(
+                "No --output-mudata given: the result tables are the published output and no MuData "
+                "is copied. The pipeline's merge step assembles one from these tables."
+            )
+        if args.output_mudata:
+            # The analysis-qualified keys carry the tables; the generic keys that
+            # standalone consumers read are hard links to whichever pair is primary.
+            # They are the same frames, and at screen scale a duplicate is gigabytes.
+            updates = {
+                "global_analysis_per_element_results": make_h5mu_safe_dataframe(global_element_df),
+                "global_analysis_per_guide_results": make_h5mu_safe_dataframe(global_guide_df),
+            }
+            if local_element_df is not None:
+                updates["local_analysis_per_element_results"] = make_h5mu_safe_dataframe(local_element_df)
+                updates["local_analysis_per_guide_results"] = make_h5mu_safe_dataframe(local_guide_df)
+            prefix = "global_analysis" if args.test_all_pairs else "local_analysis"
+            aliases = {
+                "per_element_results": f"{prefix}_per_element_results",
+                "per_guide_results": f"{prefix}_per_guide_results",
+            }
+            write_uns_patch(args.input, args.output_mudata, updates=updates, aliases=aliases)
 
         if args.v2_artifact_dir:
             artifact_dir = Path(args.v2_artifact_dir)
@@ -543,14 +654,49 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input", required=True, help="Input CRISPR_Pipeline MuData file")
     parser.add_argument("--per-element-output", required=True, help="Output per-element table (.tsv.gz or .parquet, by extension)")
     parser.add_argument("--per-guide-output", required=True, help="Output per-guide table (.tsv.gz or .parquet, by extension)")
-    parser.add_argument("--output-mudata", help="Optional MuData with result tables in .uns")
+    parser.add_argument(
+        "--output-mudata",
+        help=(
+            "Optional MuData with the result tables in .uns. Writing it byte-copies the input and "
+            "re-serialises the tables, which at screen scale is tens of gigabytes; the pipeline "
+            "assembles a MuData again downstream, so skip this unless an intermediate consumer "
+            "needs one."
+        ),
+    )
     parser.add_argument("--v2-artifact-dir", default=None, help="Optional directory for raw PerTurbo v2 artifacts")
-    parser.add_argument("--test-all-pairs", action="store_true", help="Do not filter output to mdata.uns['pairs_to_test']")
+    parser.add_argument(
+        "--test-all-pairs",
+        action="store_true",
+        help=(
+            "Write the transcriptome-wide tables to --per-*-output. The fit always covers every pair; "
+            "without this flag --per-*-output hold the requested pairs (mdata.uns['pairs_to_test'])."
+        ),
+    )
+    parser.add_argument("--pairs-mudata", default=None, help="MuData carrying uns['pairs_to_test'] for the local tables (default: --input)")
+    parser.add_argument("--local-per-element-output", default=None, help="Also write the requested-pairs per-element table here")
+    parser.add_argument("--local-per-guide-output", default=None, help="Also write the requested-pairs per-guide table here")
+    parser.add_argument("--crt", action=argparse.BooleanOptionalAction, default=True, help="Run the conditional randomization test (exact saddlepoint, no resampling)")
+    parser.add_argument(
+        "--crt-pool",
+        default="from-moi",
+        choices=["from-moi", "auto", "all-cells", "control-anchored"],
+        help="Cells a perturbation is tested against; from-moi maps the pipeline's MOI setting (high -> all-cells, low -> control-anchored)",
+    )
+    parser.add_argument("--moi", default=None, help="Override the MOI setting read from guide.uns['moi']")
     parser.add_argument("--device", default="gpu", help="JAX device for PerTurbo v2, e.g. gpu or cpu")
     parser.add_argument("--batch-size", type=int, default=0, help="SVI minibatch size")
     parser.add_argument("--num-steps-control", type=int, default=2500, help="Control-fit SVI steps")
     parser.add_argument(
         "--num-steps-betas", type=int, default=1000, help="Beta-fit SVI steps"
+    )
+    parser.add_argument(
+        "--step-size",
+        type=float,
+        default=0.01,
+        help=(
+            "Adam learning rate for both SVI stages. 0.01 with 500 beta steps recovers simulated effects as "
+            "well as 0.003 with 2,500 (PerTurbo's stage-two sweep, Sep 2026); 0.003 with 300 under-converges."
+        ),
     )
     parser.add_argument("--max-chunk-size", type=int, default=50000, help="PerTurbo v2 max chunk cell count")
     parser.add_argument("--perturbation-chunk-size", type=int, default=0, help="PerTurbo v2 perturbation chunk size")
