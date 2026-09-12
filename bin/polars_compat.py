@@ -54,3 +54,15 @@ def _supports(method: str, name: str) -> bool:
 #     frame.join(other, on=..., how="left", **JOIN_ORDER_LEFT)
 JOIN_ORDER_LEFT = {"maintain_order": "left"} if _supports("join", "maintain_order") else {}
 UNIQUE_ORDER = {"maintain_order": True} if _supports("unique", "maintain_order") else {}
+
+# The same treatment for the other two call sites, each checked against the method
+# it is actually passed to rather than against ``unique``. A frame that omits
+# ``maintain_order`` on 0.20 is still deterministic: those versions preserve order
+# through sort and sink by construction.
+SORT_ORDER = {"maintain_order": True} if _supports("sort", "maintain_order") else {}
+SINK_ORDER = {"maintain_order": True} if _supports("sink_parquet", "maintain_order") else {}
+
+# ``engine="streaming"`` is a Polars 1.x argument. On 0.20 ``sink_parquet`` is the
+# streaming writer already, so dropping the argument selects the same engine
+# rather than a different one.
+SINK_ENGINE = {"engine": "streaming"} if _supports("sink_parquet", "engine") else {}

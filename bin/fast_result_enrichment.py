@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from polars_compat import lazy_schema, JOIN_ORDER_LEFT, UNIQUE_ORDER
+from polars_compat import lazy_schema, JOIN_ORDER_LEFT, UNIQUE_ORDER, SORT_ORDER, SINK_ORDER, SINK_ENGINE
 
 from pathlib import Path
 from typing import Literal
@@ -255,8 +255,8 @@ def enrich_global_parquet(
     scan.select(output_columns).sink_parquet(
         output_path,
         compression="zstd",
-        **UNIQUE_ORDER,
-        engine="streaming",
+        **SINK_ORDER,
+        **SINK_ENGINE,
     )
     print(f"Completed streaming {table_kind} enrichment: {output_path}", flush=True)
     return output_path
