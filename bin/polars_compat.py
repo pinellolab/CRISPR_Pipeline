@@ -26,3 +26,22 @@ def lazy_schema(scan):
     if hasattr(scan, "collect_schema"):
         return scan.collect_schema()
     return _Schema(scan.schema)
+
+def _supports(method: str, name: str) -> bool:
+    import inspect
+
+    import polars as pl
+
+    try:
+        return name in inspect.signature(getattr(pl.LazyFrame, method)).parameters
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
+# Polars grew ``maintain_order`` on joins after 1.0; the pipeline container ships
+# 0.20.31, where passing it raises TypeError. Older Polars preserves the left
+# frame's order for these joins anyway, so omitting the argument there gives the
+# same result rather than merely a similar one. Spread these at the call site:
+#     frame.join(other, on=..., how="left", **JOIN_ORDER_LEFT)
+JOIN_ORDER_LEFT = {"maintain_order": "left"} if _supports("join", "maintain_order") else {}
+UNIQUE_ORDER = {"maintain_order": True} if _supports("unique", "maintain_order") else {}

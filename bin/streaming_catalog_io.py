@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from polars_compat import lazy_schema
+from polars_compat import lazy_schema, JOIN_ORDER_LEFT, UNIQUE_ORDER
 
 from pathlib import Path
 from typing import Sequence
@@ -120,12 +120,12 @@ def try_write_enriched_parquet_catalog(
     catalog = catalog.select(output_columns).sort(
         sort_columns,
         nulls_last=True,
-        maintain_order=True,
+        **UNIQUE_ORDER,
     )
     catalog.sink_parquet(
         output_path,
         compression="zstd",
-        maintain_order=True,
+        **UNIQUE_ORDER,
         engine="streaming",
     )
     print(

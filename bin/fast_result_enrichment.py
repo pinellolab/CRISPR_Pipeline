@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from polars_compat import lazy_schema
+from polars_compat import lazy_schema, JOIN_ORDER_LEFT, UNIQUE_ORDER
 
 from pathlib import Path
 from typing import Literal
@@ -110,7 +110,7 @@ def _add_gene_names(frame, genes, *, fill_missing: bool):
             "_gene_id_unversioned",
             pl.col("gene_name").alias("_gene_name_unversioned"),
         )
-        .unique("_gene_id_unversioned", keep="first", maintain_order=True)
+        .unique("_gene_id_unversioned", keep="first", **UNIQUE_ORDER)
     )
     gene_name = pl.coalesce("_gene_name_direct", "_gene_name_unversioned")
     if fill_missing:
@@ -123,12 +123,12 @@ def _add_gene_names(frame, genes, *, fill_missing: bool):
             .struct.field("field_0")
             .alias("_gene_id_unversioned")
         )
-        .join(direct.lazy(), on="gene_id", how="left", maintain_order="left")
+        .join(direct.lazy(), on="gene_id", how="left", **JOIN_ORDER_LEFT)
         .join(
             unversioned.lazy(),
             on="_gene_id_unversioned",
             how="left",
-            maintain_order="left",
+            **JOIN_ORDER_LEFT,
         )
         .with_columns(gene_name.alias("gene_name"))
         .drop("_gene_name_direct", "_gene_name_unversioned", "_gene_id_unversioned")
@@ -216,7 +216,7 @@ def enrich_global_parquet(
         scan = scan.with_columns(pl.col("guide_id").cast(pl.String))
         metadata = pl.from_pandas(_guide_metadata(mdata))
         scan = scan.join(
-            metadata.lazy(), on="guide_id", how="left", maintain_order="left"
+            metadata.lazy(), on="guide_id", how="left", **JOIN_ORDER_LEFT
         )
         scan = _add_gene_names(scan, genes, fill_missing=True)
         output_columns = GUIDE_OUTPUT_COLUMNS
@@ -232,7 +232,7 @@ def enrich_global_parquet(
             metadata.lazy(),
             on=ELEMENT_COLUMNS,
             how="left",
-            maintain_order="left",
+            **JOIN_ORDER_LEFT,
         )
         scan = scan.with_columns(
             pl.col("intended_target_name").alias("element_id"),
@@ -255,7 +255,7 @@ def enrich_global_parquet(
     scan.select(output_columns).sink_parquet(
         output_path,
         compression="zstd",
-        maintain_order=True,
+        **UNIQUE_ORDER,
         engine="streaming",
     )
     print(f"Completed streaming {table_kind} enrichment: {output_path}", flush=True)
