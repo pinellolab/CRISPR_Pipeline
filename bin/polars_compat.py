@@ -28,9 +28,18 @@ def lazy_schema(scan):
     return _Schema(scan.schema)
 
 def _supports(method: str, name: str) -> bool:
+    """Whether this Polars accepts ``name`` on ``LazyFrame.method``.
+
+    Returns False when Polars is absent. This module is imported by scripts that
+    run inside the PerTurbo image, which ships no Polars at all: resolving these
+    constants must not turn an optional dependency into a required one.
+    """
     import inspect
 
-    import polars as pl
+    try:
+        import polars as pl
+    except ImportError:
+        return False
 
     try:
         return name in inspect.signature(getattr(pl.LazyFrame, method)).parameters
