@@ -282,6 +282,9 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
   # compare against.
   object_moi <- tryCatch(sceptre_object@low_moi, error = function(e) NA)
   is_low_moi <- isTRUE(object_moi)
+  # The importer decided the multiplicity from the assignments; the object carries
+  # the answer, and this function has no other view of it.
+  observed_low_moi <- is_low_moi
   n_nt_cells <- tryCatch({
     targets <- sceptre_object@grna_target_data_frame
     nt_ids <- targets$grna_id[grepl("non-targeting", as.character(targets$grna_target))]
