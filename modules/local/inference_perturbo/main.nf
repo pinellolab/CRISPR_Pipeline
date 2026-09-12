@@ -62,6 +62,8 @@ process inference_perturbo {
             --max-chunk-size ${params.INFERENCE_PERTURBO_MAX_CHUNK_CELLS} \\
             --perturbation-chunk-size 0 \\
             --gene-chunk-size ${params.INFERENCE_PERTURBO_GENE_CHUNK_SIZE} \\
+            --crt-gene-chunk-size ${params.INFERENCE_PERTURBO_CRT_GENE_CHUNK_SIZE} \\
+            --crt-max-gather-gib ${params.INFERENCE_PERTURBO_CRT_MAX_GATHER_GIB} \\
             ${parallel_fits_arg} \\
             --element-gpu ${params.INFERENCE_PERTURBO_ELEMENT_GPU} \\
             --guide-gpu ${params.INFERENCE_PERTURBO_GUIDE_GPU} \\

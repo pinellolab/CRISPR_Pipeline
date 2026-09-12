@@ -457,6 +457,10 @@ def _run_perturbo(
     ]
     if args.gene_chunk_size > 0:
         cmd.extend(["--gene-chunk-size", str(args.gene_chunk_size)])
+    if args.crt_gene_chunk_size > 0:
+        cmd.extend(["--crt-gene-chunk-size", str(args.crt_gene_chunk_size)])
+    if args.crt_max_gather_gib > 0:
+        cmd.extend(["--crt-max-gather-gib", str(args.crt_max_gather_gib)])
     if pairs_to_test_path is not None:
         # Since PerTurbo 2.0 this does not restrict the fit: it selects the rows of a
         # second table, element_effects_requested_pairs.parquet, with q-values
@@ -766,6 +770,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--max-chunk-size", type=int, default=50000, help="PerTurbo v2 max chunk cell count")
     parser.add_argument("--perturbation-chunk-size", type=int, default=0, help="PerTurbo v2 perturbation chunk size")
+    parser.add_argument(
+        "--crt-gene-chunk-size",
+        type=int,
+        default=0,
+        help=(
+            "Genes per conditional-randomization-test block; 0 lets the test size "
+            "its own blocks. This is the test's memory knob and it is separate from "
+            "--gene-chunk-size, which governs stage two. Our production Replogle "
+            "runs use 500."
+        ),
+    )
+    parser.add_argument(
+        "--crt-max-gather-gib",
+        type=float,
+        default=0.0,
+        help=(
+            "Cap on one gather inside the test, in GiB; 0 leaves the default. "
+            "Production Replogle runs use 8."
+        ),
+    )
     parser.add_argument(
         "--gene-chunk-size",
         type=int,

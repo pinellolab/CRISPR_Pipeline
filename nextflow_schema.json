@@ -379,6 +379,20 @@
                     "description": "Genes fitted per stage-two block; 0 fits the whole panel at once.",
                     "help_text": "The second GPU-memory knob, beside the cell chunk. Genes are independent given the control baseline, so blocking changes the memory profile and not the result. A 40 GB card running a transcriptome-wide panel needs a value here; an 80 GB card generally does not."
                 },
+                "INFERENCE_PERTURBO_CRT_GENE_CHUNK_SIZE": {
+                    "type": "integer",
+                    "default": 500,
+                    "minimum": 0,
+                    "description": "Genes per conditional-randomization-test block; 0 lets the test choose.",
+                    "help_text": "The test's memory knob, separate from the stage-two gene block. Without it a transcriptome-wide screen exhausts a 40 GB card inside the saddlepoint fit. It does not change the p-values."
+                },
+                "INFERENCE_PERTURBO_CRT_MAX_GATHER_GIB": {
+                    "type": "number",
+                    "default": 8,
+                    "minimum": 0,
+                    "description": "Cap on a single gather inside the test, in GiB; 0 leaves the default.",
+                    "help_text": "Protects very wide perturbation groups from one oversized gather."
+                },
                 "INFERENCE_PERTURBO_LOCAL_MAX_CHUNK_CELLS": {
                     "type": "integer",
                     "default": 20000,
