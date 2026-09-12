@@ -455,6 +455,8 @@ def _run_perturbo(
         str(args.step_size),
         "--no-progress-bar",
     ]
+    if args.gene_chunk_size > 0:
+        cmd.extend(["--gene-chunk-size", str(args.gene_chunk_size)])
     if pairs_to_test_path is not None:
         # Since PerTurbo 2.0 this does not restrict the fit: it selects the rows of a
         # second table, element_effects_requested_pairs.parquet, with q-values
@@ -764,6 +766,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--max-chunk-size", type=int, default=50000, help="PerTurbo v2 max chunk cell count")
     parser.add_argument("--perturbation-chunk-size", type=int, default=0, help="PerTurbo v2 perturbation chunk size")
+    parser.add_argument(
+        "--gene-chunk-size",
+        type=int,
+        default=0,
+        help=(
+            "Fit stage two in blocks of this many genes. 0 keeps the whole panel on "
+            "device at once, which is what a large card can afford; a 40 GB card "
+            "running a transcriptome-wide panel cannot, and asks for an allocation "
+            "it will not get. Genes are independent given the baseline, so blocking "
+            "changes the memory profile and not the result."
+        ),
+    )
     parser.add_argument("--size-factor-mode", default="observed", choices=["infer", "observed", "none"])
     parser.add_argument("--likelihood", default="negbin", choices=["nb", "negbin", "censored_nb", "lognormal_nb", "mixture_nb"])
     parser.add_argument("--prior", default="normal", choices=["normal", "cauchy"])
