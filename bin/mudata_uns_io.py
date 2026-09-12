@@ -5,9 +5,16 @@ from __future__ import annotations
 
 from polars_compat import lazy_schema
 
+import os
 from pathlib import Path
 import shutil
+import time
 from typing import Iterable
+
+# HDF5 takes POSIX locks when it opens a file for writing, and the cluster's
+# parallel filesystem does not always honour them. Set before h5py loads, which
+# is when the library reads this.
+os.environ.setdefault("HDF5_USE_FILE_LOCKING", "FALSE")
 
 import h5py
 import numpy as np
@@ -16,6 +23,26 @@ try:
     from anndata.io import write_elem
 except ImportError:  # older anndata
     from anndata.experimental import write_elem
+
+
+def _open_for_patch(path: Path, attempts: int = 5) -> "h5py.File":
+    """Open ``path`` for modification, retrying a transient filesystem error.
+
+    Opening read-write makes HDF5 write the superblock immediately. On the
+    cluster's parallel filesystem that write has come back EIO moments after a
+    successful copy of the same file, which is a fault of the storage layer
+    rather than of the file. Retrying with a short backoff clears it; a genuine
+    problem still raises, just a few seconds later.
+    """
+    delay = 1.0
+    for attempt in range(1, attempts + 1):
+        try:
+            return h5py.File(path, "r+")
+        except OSError:
+            if attempt == attempts:
+                raise
+            time.sleep(delay)
+            delay *= 2
 
 
 def write_uns_patch(
@@ -38,7 +65,7 @@ def write_uns_patch(
     if input_path.resolve() != output_path.resolve():
         shutil.copy(input_path, output_path)
 
-    with h5py.File(output_path, "r+") as f:
+    with _open_for_patch(output_path) as f:
         # Patch individual children rather than reading and rewriting the whole
         # /uns mapping.  In global screens a single result table can contain
         # >100M rows; reconstructing the full mapping multiplies memory use and
