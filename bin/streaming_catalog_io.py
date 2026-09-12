@@ -56,7 +56,29 @@ def _normalize_join_keys(local_scan, global_scan, join_columns, pl):
     return local_scan, global_scan
 
 
-def try_write_enriched_parquet_catalog(
+def try_write_enriched_parquet_catalog(**kwargs) -> bool:
+    """Try the Polars fast path, and say so plainly when it cannot be taken.
+
+    Every ``return False`` here means "the caller should build this catalog the
+    ordinary way", and the pandas path is the reference implementation, so
+    falling back is always correct and only ever slower. A Polars limitation on
+    the input -- the Gasperini run met ``not implemented: reading dictionaries
+    of type (Int32, Null)``, an all-null column -- is that same situation
+    arriving as an exception rather than as a schema check, so it is handled the
+    same way instead of failing the process.
+    """
+    try:
+        return _write_enriched_parquet_catalog(**kwargs)
+    except Exception as exc:  # noqa: BLE001 - any Polars limitation falls back
+        print(
+            "Streaming enriched-Parquet catalog unavailable, using the pandas "
+            f"path instead: {type(exc).__name__}: {exc}",
+            flush=True,
+        )
+        return False
+
+
+def _write_enriched_parquet_catalog(
     *,
     local_path: str | Path,
     global_path: str | Path,
