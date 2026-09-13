@@ -1,5 +1,14 @@
 #!/usr/bin/env python
-"""Run PerTurbo v2 while preserving CRISPR_Pipeline's inference outputs."""
+"""Run PerTurbo v2 while preserving CRISPR_Pipeline's inference outputs.
+
+The score-based conditional randomization test builds on SCEPTRE (Barry et al.,
+2024, https://doi.org/10.1186/s13059-024-03254-2) and score-resampling work
+(Barry et al., 2025, https://arxiv.org/abs/2501.03530). Its Bernoulli saddlepoint
+approximation builds on spaCRT (Niu et al., https://arxiv.org/abs/2407.08911).
+PerTurbo provides the GPU implementation and integration with Bayesian effect
+estimation. The CRT and SPA methodology is credited to the cited prior work;
+saddlepoint tail probabilities are approximate.
+"""
 
 from __future__ import annotations
 
@@ -736,7 +745,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pairs-mudata", default=None, help="MuData carrying uns['pairs_to_test'] for the local tables (default: --input)")
     parser.add_argument("--local-per-element-output", default=None, help="Also write the requested-pairs per-element table here")
     parser.add_argument("--local-per-guide-output", default=None, help="Also write the requested-pairs per-guide table here")
-    parser.add_argument("--crt", action=argparse.BooleanOptionalAction, default=True, help="Run the conditional randomization test (exact saddlepoint, no resampling)")
+    parser.add_argument("--crt", action=argparse.BooleanOptionalAction, default=True, help="Run the conditional randomization test (saddlepoint approximation, no resampling)")
     parser.add_argument(
         "--crt-pool",
         default="from-moi",
