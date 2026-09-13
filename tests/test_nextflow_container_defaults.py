@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -20,8 +21,17 @@ def test_specialized_processes_retain_their_container_overrides():
     assert "container = { params.containers.cleanser }" in config
     assert "container = { params.containers.sceptre }" in config
     assert "container = { params.containers.perturbo }" in config
-    assert "perturbo = 'ghcr.io/pinellolab/perturbo:sha-a9d696e'" in config
     assert "crispr_pipeline/perturbo:v2-cis-mask" not in config
+
+
+def test_perturbo_is_pinned_by_digest():
+    """:v2-dev is republished on every push to v2-port, so a tag pin can change
+    under a running test. Assert the invariant, not a literal that goes stale."""
+    config = (REPO_ROOT / "nextflow.config").read_text()
+    pin = re.search(r"perturbo\s*=\s*'([^']+)'", config).group(1)
+
+    assert pin.startswith("ghcr.io/pinellolab/perturbo@sha256:"), pin
+    assert len(pin.split("sha256:")[1]) == 64, pin
 
 
 def test_benchmark_assets_are_resolved_from_the_pipeline_checkout():

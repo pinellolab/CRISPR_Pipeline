@@ -301,8 +301,8 @@ containers {
    base     = 'ghcr.io/pinellolab/crispr_pipeline/conda-docker'
    cleanser = 'ghcr.io/gersbachlab-bioinformatics/cleanser:1.2.1'
    sceptre  = 'sjiang9/sceptre-igvf:0.1'
-   // Native --pairs-to-test restricts local/cis; global/trans remains unmasked.
-   perturbo = 'ghcr.io/pinellolab/perturbo:sha-a9d696e'
+   // Digest-pinned; see nextflow.config for the current value.
+   perturbo = 'ghcr.io/pinellolab/perturbo@sha256:...'
 }
 ```
 
