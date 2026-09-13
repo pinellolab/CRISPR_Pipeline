@@ -6,8 +6,7 @@ The score-based conditional randomization test builds on SCEPTRE (Barry et al.,
 (Barry et al., 2025, https://arxiv.org/abs/2501.03530). Its Bernoulli saddlepoint
 approximation builds on spaCRT (Niu et al., https://arxiv.org/abs/2407.08911).
 PerTurbo provides the GPU implementation and integration with Bayesian effect
-estimation. The CRT and SPA methodology is credited to the cited prior work;
-saddlepoint tail probabilities are approximate.
+estimation.
 """
 
 from __future__ import annotations
