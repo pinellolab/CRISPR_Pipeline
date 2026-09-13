@@ -228,13 +228,21 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
   # elements under the complement contrast. Collapse the buckets only when we are
   # about to use the non-targeting cells as the control group.
   if (observed_low_moi) {
-    is_nt <- grepl("non-targeting", as.character(grna_target_data_frame$grna_target))
+    # as.character first: when this column arrives as a factor, assigning a level
+    # it does not have yields NA silently, and SCEPTRE then rejects the table for
+    # containing NA rather than for the label being wrong. The Replogle run lost a
+    # whole chunk to that.
+    grna_target_data_frame$grna_target <- as.character(grna_target_data_frame$grna_target)
+    is_nt <- grepl("non-targeting", grna_target_data_frame$grna_target)
     if (any(is_nt)) {
       grna_target_data_frame$grna_target[is_nt] <- "non-targeting"
       message(sprintf(
         "Low-MOI screen: collapsed %d non-targeting gRNA(s) into SCEPTRE's reserved 'non-targeting' group so they can serve as the control cells.",
         sum(is_nt)
       ))
+    }
+    if (anyNA(grna_target_data_frame$grna_target) || anyNA(grna_target_data_frame$grna_id)) {
+      stop("Collapsing the non-targeting groups produced NA in grna_id/grna_target.")
     }
   }
 
