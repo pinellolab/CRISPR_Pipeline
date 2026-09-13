@@ -8,13 +8,7 @@ from polars_compat import lazy_schema
 import os
 from pathlib import Path
 import shutil
-import time
 from typing import Iterable
-
-# HDF5 takes POSIX locks when it opens a file for writing, and the cluster's
-# parallel filesystem does not always honour them. Set before h5py loads, which
-# is when the library reads this.
-os.environ.setdefault("HDF5_USE_FILE_LOCKING", "FALSE")
 
 import h5py
 import numpy as np
@@ -25,24 +19,23 @@ except ImportError:  # older anndata
     from anndata.experimental import write_elem
 
 
-def _open_for_patch(path: Path, attempts: int = 5) -> "h5py.File":
-    """Open ``path`` for modification, retrying a transient filesystem error.
+def _copy_durably(src: Path, dst: Path) -> None:
+    """Copy ``src`` to ``dst`` and make sure the bytes have reached the storage.
 
-    Opening read-write makes HDF5 write the superblock immediately. On the
-    cluster's parallel filesystem that write has come back EIO moments after a
-    successful copy of the same file, which is a fault of the storage layer
-    rather than of the file. Retrying with a short backoff clears it; a genuine
-    problem still raises, just a few seconds later.
+    ``shutil.copy`` returns without fsync. On the cluster's parallel filesystem
+    the very next ``h5py.File(dst, "r+")`` then fails EIO on the 96-byte
+    superblock write at offset 512, reproducibly -- and an earlier version of
+    this code retried that open, which turned the hard failure into a file whose
+    ``/mod/gene/X`` was silently corrupt, with a different checksum each run.
+    Flushing and fsyncing the copy makes the reopen succeed and the matrix read
+    back intact.
     """
-    delay = 1.0
-    for attempt in range(1, attempts + 1):
-        try:
-            return h5py.File(path, "r+")
-        except OSError:
-            if attempt == attempts:
-                raise
-            time.sleep(delay)
-            delay *= 2
+    with open(src, "rb") as fin, open(dst, "wb") as fout:
+        shutil.copyfileobj(fin, fout, 8 * 1024 * 1024)
+        fout.flush()
+        os.fsync(fout.fileno())
+    if os.path.getsize(dst) != os.path.getsize(src):
+        raise OSError(f"short copy: {dst} is not the size of {src}")
 
 
 def write_uns_patch(
@@ -63,9 +56,9 @@ def write_uns_patch(
     input_path = Path(input_path)
     output_path = Path(output_path)
     if input_path.resolve() != output_path.resolve():
-        shutil.copy(input_path, output_path)
+        _copy_durably(input_path, output_path)
 
-    with _open_for_patch(output_path) as f:
+    with h5py.File(output_path, "r+") as f:
         # Patch individual children rather than reading and rewriting the whole
         # /uns mapping.  In global screens a single result table can contain
         # >100M rows; reconstructing the full mapping multiplies memory use and
