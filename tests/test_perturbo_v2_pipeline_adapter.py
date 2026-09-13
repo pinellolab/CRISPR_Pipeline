@@ -92,7 +92,7 @@ def test_prepare_mudata_adds_v2_metadata_and_control_guide_names(tmp_path):
     assert guide_name_map["non-targeting|nt1"] == "nt1"
 
 
-def test_build_native_pairs_to_test_uses_requested_genes_and_controls(tmp_path):
+def test_build_native_pairs_to_test_uses_only_requested_pairs(tmp_path):
     input_path = tmp_path / "input.h5mu"
     prepared_path = tmp_path / "prepared.h5mu"
     _make_mudata().write(input_path)
@@ -116,8 +116,14 @@ def test_build_native_pairs_to_test_uses_requested_genes_and_controls(tmp_path):
     assert set(element_pairs["gene"]) == {"GENE1", "GENE2"}
     assert set(guide_pairs["gene"]) == {"GENE1", "GENE2"}
     assert {"gA", "gB", "non-targeting|nt1"}.issubset(set(guide_pairs["element"]))
+    # Exactly the requested pairs -- the fixture asks for gA->GENE1, gB->GENE2
+    # and nt1->GENE1. Control elements are deliberately not crossed with every
+    # tested gene: that augmentation used to dominate this table's
+    # Benjamini-Hochberg family (2,623,521 of 2,714,942 rows on Replogle) and
+    # made the local q-values far more conservative than SCEPTRE's over the same
+    # hypotheses. Controls are still tested, in the transcriptome-wide table.
     control_pairs = guide_pairs[guide_pairs["element"] == "non-targeting|nt1"]
-    assert set(control_pairs["gene"]) == {"GENE1", "GENE2"}
+    assert set(control_pairs["gene"]) == {"GENE1"}
 
 
 def test_convert_element_effects_maps_metadata_and_filters_pairs(tmp_path):
@@ -216,6 +222,9 @@ def test_run_perturbo_uses_only_native_pairs_to_test_flag(tmp_path, monkeypatch,
             "--no-save-model-params",
         ]
     )
+    # main() resolves the pool before it reaches _run_perturbo; these tests call
+    # _run_perturbo directly, so do what main() does rather than hardcode a value.
+    args.resolved_crt_pool = adapter._resolve_crt_pool(args.crt_pool, None)
     adapter._run_perturbo(
         prepared_path,
         tmp_path / "fit",
