@@ -57,7 +57,22 @@ def _with_merge_key_columns(df: pd.DataFrame, key_cols):
 def _bh_adjust(pvalues: pd.Series) -> pd.Series:
     p = pd.to_numeric(pvalues, errors="coerce")
     out = pd.Series(np.nan, index=p.index, dtype=float)
-    valid = p.notna()
+    valid = p.notna() & np.isfinite(p)
+    # scipy's false_discovery_control rejects the whole array if any element
+    # leaves [0, 1]. SCEPTRE's parametric fit overshoots slightly on a handful
+    # of pairs -- three of 97,786 at up to 1.0058 on the Replogle essential
+    # screen -- which is numerical, not a wrong answer: a p above 1 is
+    # non-significant either way. Clip into range and say how many, so this
+    # stays visible rather than becoming a silent coercion.
+    _out_of_range = int((valid & ((p < 0) | (p > 1))).sum())
+    if _out_of_range:
+        _worst = float(max((p[valid] - 1).max(), (-p[valid]).max(), 0.0))
+        print(
+            f"  clipping {_out_of_range} p-value(s) outside [0, 1] into range "
+            f"(largest excursion {_worst:.3g}) before BH",
+            flush=True,
+        )
+        p = p.clip(lower=0.0, upper=1.0)
     if not valid.any():
         return out
 
