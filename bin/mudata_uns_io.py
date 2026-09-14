@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+from polars_compat import lazy_schema
+
+import os
 from pathlib import Path
 import shutil
 from typing import Iterable
@@ -16,11 +19,31 @@ except ImportError:  # older anndata
     from anndata.experimental import write_elem
 
 
+def _copy_durably(src: Path, dst: Path) -> None:
+    """Copy ``src`` to ``dst`` and make sure the bytes have reached the storage.
+
+    ``shutil.copy`` returns without fsync. On the cluster's parallel filesystem
+    the very next ``h5py.File(dst, "r+")`` then fails EIO on the 96-byte
+    superblock write at offset 512, reproducibly -- and an earlier version of
+    this code retried that open, which turned the hard failure into a file whose
+    ``/mod/gene/X`` was silently corrupt, with a different checksum each run.
+    Flushing and fsyncing the copy makes the reopen succeed and the matrix read
+    back intact.
+    """
+    with open(src, "rb") as fin, open(dst, "wb") as fout:
+        shutil.copyfileobj(fin, fout, 8 * 1024 * 1024)
+        fout.flush()
+        os.fsync(fout.fileno())
+    if os.path.getsize(dst) != os.path.getsize(src):
+        raise OSError(f"short copy: {dst} is not the size of {src}")
+
+
 def write_uns_patch(
     input_path: str | Path,
     output_path: str | Path,
     updates: dict | None = None,
     deletes: Iterable[str] = (),
+    aliases: dict[str, str] | None = None,
 ) -> None:
     """Copy ``input_path`` to ``output_path``, then add/overwrite ``updates``
     and remove ``deletes`` from the file's top-level /uns group.
@@ -33,7 +56,7 @@ def write_uns_patch(
     input_path = Path(input_path)
     output_path = Path(output_path)
     if input_path.resolve() != output_path.resolve():
-        shutil.copy(input_path, output_path)
+        _copy_durably(input_path, output_path)
 
     with h5py.File(output_path, "r+") as f:
         # Patch individual children rather than reading and rewriting the whole
@@ -50,6 +73,17 @@ def write_uns_patch(
             if key in uns:
                 del uns[key]
             write_elem(uns, key, value)
+        # An alias is an HDF5 hard link, not a second copy: the two names point at
+        # one set of datasets, so a consumer reading either sees the same table and
+        # the file does not carry it twice. A screen-scale result table is gigabytes,
+        # and the generic keys are exactly the same frames as the analysis-qualified
+        # ones, so writing both cost several gigabytes of pure duplication.
+        for alias, target in (aliases or {}).items():
+            if target not in uns:
+                raise KeyError(f"cannot alias {alias!r} to {target!r}: {target!r} is not in /uns")
+            if alias in uns:
+                del uns[alias]
+            uns[alias] = uns[target]
 
 
 def _categorical_code_dtype(category_count: int) -> np.dtype:
@@ -82,7 +116,7 @@ def write_parquet_dataframe_to_uns(
     h5mu_path = Path(h5mu_path)
     parquet_path = Path(parquet_path)
     scan = pl.scan_parquet(parquet_path)
-    schema = scan.collect_schema()
+    schema = lazy_schema(scan)
     column_names = schema.names()
     row_count = (
         scan.select(pl.len().alias("rows"))

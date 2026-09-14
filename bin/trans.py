@@ -733,6 +733,9 @@ def plot_roc_pr_curves(
     outdir : str
         Output directory.
     prefix : str
+    export_full_results : bool
+        Write the complete guide-by-gene TSV in addition to compact dashboard
+        summaries. Disabled by default to avoid duplicating multi-gigabyte data.
         Filename prefix.
     """
     if not curves:
@@ -977,6 +980,7 @@ def run_trans_qc(
     non_targeting_name: str = "non-targeting",
     n_background: int = 10000,
     prefix: str = "global_analysis",
+    export_full_results: bool = False,
 ) -> None:
     """
     Run trans-regulatory inference QC.
@@ -1170,10 +1174,18 @@ def run_trans_qc(
     ]
     output_cols = [c for c in output_cols if c in trans_results_annotated.columns]
 
-    # Save all results
-    all_results_path = os.path.join(outdir, f"{prefix}_results.tsv")
-    trans_results_annotated[output_cols].to_csv(all_results_path, sep="\t", index=False)
-    logger.info(f"Saved {len(trans_results_annotated):,} trans results to {all_results_path}")
+    # A complete guide-by-gene table can contain tens of millions of rows and is
+    # already preserved in the inference MuData/parquet outputs.  Do not duplicate
+    # it in the dashboard bundle unless a user explicitly requests the export.
+    if export_full_results:
+        all_results_path = os.path.join(outdir, f"{prefix}_results.tsv")
+        trans_results_annotated[output_cols].to_csv(all_results_path, sep="\t", index=False)
+        logger.info(f"Saved {len(trans_results_annotated):,} trans results to {all_results_path}")
+    else:
+        logger.info(
+            "Skipped full trans-results TSV (%s rows); use --export-full-results to create it",
+            f"{len(trans_results_annotated):,}",
+        )
 
     # Save only significant results (smaller file for quick access)
     sig_results = trans_results_annotated[trans_results_annotated["significant"]].copy()
@@ -1272,6 +1284,13 @@ def parse_args() -> argparse.Namespace:
         "--prefix", default="global_analysis",
         help="Prefix for output filenames (default: 'global_analysis')."
     )
+    parser.add_argument(
+        "--export-full-results", action="store_true",
+        help=(
+            "Also export the complete guide-by-gene TSV. Disabled by default because "
+            "the table can be many gigabytes and duplicates pipeline inference outputs."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1290,4 +1309,5 @@ if __name__ == "__main__":
         non_targeting_name=args.non_targeting_label,
         n_background=args.n_background,
         prefix=args.prefix,
+        export_full_results=args.export_full_results,
     )

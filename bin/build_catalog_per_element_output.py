@@ -24,6 +24,16 @@ OUTPUT_COLUMNS = [
     "sceptre_q_value",
     "sceptre_fc_se",
     "sceptre_negLog10p",
+    # PerTurbo over the same requested pairs SCEPTRE was corrected over, so the two
+    # cis columns are directly comparable, and PerTurbo's transcriptome-wide columns
+    # beside them. Comparing perturbo_q_value with sceptre_q_value is comparing a
+    # correction over every pair in the screen with one over the requested pairs
+    # alone; perturbo_cis_q_value is the like-for-like number.
+    "perturbo_cis_log2_fc",
+    "perturbo_cis_p_value",
+    "perturbo_cis_q_value",
+    "perturbo_cis_fc_se",
+    "perturbo_cis_negLog10p",
     "perturbo_log2_fc",
     "perturbo_p_value",
     "perturbo_q_value",
@@ -108,7 +118,22 @@ def _bh_adjust(pvalues: pd.Series) -> pd.Series:
     """
     p = pd.to_numeric(pvalues, errors="coerce")
     out = pd.Series(np.nan, index=p.index, dtype=float)
-    valid = p.notna()
+    valid = p.notna() & np.isfinite(p)
+    # scipy's false_discovery_control rejects the whole array if any element
+    # leaves [0, 1]. SCEPTRE's parametric fit overshoots slightly on a handful
+    # of pairs -- three of 97,786 at up to 1.0058 on the Replogle essential
+    # screen -- which is numerical, not a wrong answer: a p above 1 is
+    # non-significant either way. Clip into range and say how many, so this
+    # stays visible rather than becoming a silent coercion.
+    _out_of_range = int((valid & ((p < 0) | (p > 1))).sum())
+    if _out_of_range:
+        _worst = float(max((p[valid] - 1).max(), (-p[valid]).max(), 0.0))
+        print(
+            f"  clipping {_out_of_range} p-value(s) outside [0, 1] into range "
+            f"(largest excursion {_worst:.3g}) before BH",
+            flush=True,
+        )
+        p = p.clip(lower=0.0, upper=1.0)
     if not valid.any():
         return out
 
@@ -276,7 +301,17 @@ def create_catalog_per_element(
         global_results, ["perturbo_fc_se", "log2_fc_std"]
     )
 
+    # mergedResults already put PerTurbo's cis columns in the local table; they were
+    # being dropped, which left the catalog with no comparable pair of q-values.
+    cis_perturbo_fc_col = _first_existing_column_optional(local_results, ["perturbo_log2_fc"])
+    cis_perturbo_p_col = _first_existing_column_optional(local_results, ["perturbo_p_value"])
+    cis_perturbo_q_col = _first_existing_column_optional(local_results, ["perturbo_q_value"])
+    cis_perturbo_fc_se_col = _first_existing_column_optional(local_results, ["perturbo_fc_se"])
+
     cis_metric_cols = [cis_fc_col, cis_p_col]
+    for optional in (cis_perturbo_fc_col, cis_perturbo_p_col, cis_perturbo_q_col, cis_perturbo_fc_se_col):
+        if optional is not None:
+            cis_metric_cols.append(optional)
     if cis_q_col is not None:
         cis_metric_cols.append(cis_q_col)
     if cis_fc_se_col is not None:
@@ -311,6 +346,30 @@ def create_catalog_per_element(
         )
     if "sceptre_fc_se" not in cis_subset.columns:
         cis_subset["sceptre_fc_se"] = np.nan
+
+    cis_perturbo_rename = {}
+    if cis_perturbo_fc_col is not None:
+        cis_perturbo_rename[cis_perturbo_fc_col] = "perturbo_cis_log2_fc"
+    if cis_perturbo_p_col is not None:
+        cis_perturbo_rename[cis_perturbo_p_col] = "_perturbo_cis_p_value"
+    if cis_perturbo_q_col is not None:
+        cis_perturbo_rename[cis_perturbo_q_col] = "perturbo_cis_q_value"
+    if cis_perturbo_fc_se_col is not None:
+        cis_perturbo_rename[cis_perturbo_fc_se_col] = "perturbo_cis_fc_se"
+    cis_subset = cis_subset.rename(columns=cis_perturbo_rename)
+    if "_perturbo_cis_p_value" in cis_subset.columns:
+        computed_cis_q = _bh_adjust(cis_subset["_perturbo_cis_p_value"])
+        if "perturbo_cis_q_value" not in cis_subset.columns:
+            cis_subset["perturbo_cis_q_value"] = computed_cis_q
+        else:
+            cis_subset["perturbo_cis_q_value"] = cis_subset["perturbo_cis_q_value"].fillna(computed_cis_q)
+    else:
+        # No PerTurbo cis columns upstream: the catalog still has the schema, empty.
+        cis_subset["_perturbo_cis_p_value"] = np.nan
+        cis_subset["perturbo_cis_q_value"] = np.nan
+    for column in ("perturbo_cis_log2_fc", "perturbo_cis_fc_se"):
+        if column not in cis_subset.columns:
+            cis_subset[column] = np.nan
 
     trans_rename_cols = {
         trans_fc_col: "perturbo_log2_fc",
@@ -349,6 +408,8 @@ def create_catalog_per_element(
         merged["_perturbo_p_value"], pvalue_floor
     )
     merged["perturbo_p_value"] = merged["_perturbo_p_value"]
+    merged["perturbo_cis_negLog10p"] = _neg_log10(merged["_perturbo_cis_p_value"], pvalue_floor)
+    merged["perturbo_cis_p_value"] = merged["_perturbo_cis_p_value"]
 
     merged["element_name"] = merged["intended_target_name"]
     merged["element_id"] = merged["element_name"]

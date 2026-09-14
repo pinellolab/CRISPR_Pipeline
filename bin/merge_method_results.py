@@ -3,6 +3,7 @@
 import argparse
 import pandas as pd
 import mudata as mu
+from mudata_uns_io import write_uns_patch
 import numpy as np
 from scipy.stats import false_discovery_control
 from analysis_output_formatting import (
@@ -30,12 +31,25 @@ def _build_merge_keys(sceptre_df: pd.DataFrame, perturbo_df: pd.DataFrame):
     return ELEMENT_BASE_KEYS, False
 
 
+def _merge_key_series(values: pd.Series, col: str) -> pd.Series:
+    """The key as text, with genomic coordinates normalised first.
+
+    ``read_csv`` types a coordinate column as int64 when it is complete and float64
+    when a single value is missing, so the same position was "100" on one side and
+    "100.0" on the other and the outer merge matched nothing. Coordinates go
+    through a nullable integer first; every other key is compared as written.
+    """
+    if col.endswith(("_start", "_end")):
+        values = pd.to_numeric(values, errors="coerce").astype("Int64")
+    return values.astype("string").fillna("__NA__")
+
+
 def _with_merge_key_columns(df: pd.DataFrame, key_cols):
     out = df.copy()
     merge_cols = []
     for col in key_cols:
         merge_col = f"__merge_{col}"
-        out[merge_col] = out[col].astype("string").fillna("__NA__")
+        out[merge_col] = _merge_key_series(out[col], col)
         merge_cols.append(merge_col)
     return out, merge_cols
 
@@ -43,7 +57,22 @@ def _with_merge_key_columns(df: pd.DataFrame, key_cols):
 def _bh_adjust(pvalues: pd.Series) -> pd.Series:
     p = pd.to_numeric(pvalues, errors="coerce")
     out = pd.Series(np.nan, index=p.index, dtype=float)
-    valid = p.notna()
+    valid = p.notna() & np.isfinite(p)
+    # scipy's false_discovery_control rejects the whole array if any element
+    # leaves [0, 1]. SCEPTRE's parametric fit overshoots slightly on a handful
+    # of pairs -- three of 97,786 at up to 1.0058 on the Replogle essential
+    # screen -- which is numerical, not a wrong answer: a p above 1 is
+    # non-significant either way. Clip into range and say how many, so this
+    # stays visible rather than becoming a silent coercion.
+    _out_of_range = int((valid & ((p < 0) | (p > 1))).sum())
+    if _out_of_range:
+        _worst = float(max((p[valid] - 1).max(), (-p[valid]).max(), 0.0))
+        print(
+            f"  clipping {_out_of_range} p-value(s) outside [0, 1] into range "
+            f"(largest excursion {_worst:.3g}) before BH",
+            flush=True,
+        )
+        p = p.clip(lower=0.0, upper=1.0)
     if not valid.any():
         return out
 
@@ -111,7 +140,7 @@ def _existing_columns(df: pd.DataFrame, columns):
     return [col for col in columns if col in df.columns]
 
 
-def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_guide, perturbo_per_element, base_mudata_path):
+def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_guide, perturbo_per_element, base_mudata_path, write_mudata=False):
     """
     Merge SCEPTRE and PerTurbo results into a single MuData object.
     
@@ -250,23 +279,34 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
     merged_element_df = merged_element_df[preferred_order]
     
     # Load base mudata for structure
-    base_mdata = mu.read_h5mu(base_mudata_path)
+    # Backed: the annotations come from the modalities' var frames, so there is no
+    # reason to pull a screen-scale count matrix through memory at this point.
+    base_mdata = mu.read_h5mu(base_mudata_path, backed="r")
 
     merged_guide_df = format_guide_output(merged_guide_df, base_mdata)
     merged_element_df = format_element_output(merged_element_df, base_mdata)
     
-    # Store merged results in mudata
-    base_mdata.uns['per_guide_results'] = make_h5mu_safe_dataframe(merged_guide_df)
-    base_mdata.uns['per_element_results'] = make_h5mu_safe_dataframe(merged_element_df)
-    
-    # Write outputs
-    print("Writing merged results...")
-    base_mdata.write("inference_mudata.h5mu")
+    # The MuData is optional here: mergeMudata assembles the published one from these
+    # tables at the end of the pipeline, so another copy of the matrices in between
+    # costs tens of gigabytes for nothing. When it is wanted, patch the input rather
+    # than rebuilding it.
+    if write_mudata:
+        print("Writing the merged tables into a MuData copy...")
+        write_uns_patch(
+            base_mudata_path,
+            "inference_mudata.h5mu",
+            updates={
+                'per_guide_results': make_h5mu_safe_dataframe(merged_guide_df),
+                'per_element_results': make_h5mu_safe_dataframe(merged_element_df),
+            },
+        )
+    else:
+        print("Skipping inference_mudata.h5mu; the merged tables are the output.")
     merged_guide_df.to_csv("per_guide_output.tsv.gz", sep='\t', index=False, compression='gzip')
     merged_element_df.to_csv("per_element_output.tsv.gz", sep='\t', index=False, compression='gzip')
     
     print("Successfully merged results from both methods!")
-    return base_mdata
+    return merged_guide_df, merged_element_df
 
 def main():
     parser = argparse.ArgumentParser(description='Merge SCEPTRE and PerTurbo results')
@@ -276,6 +316,8 @@ def main():
     parser.add_argument('--perturbo_per_element', required=True, help='Path to PerTurbo per_element_output (.tsv.gz or .parquet)')
     parser.add_argument('--base_mudata', required=True, help='Path to base mudata file for structure')
     
+    parser.add_argument('--write_mudata', action='store_true',
+                        help='Also write inference_mudata.h5mu. Off by default: mergeMudata builds the published one from these tables.')
     args = parser.parse_args()
     
     merge_method_results(
@@ -283,7 +325,8 @@ def main():
         args.sceptre_per_element, 
         args.perturbo_per_guide,
         args.perturbo_per_element,
-        args.base_mudata
+        args.base_mudata,
+        write_mudata=args.write_mudata,
     )
 
 if __name__ == "__main__":

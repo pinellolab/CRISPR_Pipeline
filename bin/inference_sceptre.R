@@ -136,7 +136,7 @@ prepare_extra_covariates <- function(mudata, remove_collinear_covariates = TRUE)
 }
 convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE) {
   # extract information from MuData
-  moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
+  declared_moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
   if (is.null(SummarizedExperiment::assayNames(mudata[["gene"]]))) {
     SummarizedExperiment::assayNames(mudata[["gene"]]) <- "counts"
   } else {
@@ -189,7 +189,28 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
     ))
   }
 
-  if (any(guide_row_data$intended_target_name == "non-targeting", na.rm = TRUE)) {
+  # The screen's own assignments decide the MOI, not the declared setting. A cell
+  # carrying at most one gRNA is a low-MOI cell whatever the samplesheet says, and
+  # only a low-MOI object can be compared against the non-targeting cells, which is
+  # the contrast PerTurbo's low-MOI path uses. Getting this wrong silently forces
+  # the complement contrast and makes the two methods answer different questions.
+  # The same rule PerTurbo's adapter applies: a screen whose cells each carry at
+  # most one gRNA is low-MOI whatever was declared; otherwise the declared setting
+  # stands. Under a declared "low" with a few multi-gRNA cells, SCEPTRE's low-MOI
+  # QC sets those cells aside, exactly as PerTurbo's control-anchored pool does.
+  guides_per_cell <- Matrix::colSums(grna_matrix > 0)
+  observed_singleton <- length(guides_per_cell) > 0 && max(guides_per_cell) <= 1
+  declared_low <- !is.null(declared_moi) && tolower(trimws(as.character(declared_moi)[1])) == "low"
+  observed_low_moi <- observed_singleton || declared_low
+  moi <- if (observed_low_moi) "low" else "high"
+  message(sprintf(
+    "MOI: declared '%s', observed max %s gRNA(s) per cell (%d of %d cells carry more than one) -> using '%s'.",
+    if (is.null(declared_moi)) "unset" else as.character(declared_moi),
+    if (length(guides_per_cell)) max(guides_per_cell) else NA,
+    sum(guides_per_cell > 1), length(guides_per_cell), moi
+  ))
+
+  if (!observed_low_moi && any(guide_row_data$intended_target_name == "non-targeting", na.rm = TRUE)) {
     stop("Found guides assigned to exact 'non-targeting'. Expected bucketed non-targeting groups (e.g., non-targeting|1).")
   }
 
@@ -199,6 +220,31 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 
   grna_target_data_frame <- guide_row_data |>
     dplyr::transmute(grna_id = grna_id, grna_target = intended_target_key)
+
+  # For the non-targeting-cell contrast, SCEPTRE requires the control gRNAs to carry
+  # the reserved target label "non-targeting" (check_set_analysis_parameters), and it
+  # refuses that label inside the discovery pairs. The pipeline otherwise buckets the
+  # controls as non-targeting|1, |2, ... so the buckets can be tested as pseudo-
+  # elements under the complement contrast. Collapse the buckets only when we are
+  # about to use the non-targeting cells as the control group.
+  if (observed_low_moi) {
+    # as.character first: when this column arrives as a factor, assigning a level
+    # it does not have yields NA silently, and SCEPTRE then rejects the table for
+    # containing NA rather than for the label being wrong. The Replogle run lost a
+    # whole chunk to that.
+    grna_target_data_frame$grna_target <- as.character(grna_target_data_frame$grna_target)
+    is_nt <- grepl("non-targeting", grna_target_data_frame$grna_target)
+    if (any(is_nt)) {
+      grna_target_data_frame$grna_target[is_nt] <- "non-targeting"
+      message(sprintf(
+        "Low-MOI screen: collapsed %d non-targeting gRNA(s) into SCEPTRE's reserved 'non-targeting' group so they can serve as the control cells.",
+        sum(is_nt)
+      ))
+    }
+    if (anyNA(grna_target_data_frame$grna_target) || anyNA(grna_target_data_frame$grna_id)) {
+      stop("Collapsing the non-targeting groups produced NA in grna_id/grna_target.")
+    }
+  }
 
   # assemble information into sceptre object
   sceptre_object <- sceptre::import_data(
@@ -235,10 +281,45 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
 
   args_list <- list(...)
   requested_control_group <- if ("control_group" %in% names(args_list)) as.character(args_list$control_group)[1] else NA_character_
-  if (!is.na(requested_control_group) && requested_control_group != "complement") {
-    warning(sprintf("Overriding control_group='%s' with 'complement' for SCEPTRE DE analysis.", requested_control_group))
+
+  # Which cells a perturbation is compared against. "nt_cells" contrasts it with the
+  # non-targeting cells, which is what PerTurbo's low-MOI path does, so the two
+  # methods answer the same question; "complement" contrasts it with every other
+  # cell, which is the only option SCEPTRE offers at high MOI. The screen decides:
+  # nt_cells needs a low-MOI object (one gRNA per cell) and non-targeting cells to
+  # compare against.
+  object_moi <- tryCatch(sceptre_object@low_moi, error = function(e) NA)
+  is_low_moi <- isTRUE(object_moi)
+  # The importer decided the multiplicity from the assignments; the object carries
+  # the answer, and this function has no other view of it.
+  observed_low_moi <- is_low_moi
+  n_nt_cells <- tryCatch({
+    targets <- sceptre_object@grna_target_data_frame
+    nt_ids <- targets$grna_id[grepl("non-targeting", as.character(targets$grna_target))]
+    if (length(nt_ids) == 0) {
+      0L
+    } else {
+      sum(Matrix::colSums(sceptre_object@grna_matrix[nt_ids, , drop = FALSE] > 0) > 0)
+    }
+  }, error = function(e) NA_integer_)
+
+  if (is_low_moi && !is.na(n_nt_cells) && n_nt_cells > 0) {
+    args_list$control_group <- if (!is.na(requested_control_group)) requested_control_group else "nt_cells"
+    message(sprintf(
+      "Low-MOI object with %s non-targeting cells: using control_group='%s'.",
+      format(n_nt_cells, big.mark = ","), args_list$control_group
+    ))
+  } else {
+    if (!is.na(requested_control_group) && requested_control_group != "complement") {
+      warning(sprintf(
+        "Overriding control_group='%s' with 'complement': the object is %s and has %s non-targeting cells.",
+        requested_control_group,
+        if (is_low_moi) "low-MOI" else "high-MOI",
+        if (is.na(n_nt_cells)) "an unknown number of" else format(n_nt_cells, big.mark = ",")
+      ))
+    }
+    args_list$control_group <- "complement"
   }
-  args_list$control_group <- "complement"
 
   # Check if pairs_to_test exists in metadata
   if (!is.null(MultiAssayExperiment::metadata(mudata)$pairs_to_test)) {
@@ -279,6 +360,21 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
       dplyr::filter(!is.na(grna_target), !is.na(response_id)) |>
       dplyr::distinct()
 
+    if (observed_low_moi) {
+      # Under the non-targeting-cell contrast the control gRNAs are the reference
+      # population, and SCEPTRE refuses them as discovery targets ("To test
+      # non-targeting gRNAs against responses, run the calibration check"). Their
+      # buckets were also collapsed above, so a bucketed pair would name a target
+      # that no longer exists. Drop them and say so.
+      is_nt_pair <- grepl("non-targeting", discovery_pairs$grna_target)
+      if (any(is_nt_pair)) {
+        message(sprintf(
+          "Low-MOI screen: dropping %d requested pair(s) on non-targeting pseudo-elements; they are the control population under control_group='nt_cells'.",
+          sum(is_nt_pair)
+        ))
+        discovery_pairs <- discovery_pairs[!is_nt_pair, , drop = FALSE]
+      }
+    }
     args_list[["discovery_pairs"]] <- discovery_pairs
   } else {
     # No pairs_to_test found - use SCEPTRE's construct_trans_pairs for trans analysis
@@ -459,6 +555,15 @@ if (!exists(".sourced_from_test")) {
     try(write.table(results$singleton_test_results, file = "per_guide_output.tsv", sep = "\t", row.names = FALSE, quote = FALSE), silent = TRUE)
   }
 
-  # write the modified MuData (contains union results in metadata as 'test_results')
-  try(MuData::writeH5MU(object = results$mudata, file = "inference_mudata.h5mu"), silent = TRUE)
+  # Write the modified MuData (union results in metadata as 'test_results') only when
+  # asked. Chunked runs call this once per chunk and nothing downstream reads those
+  # files -- sceptre_chunk_merge consumes the two tables -- so on a screen-scale input
+  # it was tens of gigabytes of writes per run, competing for the same filesystem as
+  # the analysis. SCEPTRE_WRITE_MUDATA=true restores it.
+  write_mudata <- tolower(Sys.getenv("SCEPTRE_WRITE_MUDATA", "false")) %in% c("true", "1", "yes")
+  if (write_mudata) {
+    try(MuData::writeH5MU(object = results$mudata, file = "inference_mudata.h5mu"), silent = TRUE)
+  } else {
+    message("Skipping inference_mudata.h5mu (SCEPTRE_WRITE_MUDATA is not set); the result tables are the output.")
+  }
 }

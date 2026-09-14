@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from polars_compat import lazy_schema, JOIN_ORDER_LEFT, UNIQUE_ORDER, SORT_ORDER, SINK_ORDER, SINK_ENGINE
+
 from pathlib import Path
 from typing import Sequence
 
@@ -20,8 +22,8 @@ def _normalize_join_keys(local_scan, global_scan, join_columns, pl):
     Normalize only the key columns and preserve every metric's native dtype.
     """
 
-    local_schema = local_scan.collect_schema()
-    global_schema = global_scan.collect_schema()
+    local_schema = lazy_schema(local_scan)
+    global_schema = lazy_schema(global_scan)
     string_types = (pl.String, pl.Categorical, pl.Enum)
     local_exprs = []
     global_exprs = []
@@ -54,7 +56,29 @@ def _normalize_join_keys(local_scan, global_scan, join_columns, pl):
     return local_scan, global_scan
 
 
-def try_write_enriched_parquet_catalog(
+def try_write_enriched_parquet_catalog(**kwargs) -> bool:
+    """Try the Polars fast path, and say so plainly when it cannot be taken.
+
+    Every ``return False`` here means "the caller should build this catalog the
+    ordinary way", and the pandas path is the reference implementation, so
+    falling back is always correct and only ever slower. A Polars limitation on
+    the input -- the Gasperini run met ``not implemented: reading dictionaries
+    of type (Int32, Null)``, an all-null column -- is that same situation
+    arriving as an exception rather than as a schema check, so it is handled the
+    same way instead of failing the process.
+    """
+    try:
+        return _write_enriched_parquet_catalog(**kwargs)
+    except Exception as exc:  # noqa: BLE001 - any Polars limitation falls back
+        print(
+            "Streaming enriched-Parquet catalog unavailable, using the pandas "
+            f"path instead: {type(exc).__name__}: {exc}",
+            flush=True,
+        )
+        return False
+
+
+def _write_enriched_parquet_catalog(
     *,
     local_path: str | Path,
     global_path: str | Path,
@@ -77,8 +101,8 @@ def try_write_enriched_parquet_catalog(
 
     local_scan = pl.scan_parquet(local_path)
     global_scan = pl.scan_parquet(global_path)
-    local_schema = set(local_scan.collect_schema().names())
-    global_schema = set(global_scan.collect_schema().names())
+    local_schema = set(lazy_schema(local_scan).names())
+    global_schema = set(lazy_schema(global_scan).names())
     local_required = set(join_columns) | set(local_metric_columns)
     global_required = set(join_columns) | set(global_required_columns)
     if not local_required.issubset(local_schema):
@@ -118,13 +142,13 @@ def try_write_enriched_parquet_catalog(
     catalog = catalog.select(output_columns).sort(
         sort_columns,
         nulls_last=True,
-        maintain_order=True,
+        **SORT_ORDER,
     )
     catalog.sink_parquet(
         output_path,
         compression="zstd",
-        maintain_order=True,
-        engine="streaming",
+        **SINK_ORDER,
+        **SINK_ENGINE,
     )
     print(
         "Wrote catalog with the streaming enriched-Parquet fast path: "

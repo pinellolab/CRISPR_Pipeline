@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from polars_compat import lazy_schema, JOIN_ORDER_LEFT, UNIQUE_ORDER, SORT_ORDER, SINK_ORDER, SINK_ENGINE
+
 from pathlib import Path
 from typing import Literal
 
@@ -108,7 +110,7 @@ def _add_gene_names(frame, genes, *, fill_missing: bool):
             "_gene_id_unversioned",
             pl.col("gene_name").alias("_gene_name_unversioned"),
         )
-        .unique("_gene_id_unversioned", keep="first", maintain_order=True)
+        .unique("_gene_id_unversioned", keep="first", **UNIQUE_ORDER)
     )
     gene_name = pl.coalesce("_gene_name_direct", "_gene_name_unversioned")
     if fill_missing:
@@ -121,12 +123,12 @@ def _add_gene_names(frame, genes, *, fill_missing: bool):
             .struct.field("field_0")
             .alias("_gene_id_unversioned")
         )
-        .join(direct.lazy(), on="gene_id", how="left", maintain_order="left")
+        .join(direct.lazy(), on="gene_id", how="left", **JOIN_ORDER_LEFT)
         .join(
             unversioned.lazy(),
             on="_gene_id_unversioned",
             how="left",
-            maintain_order="left",
+            **JOIN_ORDER_LEFT,
         )
         .with_columns(gene_name.alias("gene_name"))
         .drop("_gene_name_direct", "_gene_name_unversioned", "_gene_id_unversioned")
@@ -137,10 +139,10 @@ def _prepare_scan(input_path: str | Path):
     import polars as pl
 
     scan = pl.scan_parquet(input_path)
-    schema = scan.collect_schema()
+    schema = lazy_schema(scan)
     schema_names = set(schema.names())
     scan = scan.rename(_rename_columns(schema_names))
-    renamed_schema = scan.collect_schema()
+    renamed_schema = lazy_schema(scan)
     required = {"gene_id", "perturbo_log2_fc", "perturbo_p_value"}
     missing = required.difference(renamed_schema.names())
     if missing:
@@ -154,27 +156,33 @@ def _prepare_scan(input_path: str | Path):
         )
     if "perturbo_fdr_log10_p_value" in renamed_schema.names():
         scan = scan.drop("perturbo_fdr_log10_p_value")
-        renamed_schema = scan.collect_schema()
+        renamed_schema = lazy_schema(scan)
     if "perturbo_fc_se" not in renamed_schema.names():
         scan = scan.with_columns(
             pl.lit(None, dtype=pl.Float64).alias("perturbo_fc_se")
         )
 
-    # Current PerTurbo Parquet outputs contain complete q-values. Checking the
-    # single q-value column is cheap compared with constructing 211M enriched
-    # rows and protects the existing fill-missing-q semantics.
-    has_missing_q = (
-        scan.select(pl.col("perturbo_q_value").is_null().any())
+    # The pandas path fills a q-value only where the q is missing but the p is
+    # present, so that is the only case this path cannot reproduce. A pair the
+    # conditional randomization test did not evaluate has neither, and
+    # Benjamini-Hochberg preserves the missingness, so such rows are no reason to
+    # abandon streaming: testing the q column alone sent every run with an
+    # untested pair down the pandas path, which materialises the whole enriched
+    # table (211M rows on a screen-scale input).
+    has_unfillable_q = (
+        scan.select(
+            (pl.col("perturbo_q_value").is_null() & pl.col("perturbo_p_value").is_not_null()).any()
+        )
         .collect(engine="streaming")
         .item()
     )
-    if has_missing_q:
+    if has_unfillable_q:
         raise ValueError(
-            "Fast Parquet enrichment does not fill missing q-values; use the "
-            "pandas fallback for this input."
+            "Fast Parquet enrichment does not fill missing q-values where a p-value is "
+            "present; use the pandas fallback for this input."
         )
 
-    p_dtype = scan.collect_schema()["perturbo_p_value"]
+    p_dtype = lazy_schema(scan)["perturbo_p_value"]
     scan = scan.with_columns(
         (
             pl.col("perturbo_p_value")
@@ -208,7 +216,7 @@ def enrich_global_parquet(
         scan = scan.with_columns(pl.col("guide_id").cast(pl.String))
         metadata = pl.from_pandas(_guide_metadata(mdata))
         scan = scan.join(
-            metadata.lazy(), on="guide_id", how="left", maintain_order="left"
+            metadata.lazy(), on="guide_id", how="left", **JOIN_ORDER_LEFT
         )
         scan = _add_gene_names(scan, genes, fill_missing=True)
         output_columns = GUIDE_OUTPUT_COLUMNS
@@ -224,7 +232,7 @@ def enrich_global_parquet(
             metadata.lazy(),
             on=ELEMENT_COLUMNS,
             how="left",
-            maintain_order="left",
+            **JOIN_ORDER_LEFT,
         )
         scan = scan.with_columns(
             pl.col("intended_target_name").alias("element_id"),
@@ -247,8 +255,8 @@ def enrich_global_parquet(
     scan.select(output_columns).sink_parquet(
         output_path,
         compression="zstd",
-        maintain_order=True,
-        engine="streaming",
+        **SINK_ORDER,
+        **SINK_ENGINE,
     )
     print(f"Completed streaming {table_kind} enrichment: {output_path}", flush=True)
     return output_path

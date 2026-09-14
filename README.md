@@ -301,8 +301,8 @@ containers {
    base     = 'ghcr.io/pinellolab/crispr_pipeline/conda-docker'
    cleanser = 'ghcr.io/gersbachlab-bioinformatics/cleanser:1.2.1'
    sceptre  = 'sjiang9/sceptre-igvf:0.1'
-   // Native --pairs-to-test restricts local/cis; global/trans remains unmasked.
-   perturbo = 'ghcr.io/pinellolab/perturbo:sha-a9d696e'
+   // Digest-pinned; see nextflow.config for the current value.
+   perturbo = 'ghcr.io/pinellolab/perturbo@sha256:...'
 }
 ```
 
@@ -395,6 +395,7 @@ The local-analysis outputs report guide-gene or target-element-gene tests restri
 | `perturbo_log2_fc` | PerTurbo effect size estimate (log2 fold-change) |
 | `perturbo_p_value` | PerTurbo (uncorrected) posterior probability  of differential expression |
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this local-analysis output table. |
+| `perturbo_cis_q_value` | PerTurbo's q-value over the requested (cis) pairs alone — the family `sceptre_q_value` is corrected over, so these two are directly comparable. `perturbo_q_value` is corrected over every pair in the screen and is therefore stricter. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
 | `guide_sequence` | Guide spacer sequence from guide metadata. |
@@ -770,6 +771,129 @@ The pipeline generates these outputs upon completion:
 - `pipeline_outputs`: Contains the final MuData file and local/global analysis result tables
 - `pipeline_dashboard`: Houses interactive visualization reports and supporting assets only
 - `pipeline_dashboard.tar.gz`: Compressed archive of `pipeline_dashboard`
+
+### Live Axiom telemetry
+
+The normal HTML dashboard is still generated at the end of the workflow. For a
+live operational dashboard, source a shell environment containing the token and
+launch Nextflow through the fail-open telemetry wrapper:
+
+```bash
+source ~/.bashrc
+export AXIOM_OUTDIR=/absolute/path/to/results
+export AXIOM_RUN_NAME=tapseq_chr8_$(date -u +%Y%m%dT%H%M%SZ)
+
+bin/run_with_axiom.sh nextflow run main.nf \
+  -profile local \
+  -params-file /absolute/path/to/params.json \
+  --outdir "$AXIOM_OUTDIR" \
+  -resume
+```
+
+`conf/axiom.config` documents every telemetry setting. By default it reads the
+token from `AXIOM_IGVF`, writes events to the `crispr-pipeline` Axiom dataset
+(Axiom dataset names do not permit underscores),
+creates one shared dashboard per UUID/date/run name, refreshes every 60 seconds,
+and hard-caps attempted event data at 20 MB. It sends compact lifecycle,
+per-process runtime/resource, heartbeat, tool/stage, and incremental numeric QC
+events. Input/guide validation and SeqSpec QC appear as soon as their bounded
+CSV/JSON artifacts are published; final biological metrics are added when
+`pipeline_qc_metrics.json` becomes available. The dashboard also inventories QC
+image/report filenames, paths, media types, and sizes. Axiom is not an artifact
+store, so local PNG/SVG/HTML contents are not uploaded or rendered; serve those
+artifacts from an authenticated HTTP object store if inline images are required.
+Telemetry never sends task scripts, environment variables, FASTQ contents,
+binary images, or unbounded stdout/stderr.
+
+The default ingest endpoint is Axiom US East. Set `AXIOM_INGEST_URL` to
+`https://eu-central-1.aws.edge.axiom.co/v1/ingest/{dataset}` when the dataset is
+hosted in Axiom EU Central. Dashboard creation requires an advanced API token
+with dashboard create/update access in addition to ingest permission.
+
+Nextflow's native trace observer supplies process completion and resource data,
+the DAG report preserves process dependencies, and `onComplete`/`onError` hooks
+write a small local handoff consumed by the sidecar. All Axiom HTTP and dashboard
+errors are warnings: the wrapper returns the Nextflow exit code and telemetry
+cannot terminate an otherwise healthy pipeline.
+
+### Interactive W&B execution dashboard prototype
+
+W&B can render the QC images and self-contained HTML that Axiom only inventories.
+`bin/render_wandb_pipeline_dashboard.py` builds one clickable execution page from
+the live Nextflow trace, grouping tasks into Input QC, SeqSpec, Mapping,
+Preprocessing, MuData, Guide assignment, Inference, Evaluation, and Final
+dashboard families. Selecting a family shows its current state, aggregate task
+metrics, process table, and any family-specific QC that is already available.
+
+```bash
+python bin/render_wandb_pipeline_dashboard.py \
+  --trace /path/to/nextflow_trace.tsv \
+  --run-id "$RUN_ID" \
+  --run-name "$RUN_NAME" \
+  --status running \
+  --guide-report /path/to/guide_metadata.validation.json \
+  --seqspec-table /path/to/guide_position_table.csv \
+  --seqspec-image /path/to/seqSpec_check_plots.png \
+  --qc-metrics-json /path/to/pipeline_qc_metrics.json \
+  --artifact-dir /path/to/pipeline_dashboard \
+  --nextflow-log /path/to/nextflow.log \
+  --output /path/to/pipeline_execution.html
+```
+
+The HTML contains no credentials, FASTQs, command scripts, or unbounded task
+logs. Small QC images are embedded so the page remains portable; duplicate
+images and images larger than 3 MB are omitted. The total HTML is hard-capped at
+20 MB. Failed and aborted trace rows include a short, sanitized tail from
+`.command.err` and `.command.out`, plus a bounded Nextflow log tail when supplied.
+Tokens and common secret assignments are redacted before HTML escaping.
+
+The metric catalog is mapped to its owning process family: mapping yield and
+on-list rates; cell filtering and RNA QC; MuData dimensions and modality
+intersection; guide-assignment coverage; intended-target and global-effect QC;
+and the final metric/source manifest. The accompanying publisher intentionally
+uploads only this page, rather than creating separate W&B scalar, table, or image
+panels:
+
+```bash
+python bin/wandb_qc_smoke.py \
+  --entity your-wandb-entity \
+  --project crispr-pipeline \
+  --run-name "$RUN_NAME" \
+  --source-run-id "$RUN_ID" \
+  --dashboard-html /path/to/pipeline_execution.html
+```
+
+The renderer is deliberately independent of the scientific processes. A live
+sidecar calls it whenever the trace changes and updates only the
+`pipeline/main_execution` W&B media key. Live updates omit images to preserve
+the upload budget; the final update embeds the available plots. The sidecar
+reserves two thirds of the 20 MB budget for the final page and falls back to a
+metrics-only final page if the image-rich page does not fit.
+
+Launch it with the wrapper after the dataset-specific provenance `prepare` and
+`check` steps have succeeded:
+
+```bash
+source ~/.bashrc
+export WANDB_OUTDIR=/absolute/path/to/results
+export WANDB_ENTITY=your-wandb-entity
+export WANDB_RUN_NAME=dataset_$(date -u +%Y%m%dT%H%M%SZ)
+# Optional when W&B is installed outside the active Nextflow environment:
+export WANDB_PYTHON=/absolute/path/to/wandb/environment/bin/python
+
+bin/run_with_wandb.sh nextflow run main.nf \
+  -profile local \
+  -params-file /absolute/path/to/params.json \
+  --outdir "$WANDB_OUTDIR" \
+  -resume
+```
+
+`conf/wandb.config` documents the matching project, entity, token environment,
+refresh interval, byte budget, and single-HTML layout. The wrapper always
+returns the Nextflow exit code. Missing credentials, missing W&B dependencies,
+rendering errors, network errors, and publisher failures only produce warnings.
+For multi-hour local runs, start this wrapper in a detached `screen` session so
+closing an IDE or terminal cannot deliver `SIGHUP` to Nextflow.
 
 ### Troubleshooting
 If you encounter any issues during testing:

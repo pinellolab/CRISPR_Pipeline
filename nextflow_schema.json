@@ -372,6 +372,27 @@
                     "description": "Maximum cells sent to a PerTurbo v2 fit at once.",
                     "help_text": "This is the primary GPU-memory knob for local and global runs; PerTurbo minibatching is intentionally disabled by the pipeline."
                 },
+                "INFERENCE_PERTURBO_GENE_CHUNK_SIZE": {
+                    "type": "integer",
+                    "default": 0,
+                    "minimum": 0,
+                    "description": "Genes fitted per stage-two block; 0 fits the whole panel at once.",
+                    "help_text": "The second GPU-memory knob, beside the cell chunk. Genes are independent given the control baseline, so blocking changes the memory profile and not the result. A 40 GB card running a transcriptome-wide panel needs a value here; an 80 GB card generally does not."
+                },
+                "INFERENCE_PERTURBO_CRT_GENE_CHUNK_SIZE": {
+                    "type": "integer",
+                    "default": 500,
+                    "minimum": 0,
+                    "description": "Genes per conditional-randomization-test block; 0 lets the test choose.",
+                    "help_text": "The test's memory knob, separate from the stage-two gene block. Without it a transcriptome-wide screen exhausts a 40 GB card inside the saddlepoint fit. It does not change the p-values."
+                },
+                "INFERENCE_PERTURBO_CRT_MAX_GATHER_GIB": {
+                    "type": "number",
+                    "default": 8,
+                    "minimum": 0,
+                    "description": "Cap on a single gather inside the test, in GiB; 0 leaves the default.",
+                    "help_text": "Protects very wide perturbation groups from one oversized gather."
+                },
                 "INFERENCE_PERTURBO_LOCAL_MAX_CHUNK_CELLS": {
                     "type": "integer",
                     "default": 20000,
@@ -403,13 +424,18 @@
                 },
                 "INFERENCE_PERTURBO_NUM_STEPS_CONTROL": {
                     "type": "integer",
-                    "default": 2500,
+                    "default": 500,
                     "minimum": 1,
                     "description": "SVI steps for the PerTurbo v2 control/baseline fit."
                 },
+                "INFERENCE_PERTURBO_STEP_SIZE": {
+                    "type": "number",
+                    "default": 0.01,
+                    "description": "Adam learning rate for both PerTurbo SVI stages. At 0.01, 500 beta steps recover simulated effects as well as 2,500 at 0.003."
+                },
                 "INFERENCE_PERTURBO_NUM_STEPS_BETAS": {
                     "type": "integer",
-                    "default": 2500,
+                    "default": 500,
                     "minimum": 1,
                     "description": "SVI steps for PerTurbo v2 perturbation-effect fits."
                 },
@@ -433,6 +459,22 @@
                     "type": "string",
                     "default": "normal",
                     "description": "Perturbation-effect prior passed to PerTurbo v2."
+                },
+                "INFERENCE_PERTURBO_WRITE_MUDATA": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Have the PerTurbo step also write inference_mudata.h5mu. Off by default: it byte-copies the input and re-serialises the result tables, and the pipeline assembles a MuData from those tables downstream."
+                },
+                "INFERENCE_PERTURBO_CRT": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run PerTurbo's conditional randomization test beside the Bayesian effect estimates; its p-value becomes perturbo_p_value."
+                },
+                "INFERENCE_PERTURBO_CRT_POOL": {
+                    "type": "string",
+                    "default": "from-moi",
+                    "enum": ["from-moi", "auto", "all-cells", "control-anchored"],
+                    "description": "Cells a perturbation is tested against. from-moi follows Multiplicity_of_infection (high: every cell, each element a marginal association; low: the pure control cells plus the perturbation's own). auto lets PerTurbo measure the design from the median guides per cell."
                 },
                 "INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT": {
                     "type": "string",
@@ -524,6 +566,27 @@
                 }
             }
         },
+        "telemetry_options": {
+            "title": "Axiom telemetry options",
+            "type": "object",
+            "fa_icon": "fas fa-chart-line",
+            "description": "Optional fail-open, per-process telemetry for live Axiom dashboards. Launch through bin/run_with_axiom.sh and keep the token only in the named environment variable.",
+            "properties": {
+                "AXIOM_enabled": {"type": "boolean", "default": false, "description": "Enable Axiom lifecycle hook events."},
+                "AXIOM_dataset": {"type": "string", "default": "crispr-pipeline", "pattern": "^[A-Za-z0-9-]{1,128}$", "description": "Axiom event dataset. Axiom dataset names permit alphanumeric characters and hyphens, not underscores."},
+                "AXIOM_token_env": {"type": "string", "default": "AXIOM_IGVF", "description": "Environment-variable name containing the Axiom token; never the token itself."},
+                "AXIOM_ingest_url": {"type": "string", "default": "https://us-east-1.aws.edge.axiom.co/v1/ingest/{dataset}", "description": "Axiom ingest URL template. Set the host to the dataset's edge deployment (for example eu-central-1.aws.edge.axiom.co)."},
+                "AXIOM_api_url": {"type": "string", "default": "https://api.axiom.co", "description": "Base URL for dashboard management."},
+                "AXIOM_create_dashboard": {"type": "boolean", "default": true, "description": "Create an idempotent dashboard scoped to this run UUID."},
+                "AXIOM_max_bytes": {"type": "integer", "default": 20000000, "maximum": 20000000, "minimum": 1, "description": "Hard cap on serialized events attempted per run (20 MB maximum)."},
+                "AXIOM_max_event_bytes": {"type": "integer", "default": 8192, "maximum": 65536, "minimum": 512, "description": "Maximum serialized size of one telemetry event."},
+                "AXIOM_poll_seconds": {"type": "number", "default": 2, "minimum": 0.25, "description": "Seconds between Nextflow trace checks."},
+                "AXIOM_heartbeat_seconds": {"type": "number", "default": 60, "minimum": 10, "description": "Seconds between live run heartbeats."},
+                "AXIOM_run_id": {"type": "string", "default": "", "description": "Wrapper-generated UUID that partitions events and dashboards by execution."},
+                "AXIOM_run_name": {"type": "string", "default": "", "description": "Human-readable execution name used in Axiom."},
+                "AXIOM_event_file": {"type": "string", "default": "", "description": "Run-local JSONL handoff written by Nextflow onComplete/onError hooks."}
+            }
+        },
         "network_options": {
             "title": "Network plot options",
             "type": "object",
@@ -565,6 +628,9 @@
         },
         {
             "$ref": "#/$defs/benchmark_options"
+        },
+        {
+            "$ref": "#/$defs/telemetry_options"
         },
         {
             "$ref": "#/$defs/network_options"

@@ -159,6 +159,17 @@ workflow PIPELINE_COMPLETION {
     // Completion email and summary
     //
     workflow.onComplete {
+        try {
+            def axiomSuccess = workflow?.success == true
+            def axiomError = workflow?.errorMessage ?: 'unknown error'
+            writeAxiomLifecycleEvent(
+                'workflow_hook_complete',
+                axiomSuccess ? 'SUCCEEDED' : 'FAILED',
+                axiomSuccess ? 'Nextflow onComplete hook fired' : "Nextflow onComplete hook fired after failure: ${axiomError}"
+            )
+        } catch (Exception error) {
+            log.warn("Unable to evaluate optional telemetry completion event; pipeline continues: ${error.message}")
+        }
         if (demo_mode) {
             log.warn '''
 ================================================================================
@@ -189,7 +200,40 @@ See DEMO_MODE_WARNING.txt in the output directory.
     }
 
     workflow.onError {
+        try {
+            def axiomError = workflow?.errorMessage ?: 'unknown error'
+            writeAxiomLifecycleEvent(
+                'workflow_hook_error',
+                'FAILED',
+                "Nextflow onError hook fired: ${axiomError}"
+            )
+        } catch (Exception error) {
+            log.warn("Unable to evaluate optional telemetry error event; pipeline continues: ${error.message}")
+        }
         log.error "Pipeline failed. Please refer to troubleshooting docs: https://nf-co.re/docs/usage/troubleshooting"
+    }
+}
+
+// The sidecar tails this tiny file and performs network I/O outside Nextflow.
+// Hook failures are swallowed so observability can never change pipeline status.
+def writeAxiomLifecycleEvent(event_type, status, message) {
+    if (!params.AXIOM_enabled || !params.AXIOM_event_file) {
+        return null
+    }
+    try {
+        def target = new File(params.AXIOM_event_file.toString())
+        target.parentFile?.mkdirs()
+        def payload = [
+            _time: java.time.Instant.now().toString(),
+            event_type: event_type,
+            status: status,
+            run_id: params.AXIOM_run_id ?: System.getenv('AXIOM_RUN_ID') ?: 'unknown',
+            run_name: params.AXIOM_run_name ?: System.getenv('AXIOM_RUN_NAME') ?: workflow.runName,
+            message: message.toString().take(2048)
+        ]
+        target << groovy.json.JsonOutput.toJson(payload) + System.lineSeparator()
+    } catch (Exception error) {
+        log.warn("Unable to write optional Axiom lifecycle event; pipeline continues: ${error.message}")
     }
 }
 
