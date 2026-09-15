@@ -23,7 +23,7 @@ from sklearn.metrics import precision_recall_curve, roc_curve, auc
 import h5py
 import pandas as pd
 import numpy as np
-import scipy as sp
+from scipy import sparse
 import matplotlib.pyplot as plt
 import seaborn as sns
 import argparse
@@ -462,9 +462,264 @@ def _write_skip(outdir, reason, *lines):
             handle.write(line + "\n")
 
 
+# ---------------------------------------------------------------------------
+# Control-cell batch composition
+#
+# The controls evaluation reads calibration off the non-targeting rows, and it
+# reads it as a property of the method. On the TAP-seq chr8 screen it was not:
+# all 30 non-targeting guides had been delivered in one of 14 sequencing lanes,
+# so 2,033 of the 2,049 control-only cells sat in a single ``obs["batch"]``
+# level. Within that lane both methods were exactly calibrated; pooled across
+# lanes one of them looked 22% miscalibrated at p<0.05. Nothing in the QC
+# output said where the control cells were, so the number was read as a method
+# failure. The table below says where they are.
+#
+# This is reporting only -- it reads the guide modality and one obs column, and
+# changes none of the numbers the evaluation computes.
+# ---------------------------------------------------------------------------
+
+BATCH_COLUMN = "batch"
+COMPOSITION_TABLE = "control_batch_composition.tsv"
+COMPOSITION_NOTE = "control_batch_composition_note.txt"
+
+# A control pool this concentrated cannot separate the method from the batch:
+# the calibration estimate is computed inside one lane while the screen's cells
+# are spread over many.
+_CONTROL_SHARE_WARN = 0.90
+_BATCH_SHARE_WARN = 0.50
+
+_COMPOSITION_COLUMNS = (
+    "batch",
+    "n_cells",
+    "n_control_only_cells",
+    "control_share_of_batch",
+    "share_of_all_control_cells",
+)
+
+_MISSING_BATCH = "unknown"
+
+
+def _empty_composition():
+    return pd.DataFrame({name: [] for name in _COMPOSITION_COLUMNS})
+
+
+def _is_true(value):
+    """``targeting`` as the evaluation reads it: a bool, or a string saying so."""
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    return str(value).strip().upper() == "TRUE"
+
+
+def _non_targeting_guides(guide_var):
+    """Mask over ``guide.var`` rows for the guides the evaluation calls controls.
+
+    ``targeting == False`` is the evaluation's own test, so it decides here too;
+    ``type == "non-targeting"`` stands in for screens that carry only the label.
+    """
+    if "targeting" in guide_var.columns:
+        return ~guide_var["targeting"].map(_is_true).to_numpy(dtype=bool)
+    if "type" in guide_var.columns:
+        return (
+            guide_var["type"]
+            .map(lambda v: str(v).strip().lower() == "non-targeting")
+            .to_numpy(dtype=bool)
+        )
+    return None
+
+
+def _assignment_matrix(guide):
+    """The guide-by-cell calls, binarized, as the other QC scripts read them."""
+    assignment = (
+        guide.layers["guide_assignment"]
+        if "guide_assignment" in getattr(guide, "layers", {})
+        else guide.X
+    )
+    if assignment is None:
+        return None
+    if sparse.issparse(assignment):
+        return (assignment > 0).astype(np.int8)
+    return (np.asarray(assignment) > 0).astype(np.int8)
+
+
+def _row_counts(matrix):
+    return np.asarray(matrix.sum(axis=1)).ravel()
+
+
+def _batch_labels(mdata, guide, batch_column):
+    """One batch label per guide-modality cell, or ``None`` if there is none.
+
+    The column is looked for where the pipeline writes it -- on a modality's
+    ``obs``, and on the MuData's own ``obs`` under the plain name or under the
+    ``mod:name`` form MuData gives a column several modalities share.
+    """
+    if batch_column in guide.obs.columns:
+        return guide.obs[batch_column]
+
+    cells = pd.Index(guide.obs_names)
+    candidates = [batch_column] + [
+        f"{mod}:{batch_column}" for mod in getattr(mdata, "mod", {})
+    ]
+    obs = getattr(mdata, "obs", None)
+    if obs is not None:
+        for name in candidates:
+            if name in obs.columns:
+                return obs[name].reindex(cells)
+
+    for name, modality in getattr(mdata, "mod", {}).items():
+        if name != "guide" and batch_column in modality.obs.columns:
+            return modality.obs[batch_column].reindex(cells)
+    return None
+
+
+def control_batch_composition(mdata, batch_column=BATCH_COLUMN):
+    """How the control-only cells are spread over the screen's batches.
+
+    A control-only cell carries at least one guide and no targeting guide --
+    the cells a control-anchored null is built from. Returns the per-batch
+    table, the note that goes beside it, and whether the controls are confined
+    to one batch level.
+    """
+    guide = getattr(mdata, "mod", {}).get("guide")
+    if guide is None:
+        return (
+            _empty_composition(),
+            "Control-cell batch composition skipped: no 'guide' modality.\n",
+            False,
+        )
+
+    non_targeting = _non_targeting_guides(guide.var)
+    if non_targeting is None:
+        return (
+            _empty_composition(),
+            "Control-cell batch composition skipped: guide.var carries neither "
+            "a 'targeting' nor a 'type' column, so the non-targeting guides "
+            "cannot be identified.\n",
+            False,
+        )
+
+    assignment = _assignment_matrix(guide)
+    if assignment is None:
+        return (
+            _empty_composition(),
+            "Control-cell batch composition skipped: the guide modality carries "
+            "no guide assignment matrix.\n",
+            False,
+        )
+
+    labels = _batch_labels(mdata, guide, batch_column)
+    if labels is None:
+        return (
+            _empty_composition(),
+            f"Control-cell batch composition skipped: no obs['{batch_column}'] "
+            "column, so control cells cannot be tabulated by batch. Calibration "
+            "read off the non-targeting rows is reported pooled over whatever "
+            "batch structure the screen has.\n",
+            False,
+        )
+
+    guides_per_cell = _row_counts(assignment)
+    controls_per_cell = _row_counts(assignment[:, non_targeting])
+    control_only = (guides_per_cell > 0) & (controls_per_cell == guides_per_cell)
+
+    labels = pd.Series(np.asarray(labels, dtype=object), copy=True)
+    labels = labels.where(labels.notna(), _MISSING_BATCH).astype(str)
+
+    per_batch = labels.value_counts()
+    per_batch_controls = labels[control_only].value_counts().reindex(
+        per_batch.index, fill_value=0
+    )
+    n_control = int(control_only.sum())
+
+    frame = pd.DataFrame(
+        {
+            "batch": per_batch.index.astype(str),
+            "n_cells": per_batch.to_numpy(dtype=np.int64),
+            "n_control_only_cells": per_batch_controls.to_numpy(dtype=np.int64),
+        }
+    )
+    frame["control_share_of_batch"] = np.where(
+        frame["n_cells"] > 0, frame["n_control_only_cells"] / frame["n_cells"], 0.0
+    )
+    frame["share_of_all_control_cells"] = (
+        frame["n_control_only_cells"] / n_control if n_control else 0.0
+    )
+    frame = frame.round(
+        {"control_share_of_batch": 6, "share_of_all_control_cells": 6}
+    ).sort_values(
+        ["n_control_only_cells", "batch"], ascending=[False, True]
+    ).reset_index(drop=True)
+
+    note, confined = _composition_note(
+        frame, n_control, int(len(labels)), int(non_targeting.sum()), batch_column
+    )
+    return frame, note, confined
+
+
+def _composition_note(frame, n_control, n_cells, n_non_targeting_guides, batch_column):
+    """The paragraph that says whether the control pool is one batch."""
+    n_levels = int(len(frame))
+    if n_control == 0:
+        return (
+            f"Control-cell batch composition: {n_levels} level(s) of "
+            f"obs['{batch_column}'] over {n_cells} cells, and no cell carries "
+            "only non-targeting guides, so no control-anchored null can be "
+            "built from this screen.\n"
+        ), False
+
+    top = frame.iloc[0]
+    control_share = float(top["share_of_all_control_cells"])
+    batch_share = float(top["n_cells"]) / n_cells if n_cells else 0.0
+    confined = control_share > _CONTROL_SHARE_WARN and batch_share < _BATCH_SHARE_WARN
+
+    note = (
+        f"Control-cell batch composition: obs['{batch_column}'] has {n_levels} "
+        f"level(s) over {n_cells} cells, and {n_control} cell(s) carry only "
+        f"non-targeting guides ({n_non_targeting_guides} such guide(s)). The "
+        f"largest control batch level is '{top['batch']}', which holds "
+        f"{int(top['n_control_only_cells'])} of those control-only cells "
+        f"({control_share:.1%} of all control cells) while holding "
+        f"{int(top['n_cells'])} of the screen's cells ({batch_share:.1%} of all "
+        f"cells)."
+    )
+    if confined:
+        note += (
+            " WARNING: the non-targeting cells are confined to one batch level, "
+            "so non-targeting-based calibration numbers in this report are "
+            "confounded with batch and should be interpreted within batch level "
+            f"'{top['batch']}' rather than as a property of the method; a "
+            "control-anchored test pool built from these cells would be "
+            "effectively a single batch."
+        )
+    return note + "\n", confined
+
+
+def write_control_batch_composition(mdata, outdir, batch_column=BATCH_COLUMN):
+    """Write the composition table and its note next to the other outputs."""
+    frame, note, confined = control_batch_composition(mdata, batch_column=batch_column)
+    frame.to_csv(os.path.join(outdir, COMPOSITION_TABLE), sep="\t", index=False)
+    with open(
+        os.path.join(outdir, COMPOSITION_NOTE), "w", encoding="utf-8"
+    ) as handle:
+        handle.write(note)
+    print(note.rstrip("\n"))
+    return frame, note, confined
+
+
+def _report_control_batch_composition(mdata, outdir, batch_column=BATCH_COLUMN):
+    """The composition report, never allowed to fail the evaluation."""
+    try:
+        write_control_batch_composition(mdata, outdir, batch_column=batch_column)
+    except Exception as error:  # reporting only; the metrics must still be written
+        print(f"Control-cell batch composition not written: {error}")
+
+
 def run_evaluation_controls(md_read, outdir):
     """Evaluate the controls from an already-loaded MuData."""
     os.makedirs(outdir, exist_ok=True)
+
+    # Written before the results check: where the control cells sit is worth
+    # knowing even for a run whose curves are skipped.
+    _report_control_batch_composition(md_read, outdir)
 
     col_used = RESULTS_KEY
     if col_used not in md_read.uns:
@@ -488,6 +743,8 @@ def run_evaluation_controls_from_path(mdata_path, outdir):
     md_read = read_mudata_without_uns(mdata_path)
     available = result_keys(mdata_path)
     print("Finished Loading MuData file...")
+
+    _report_control_batch_composition(md_read, outdir)
 
     if RESULTS_KEY not in available:
         _write_skip(
