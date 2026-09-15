@@ -48,7 +48,7 @@ import argparse
 import logging
 import os
 import sys
-from typing import Tuple, List
+from typing import Optional, Tuple, List
 
 import matplotlib
 matplotlib.use("Agg")
@@ -248,6 +248,111 @@ def resolve_metric_columns(
     return pick_col("log2fc", log2fc_col, log2fc_candidates), pick_col("pvalue", pvalue_col, pvalue_candidates)
 
 
+# ---------------------------------------------------------------------
+# Intended-target mask
+# ---------------------------------------------------------------------
+# ``direct_target_mask`` normalizes identifiers -- strip, upper, drop an Ensembl
+# version suffix by regex, treat blank as missing -- and it has two paths for
+# that: one value per row when a column is plain text, one value per *category*
+# when every column is categorical. The result table only ever holds a handful
+# of distinct identifiers (the TAP-seq chr8 screen: 4,120 guides, 1,041 intended
+# targets, and one gene id per tested gene) spread over 52,006,760 rows, so the
+# per-row path repeats each normalization thousands of times.
+#
+# Measured on that table, normalizing per row: 13.34 s at 2M rows, 52.17 s at
+# 8M, 131.78 s at 20M (``.str.replace`` with the version regex is most of it).
+# Normalizing per category instead: 0.20 s at 2M and 0.73 s at 8M, for the same
+# mask. The helpers below hand ``direct_target_mask`` categorical columns so it
+# takes that path, and build the mapped target column without materializing an
+# object-dtype copy of the frame.
+
+
+def _identifier_categorical(values: pd.Series) -> pd.Series:
+    """Return ``values`` as a categorical, factorizing only when needed.
+
+    ``pd.factorize`` is used rather than ``astype("category")`` because it does
+    not sort the categories: their order is irrelevant to an equality mask, and
+    sorting can fail outright on a mixed-type column.
+    """
+    if isinstance(values.dtype, pd.CategoricalDtype):
+        return values
+    codes, categories = pd.factorize(values)
+    return pd.Series(
+        pd.Categorical.from_codes(codes, categories=pd.Index(categories)),
+        index=values.index,
+    )
+
+
+def _category_slots(keys: pd.Series) -> Tuple[np.ndarray, pd.Index]:
+    """Per-row slot into ``keys``' categories, with a trailing missing slot.
+
+    A row whose key is missing gets the slot one past the last category, so a
+    per-category lookup can answer it without a second branch.
+    """
+    keys = _identifier_categorical(keys)
+    categories = keys.cat.categories
+    codes = keys.cat.codes.to_numpy()
+    return np.where(codes >= 0, codes, len(categories)), categories
+
+
+def _slot_values(categories: pd.Index, mapping: dict) -> np.ndarray:
+    """``mapping`` looked up once per category, missing-key value last.
+
+    ``pd.Series.map`` is used for the lookup so an absent key becomes NaN
+    exactly as it does when the same mapping is applied row by row.
+    """
+    mapped = pd.Series(categories).map(mapping).to_numpy(dtype=object)
+    values = np.empty(len(mapped) + 1, dtype=object)
+    values[: len(mapped)] = mapped
+    # The trailing slot stands for a missing key, which ``map`` resolves against
+    # a null entry in the mapping when there is one and to NaN otherwise.
+    values[len(mapped)] = next(
+        (value for key, value in mapping.items() if pd.isna(key)), np.nan
+    )
+    return values
+
+
+def _slot_categorical(
+    slots: np.ndarray, values: np.ndarray, index: pd.Index
+) -> pd.Series:
+    """Broadcast per-slot values over rows as a categorical column."""
+    codes, categories = pd.factorize(values)
+    return pd.Series(
+        pd.Categorical.from_codes(codes[slots], categories=pd.Index(categories)),
+        index=index,
+    )
+
+
+def _intended_target_mask(
+    results: pd.DataFrame,
+    intended_map: dict,
+    slots: Optional[np.ndarray] = None,
+    categories: Optional[pd.Index] = None,
+) -> pd.Series:
+    """Rows whose guide's intended target is the gene the row tested.
+
+    Equivalent to assigning ``guide_id.map(intended_map)`` onto ``results`` and
+    calling ``direct_target_mask`` on the whole frame, but the identifier
+    columns are passed as categoricals and gathered into a three-column view
+    instead of a copy of every column.
+    """
+    if slots is None or categories is None:
+        slots, categories = _category_slots(results["guide_id"])
+
+    columns = {
+        "intended_target_name": _slot_categorical(
+            slots, _slot_values(categories, intended_map), results.index
+        )
+    }
+    # Left absent when the frame lacks them, so direct_target_mask still raises
+    # its own error naming the required columns.
+    for column in ("gene_id", "gene_name"):
+        if column in results.columns:
+            columns[column] = _identifier_categorical(results[column])
+
+    return direct_target_mask(pd.DataFrame(columns, index=results.index))
+
+
 def filter_to_intended_targets(
     trans_results: pd.DataFrame,
     guide_var: pd.DataFrame,
@@ -285,18 +390,20 @@ def filter_to_intended_targets(
     # Map intended_target_name from guide metadata
     intended_map = guide_meta.set_index("guide_id")["intended_target_name"].to_dict()
 
-    results = trans_results.copy()
-    results["intended_target_name"] = results["guide_id"].map(intended_map)
-
-    # Filter to intended targets only
-    intended = results[direct_target_mask(results)].copy()
+    # Filter to intended targets only. Only the four columns below survive to
+    # the merge, so the mask is taken against the frame in place rather than
+    # against a copy of every column of all 52M rows.
+    intended = trans_results.loc[
+        _intended_target_mask(trans_results, intended_map),
+        ["guide_id", "gene_id", log2fc_col, pvalue_col],
+    ]
 
     # Deduplicate by guide_id + gene_id
     intended = intended.drop_duplicates(subset=["guide_id", "gene_id"])
 
     # Merge with guide metadata
     intended = guide_meta.merge(
-        intended[["guide_id", "gene_id", log2fc_col, pvalue_col]],
+        intended,
         on="guide_id",
         how="left",
     )
@@ -423,17 +530,22 @@ def build_evaluation_table(
     intended_map = guide_meta.set_index("guide_id")["intended_target_name"].to_dict()
     targeting_map = guide_meta.set_index("guide_id")["targeting"].to_dict()
 
-    results = trans_results.copy()
-    results["intended_target_name"] = results["guide_id"].map(intended_map)
-    results["targeting"] = results["guide_id"].map(targeting_map)
+    # Both maps are keyed by guide_id, so the guide categories are resolved once
+    # and reused. Note that the mapped targeting flag shadows any 'targeting'
+    # column the result table carries of its own, as the row-wise assignment
+    # this replaces also did.
+    slots, categories = _category_slots(trans_results["guide_id"])
+    has_pvalue = trans_results[pvalue_col].notna()
+    keep_cols = ["guide_id", "gene_id", pvalue_col]
 
     # -------------------------------------------------------------------------
     # Positive controls: guide tests its own intended target gene
     # The guide target may be an Ensembl ID or a gene symbol.
     # -------------------------------------------------------------------------
-    positives = results[
-        direct_target_mask(results) & results[pvalue_col].notna()
-    ].copy()
+    direct_target = _intended_target_mask(
+        trans_results, intended_map, slots=slots, categories=categories
+    )
+    positives = trans_results.loc[direct_target & has_pvalue, keep_cols].copy()
     positives["direct_target"] = 1
 
     # -------------------------------------------------------------------------
@@ -442,10 +554,19 @@ def build_evaluation_table(
     # -------------------------------------------------------------------------
     all_target_gene_ids = positives["gene_id"].dropna().unique()
 
-    negatives = results[
-        (results["targeting"] == False) &
-        (results["gene_id"].isin(all_target_gene_ids)) &
-        (results[pvalue_col].notna())
+    # ``targeting == False`` per guide, then broadcast: the comparison is the
+    # same element-wise test, run once per guide instead of once per row.
+    targeting_values = _slot_values(categories, targeting_map)
+    non_targeting = pd.Series(
+        np.array([value == False for value in targeting_values], dtype=bool)[slots],
+        index=trans_results.index,
+    )
+
+    negatives = trans_results.loc[
+        non_targeting &
+        (trans_results["gene_id"].isin(all_target_gene_ids)) &
+        has_pvalue,
+        keep_cols,
     ].copy()
     negatives["direct_target"] = 0
 
