@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
-from polars_compat import lazy_schema, JOIN_ORDER_LEFT, UNIQUE_ORDER, SORT_ORDER, SINK_ORDER, SINK_ENGINE
+from polars_compat import lazy_schema, JOIN_ORDER_LEFT, UNIQUE_ORDER, SORT_ORDER, SINK_ORDER, SINK_ENGINE, COLLECT_ENGINE
 
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 
 def _is_parquet(path: str | Path) -> bool:
@@ -88,8 +88,25 @@ def _write_enriched_parquet_catalog(
     global_required_columns: Sequence[str],
     output_columns: Sequence[str],
     sort_columns: Sequence[str],
+    local_alias_columns: Mapping[str, str] | None = None,
+    derived_neglog10: Mapping[str, str] | None = None,
+    require_fillable_q: Sequence[tuple[str, str]] = (),
+    pvalue_floor: float = 1e-300,
 ) -> bool:
-    """Write an enriched catalog without materializing all pairs in pandas."""
+    """Write an enriched catalog without materializing all pairs in pandas.
+
+    ``local_alias_columns`` maps a column in the local table to the name it takes
+    in the output, which is how the ``perturbo_cis_*`` block is produced: the
+    pandas path renames the local table's ``perturbo_*`` columns, so those names
+    exist in neither input file and the fast path has to perform the same rename
+    rather than select a column that was never there. A mapped column the local
+    table does not have is filled with nulls, matching the pandas path's
+    ``np.nan`` fill for a run with no local PerTurbo results.
+
+    ``derived_neglog10`` maps an output column to the p-value column it is
+    computed from, again mirroring pandas rather than carrying a precomputed
+    ``negLog10p`` across, so the floor applied here is the caller's.
+    """
 
     if not all(_is_parquet(path) for path in (local_path, global_path, output_path)):
         return False
@@ -120,7 +137,7 @@ def _write_enriched_parquet_catalog(
         .len()
         .filter(pl.col("len") > 1)
         .limit(1)
-        .collect(engine="streaming")
+        .collect(**COLLECT_ENGINE)
     )
     if duplicate_key.height:
         return False
@@ -132,13 +149,70 @@ def _write_enriched_parquet_catalog(
             how="anti",
         )
         .limit(1)
-        .collect(engine="streaming")
+        .collect(**COLLECT_ENGINE)
     )
     if local_only.height:
         return False
 
-    local_metrics = local_scan.select(list(join_columns) + list(local_metric_columns))
+    alias = dict(local_alias_columns or {})
+    derived = dict(derived_neglog10 or {})
+    present_alias = {src: dst for src, dst in alias.items() if src in local_schema}
+    # A mapped column the local table lacks is filled with nulls -- except where a
+    # derivation below can rebuild it from a column that is present, which must be
+    # left alone for that derivation to see it as missing.
+    missing_alias = [
+        dst
+        for src, dst in alias.items()
+        if src not in local_schema and dst not in derived
+    ]
+
+    local_metrics = local_scan.select(
+        list(join_columns) + list(local_metric_columns) + list(present_alias)
+    )
+    if present_alias:
+        local_metrics = local_metrics.rename(present_alias)
     catalog = global_scan.join(local_metrics, on=join_columns, how="left")
+
+    if missing_alias:
+        catalog = catalog.with_columns(
+            [pl.lit(None, dtype=pl.Float64).alias(name) for name in missing_alias]
+        )
+
+    # Derive only what nothing else produced. mergedResults computes the local
+    # table's negLog10p with the very numpy helper the pandas catalog path uses,
+    # on the same p-value and the same floor, so carrying that column across is
+    # bit-identical to recomputing it, whereas Polars' log10 differs from numpy's
+    # in the last bit. Derivation is the fallback for a table that lacks it.
+    produced = set(lazy_schema(catalog).names())
+    for out_column, p_column in derived.items():
+        if out_column in produced:
+            continue
+        catalog = catalog.with_columns(
+            pl.col(p_column)
+            .cast(pl.Float64)
+            .clip(lower_bound=pvalue_floor)
+            .log10()
+            .neg()
+            .alias(out_column)
+        )
+
+    # The pandas path fills a missing q-value by running Benjamini-Hochberg over
+    # the local family. mergedResults already did that before writing this table,
+    # so there should be nothing left to fill; Benjamini-Hochberg needs a global
+    # sort that does not belong in a streaming plan, so if any row still wants a
+    # q-value, hand the table back to pandas rather than emit a null it would
+    # have filled.
+    for q_column, p_column in require_fillable_q:
+        unfillable = (
+            catalog.select(
+                (pl.col(q_column).is_null() & pl.col(p_column).is_not_null()).any()
+            )
+            .collect(**COLLECT_ENGINE)
+            .item()
+        )
+        if unfillable:
+            return False
+
     catalog = catalog.select(output_columns).sort(
         sort_columns,
         nulls_last=True,

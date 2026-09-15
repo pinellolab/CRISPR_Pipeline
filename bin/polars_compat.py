@@ -66,3 +66,16 @@ SINK_ORDER = {"maintain_order": True} if _supports("sink_parquet", "maintain_ord
 # streaming writer already, so dropping the argument selects the same engine
 # rather than a different one.
 SINK_ENGINE = {"engine": "streaming"} if _supports("sink_parquet", "engine") else {}
+
+# ``collect(engine="streaming")`` is the Polars 1.25+ spelling. Older 1.x and 0.20
+# take ``collect(streaming=True)`` instead, and passing ``engine`` there raises
+# TypeError. Prefer the modern keyword, fall back to the legacy one, and pass
+# nothing at all if neither exists -- an in-memory collect is slower but correct,
+# whereas a TypeError inside the catalog fast path is swallowed by its blanket
+# ``except`` and silently demotes the whole table to the pandas path.
+if _supports("collect", "engine"):
+    COLLECT_ENGINE = {"engine": "streaming"}
+elif _supports("collect", "streaming"):
+    COLLECT_ENGINE = {"streaming": True}
+else:
+    COLLECT_ENGINE = {}

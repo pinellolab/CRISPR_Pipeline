@@ -331,6 +331,21 @@ def build_catalog_per_guide_output(
         ],
         output_columns=OUTPUT_COLUMNS,
         sort_columns=["guide_chr", "guide_start", "guide_end", "guide_id", "gene_id"],
+        # perturbo_cis_* are the local table's perturbo_* columns under another
+        # name -- the pandas path renames them -- so they exist under that name in
+        # neither input and the fast path has to do the rename too. Without this
+        # the select below asked for a column nobody had, and the resulting
+        # ColumnNotFoundError was swallowed into a full pandas rebuild.
+        local_alias_columns={
+            "perturbo_log2_fc": "perturbo_cis_log2_fc",
+            "perturbo_p_value": "perturbo_cis_p_value",
+            "perturbo_q_value": "perturbo_cis_q_value",
+            "perturbo_fc_se": "perturbo_cis_fc_se",
+            "perturbo_negLog10p": "perturbo_cis_negLog10p",
+        },
+        derived_neglog10={"perturbo_cis_negLog10p": "perturbo_cis_p_value"},
+        require_fillable_q=(("perturbo_cis_q_value", "perturbo_cis_p_value"),),
+        pvalue_floor=pvalue_floor,
     ):
         return None
 

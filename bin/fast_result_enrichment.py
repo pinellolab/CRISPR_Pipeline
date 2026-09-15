@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from polars_compat import lazy_schema, JOIN_ORDER_LEFT, UNIQUE_ORDER, SORT_ORDER, SINK_ORDER, SINK_ENGINE
+from polars_compat import lazy_schema, JOIN_ORDER_LEFT, UNIQUE_ORDER, SORT_ORDER, SINK_ORDER, SINK_ENGINE, COLLECT_ENGINE
 
 from pathlib import Path
 from typing import Literal
@@ -173,7 +173,7 @@ def _prepare_scan(input_path: str | Path):
         scan.select(
             (pl.col("perturbo_q_value").is_null() & pl.col("perturbo_p_value").is_not_null()).any()
         )
-        .collect(engine="streaming")
+        .collect(**COLLECT_ENGINE)
         .item()
     )
     if has_unfillable_q:

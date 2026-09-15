@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from polars_compat import lazy_schema
+from polars_compat import lazy_schema, COLLECT_ENGINE
 
 import os
 from pathlib import Path
@@ -120,7 +120,7 @@ def write_parquet_dataframe_to_uns(
     column_names = schema.names()
     row_count = (
         scan.select(pl.len().alias("rows"))
-        .collect(engine="streaming")
+        .collect(**COLLECT_ENGINE)
         .item()
     )
     temporary_key = f"__{key}_streaming_tmp"
@@ -163,7 +163,7 @@ def write_parquet_dataframe_to_uns(
             if source_dtype in (pl.String, pl.Categorical, pl.Enum):
                 series = (
                     scan.select(pl.col(name).cast(pl.Categorical))
-                    .collect(engine="streaming")[name]
+                    .collect(**COLLECT_ENGINE)[name]
                 )
                 categories_values = series.cat.get_categories().to_list()
                 code_dtype = _categorical_code_dtype(len(categories_values))
@@ -192,7 +192,7 @@ def write_parquet_dataframe_to_uns(
                 categories.attrs["encoding-version"] = "0.2.0"
                 del series, categories_values, codes_values
             else:
-                series = scan.select(name).collect(engine="streaming")[name]
+                series = scan.select(name).collect(**COLLECT_ENGINE)[name]
                 has_nulls = series.null_count() > 0
                 if source_dtype.is_integer() or source_dtype == pl.Boolean:
                     if has_nulls:
