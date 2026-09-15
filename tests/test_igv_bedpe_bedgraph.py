@@ -38,6 +38,8 @@ from scipy import sparse
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
+if str(BIN_DIR) not in sys.path:
+    sys.path.insert(0, str(BIN_DIR))
 
 GLOBAL_KEY = "global_analysis_per_element_results"
 LOCAL_KEY = "local_analysis_per_element_results"
@@ -704,6 +706,69 @@ def test_script_writes_identical_files(original, tmp_path, extra_args):
     assert new_files == old_files, "evaluation_output bytes differ"
     for name, payload in new_files.items():
         assert payload, f"{name} unexpectedly empty"
+
+
+def _missing_category_mudata():
+    """A result table with a missing target name and a missing gene_id.
+
+    Written to h5mu these are categorical code -1, which the slim reader decodes
+    as ``None`` and ``read_h5mu`` decodes as nan -- and Python ``==`` tells those
+    two apart. igv.py normalises, so the branch does not depend on the reader.
+    """
+    mdata = _screen_mudata()
+    frame = _results_frame(GLOBAL_ROWS, ("perturbo",))
+    target = frame["intended_target_name"].astype(object).to_numpy()
+    gene_id = frame["gene_id"].astype(object).to_numpy()
+    target[0] = None
+    gene_id[2] = None
+    frame["intended_target_name"] = pd.Categorical(target)
+    frame["gene_id"] = pd.Categorical(gene_id)
+    mdata.uns[GLOBAL_KEY] = frame
+    return mdata
+
+
+def test_read_results_normalizes_the_slim_readers_nulls(tmp_path):
+    mudata_path = tmp_path / "inference_mudata.h5mu"
+    _missing_category_mudata().write(mudata_path)
+    frame = igv._read_results(
+        str(mudata_path),
+        GLOBAL_KEY,
+        ["gene_id", "intended_target_name", "perturbo_log2_fc", "perturbo_p_value"],
+    )
+    # Only what was asked for, and no None left where read_h5mu would give nan.
+    assert list(frame.columns) == [
+        "gene_id",
+        "intended_target_name",
+        "perturbo_log2_fc",
+        "perturbo_p_value",
+    ]
+    assert frame["intended_target_name"].isna().sum() == 1
+    assert frame["gene_id"].isna().sum() == 1
+    assert not any(value is None for value in frame["intended_target_name"])
+    assert not any(value is None for value in frame["gene_id"])
+    # Same values read_h5mu gives for those columns.
+    expected = mu.read_h5mu(mudata_path).uns[GLOBAL_KEY]
+    for column in frame.columns:
+        got = [None if pd.isna(v) else v for v in frame[column]]
+        want = [None if pd.isna(v) else v for v in expected[column]]
+        assert got == want, column
+
+
+@needs_original
+def test_script_identical_with_missing_categories(tmp_path):
+    """The whole script, on a table the two readers decode differently."""
+    mudata_path = tmp_path / "inference_mudata.h5mu"
+    _missing_category_mudata().write(mudata_path)
+    gtf = _write_gtf(tmp_path / "gencode_gtf.gtf.gz", compress=True)
+    original_script = tmp_path / "igv_original_script.py"
+    original_script.write_text(ORIGINAL_SOURCE)
+    old_files, _ = _run_script(
+        original_script, mudata_path, gtf, tmp_path / "old", ["--default"]
+    )
+    new_files, _ = _run_script(
+        BIN_DIR / "igv.py", mudata_path, gtf, tmp_path / "new", ["--default"]
+    )
+    assert new_files == old_files
 
 
 def test_default_writes_the_expected_file_set(tmp_path):

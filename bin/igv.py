@@ -3,10 +3,16 @@
 import argparse
 import pandas as pd
 import numpy as np
-import mudata as mu
 import os
 from gtfparse import read_gtf
-from typing import Literal, Tuple, Dict, Optional, Any
+from typing import Literal, Tuple, Dict, List, Optional, Any
+
+from qc_mudata_io import (
+    read_mudata_without_uns,
+    read_result_columns,
+    result_keys,
+    result_table_columns,
+)
 
 # Why this file is column-at-a-time rather than row-at-a-time:
 #
@@ -34,6 +40,33 @@ from typing import Literal, Tuple, Dict, Optional, Any
 #    values handed to ``pd.DataFrame`` here are the same Python scalars the row
 #    loop appended, and inference is left to do what it did before. Nothing may
 #    go through ``Series.map`` or reach the frame as a typed ndarray.
+
+
+def _metric_columns(method: Optional[str]) -> Tuple[str, str]:
+    """The log2_fc and p_value column names for a method, or the generic pair."""
+    if not method:
+        return "log2_fc", "p_value"
+    return f"{method}_log2_fc", f"{method}_p_value"
+
+
+def _read_results(path: str, results_key: str, columns: List[str]) -> pd.DataFrame:
+    """Named columns of one ``uns`` result table, as ``read_h5mu`` would give them.
+
+    ``read_result_columns`` decodes a missing categorical as ``None`` where
+    ``read_h5mu`` decodes it as nan, and ``igv`` picks its branch on Python
+    ``==``, where ``None == None`` is True and ``nan == nan`` is not. Normalising
+    here keeps the branch independent of which reader loaded the table.
+    """
+    frame = read_result_columns(path, results_key, columns)
+    for column in frame.columns:
+        if frame[column].dtype != object:
+            continue
+        missing = frame[column].isna().to_numpy()
+        if missing.any():
+            values = frame[column].to_numpy().copy()
+            values[missing] = np.nan
+            frame[column] = values
+    return frame
 
 
 def _row_values(var: pd.DataFrame) -> Tuple[np.ndarray, Dict[str, int]]:
@@ -130,12 +163,7 @@ def igv(mdata, gtf: str, method: Optional[Literal['sceptre', 'perturbo']] = None
         results_key: str = 'test_results') -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Generate bedpe and bedgraph data for generic or method-specific data"""
     # Set column names based on whether method is specified
-    if not method:  # Generic columns
-        log2_fc_col = "log2_fc"
-        p_value_col = "p_value"
-    else:  # Method-specific columns
-        log2_fc_col = f"{method}_log2_fc"
-        p_value_col = f"{method}_p_value"
+    log2_fc_col, p_value_col = _metric_columns(method)
 
     # Process coordinates
     coordinate_dict = process_coordinates(mdata)
@@ -225,19 +253,30 @@ def igv(mdata, gtf: str, method: Optional[Literal['sceptre', 'perturbo']] = None
 
     return bedpe_df, bedgraph_df
 
-def process_results_config(mdata, gtf: str, results_key: str, analysis_type: Optional[str] = None):
+def _load_metrics(mdata, mdata_path: str, results_key: str, method: Optional[str]):
+    """Put just the columns one ``igv`` call reads into ``mdata.uns``."""
+    log2_fc_col, p_value_col = _metric_columns(method)
+    mdata.uns[results_key] = _read_results(
+        mdata_path,
+        results_key,
+        ["gene_id", "intended_target_name", log2_fc_col, p_value_col],
+    )
+
+
+def process_results_config(mdata, mdata_path: str, gtf: str, results_key: str,
+                           analysis_type: Optional[str] = None):
     """Process a single results configuration (either test_results or cis/trans_test_results)"""
 
     # Check if the key exists in mdata.uns
-    if results_key not in mdata.uns:
+    if results_key not in result_keys(mdata_path):
         print(f"Warning: {results_key} not found in mdata.uns, skipping...")
         return
 
     print(f"\nProcessing {results_key}...")
 
-    # Check available methods/columns
-    results_df = pd.DataFrame(mdata.uns[results_key])
-    cols = results_df.columns
+    # Check available methods/columns. The names come out of the file's
+    # column-order attribute, so nothing is read to list them.
+    cols = pd.Index(result_table_columns(mdata_path, results_key))
     print(f"Available columns for {results_key}:", cols)
 
     # Create output directory
@@ -247,6 +286,7 @@ def process_results_config(mdata, gtf: str, results_key: str, analysis_type: Opt
     # Check for generic columns first
     if 'log2_fc' in cols and 'p_value' in cols:
         print(f"Using generic log2_fc and p_value columns for {results_key}")
+        _load_metrics(mdata, mdata_path, results_key, None)
         bedpe_df, bedgraph_df = igv(mdata, gtf, None, results_key)
 
         # Save generic files with analysis type prefix
@@ -261,12 +301,16 @@ def process_results_config(mdata, gtf: str, results_key: str, analysis_type: Opt
         print(f"bedpe file: {bedpe_path}")
         print(f"bedgraph file: {bedgraph_path}")
     else:
-        # Check for method-specific columns
+        # Check for method-specific columns, reading one column per candidate
+        # rather than the whole table.
         available_methods = []
-        if 'sceptre_log2_fc' in cols and not results_df['sceptre_log2_fc'].isna().all():
-            available_methods.append('sceptre')
-        if 'perturbo_log2_fc' in cols and not results_df['perturbo_log2_fc'].isna().all():
-            available_methods.append('perturbo')
+        for candidate in ('sceptre', 'perturbo'):
+            column = f"{candidate}_log2_fc"
+            if column not in cols:
+                continue
+            values = _read_results(mdata_path, results_key, [column])[column]
+            if not values.isna().all():
+                available_methods.append(candidate)
 
         print(f"Available methods for {results_key}: {available_methods}")
 
@@ -276,6 +320,7 @@ def process_results_config(mdata, gtf: str, results_key: str, analysis_type: Opt
 
         # Process data for available methods
         for method in available_methods:
+            _load_metrics(mdata, mdata_path, results_key, method)
             bedpe_df, bedgraph_df = igv(mdata, gtf, method, results_key)
 
             # Generate outputs with analysis type prefix
@@ -304,9 +349,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print("Loading MuData file...")
-    # backed="r" avoids loading gene/guide .X into memory; this script only
-    # reads .var and .uns[results_key].
-    mdata = mu.read(args.mdata_path, backed="r")
+    # This script reads .var and four columns of one uns table at a time, and
+    # the uns tables are the file: 5.91 GB of the 6.00 GB TAP-seq chr8 screen,
+    # 4.65 GB of that the per-guide table --default never looks at.
+    # mudata.read loads all of uns eagerly -- backed="r" defers only .X -- which
+    # is how this task peaked at 15.7 GB of RSS. Take the modalities, and pull
+    # result columns per table below.
+    mdata = read_mudata_without_uns(args.mdata_path)
 
     # Nextflow declares this directory as the process output. Preserve an
     # explicit empty output when the selected inference mode has no plottable
@@ -328,6 +377,8 @@ if __name__ == "__main__":
 
     # Process each results configuration
     for config in results_configs:
-        process_results_config(mdata, args.gtf, config["key"], config["type"])
+        process_results_config(
+            mdata, args.mdata_path, args.gtf, config["key"], config["type"]
+        )
 
     print("\nAll processing completed successfully")
