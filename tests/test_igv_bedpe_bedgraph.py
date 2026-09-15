@@ -24,7 +24,6 @@ import gzip
 import importlib.util
 import os
 import pathlib
-import re
 import subprocess
 import sys
 import types
