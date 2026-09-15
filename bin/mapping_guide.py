@@ -46,6 +46,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 import mudata
+
+from qc_mudata_io import read_mudata_without_uns
 import numpy as np
 import pandas as pd
 from anndata import AnnData
@@ -458,9 +460,11 @@ def run_guide_mapping_qc(
     """
     os.makedirs(outdir, exist_ok=True)
 
-    # Load data
+    # Load data. Only the modalities are used below, and uns carries the full
+    # result tables -- 6.35 GB of a 6.41 GB file on the TAP-seq chr8 screen --
+    # which read_h5mu would load eagerly for nothing.
     logger.info(f"Loading MuData from {input_path}")
-    mdata = mudata.read_h5mu(input_path)
+    mdata = read_mudata_without_uns(input_path)
 
     if guide_mod_key not in mdata.mod:
         raise ValueError(f"Modality '{guide_mod_key}' not found in MuData. "

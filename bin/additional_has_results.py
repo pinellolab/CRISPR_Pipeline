@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-import mudata
+from qc_mudata_io import result_keys
 
 RESULT_KEYS = {
     "global_analysis_per_guide_results",
@@ -22,8 +22,9 @@ def main() -> int:
     parser.add_argument("--input", required=True)
     args = parser.parse_args()
 
-    m = mudata.read_h5mu(args.input)
-    keys = set(m.uns.keys())
+    # Only the key names decide this, so read the names and none of the tables:
+    # loading them cost a 6.4 GB read to answer YES/NO.
+    keys = set(result_keys(args.input))
     has_results = any(k in keys for k in RESULT_KEYS)
     print("YES" if has_results else "NO")
     return 0

@@ -58,6 +58,15 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 import mudata
+
+from qc_mudata_io import (
+    QC_RESULT_COLUMNS,
+    RESULTS_KEY_CANDIDATES,
+    read_mudata_without_uns,
+    read_result_columns,
+    resolve_result_key,
+    result_keys,
+)
 import numpy as np
 import pandas as pd
 from mudata import MuData
@@ -1016,9 +1025,23 @@ def run_trans_qc(
     """
     os.makedirs(outdir, exist_ok=True)
 
-    # Load data
+    # Load data. uns carries the full result tables -- 6.35 GB of a 6.41 GB file
+    # on the TAP-seq chr8 screen, 4.99 GB of it the 52,006,760-row guide table --
+    # and read_h5mu loads all of them eagerly. Take the modalities, then the one
+    # table this run needs, and only its used columns.
     logger.info(f"Loading MuData from {input_path}")
-    mdata = mudata.read_h5mu(input_path)
+    mdata = read_mudata_without_uns(input_path)
+    _resolved_key = resolve_result_key(input_path, results_key, RESULTS_KEY_CANDIDATES)
+    if _resolved_key is None:
+        raise ValueError(
+            "No compatible inference results found in mdata.uns. Available keys: "
+            f"{result_keys(input_path)}"
+        )
+    mdata.uns[_resolved_key] = read_result_columns(
+        input_path,
+        _resolved_key,
+        list(QC_RESULT_COLUMNS) + [log2fc_col, pvalue_col],
+    )
 
     if guide_mod_key not in mdata.mod:
         raise ValueError(f"Modality '{guide_mod_key}' not found in MuData")
