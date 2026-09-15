@@ -13,6 +13,8 @@ process inference_sceptre {
 
     script:
     """
+    # Stays at the global cap of 1 BLAS thread: this forks n_processors = task.cpus
+    # R workers, and each would otherwise bring its own 64-thread pool.
     cat <<EOF > args.txt
     ${mudata_fp}
     ${params.INFERENCE_SCEPTRE_side}

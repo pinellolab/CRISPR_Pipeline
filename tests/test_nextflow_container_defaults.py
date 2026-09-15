@@ -38,3 +38,23 @@ def test_benchmark_assets_are_resolved_from_the_pipeline_checkout():
     config = (REPO_ROOT / "nextflow.config").read_text()
 
     assert 'ENCODE_BED_DIR = "${projectDir}/encode_bed_files"' in config
+
+
+def test_library_thread_pools_are_capped_inside_tasks():
+    """Every task must cap OpenBLAS/OpenMP/Arrow threads, or pools size to the host.
+
+    The `env` scope is the vector that reaches inside the container on the local
+    and SLURM executors; `beforeScript` runs on the host and is wiped before the
+    container starts. A process that does real parallel work opts back in with
+    task.cpus in its own script block.
+    """
+    config = (REPO_ROOT / "nextflow.config").read_text()
+    env_block = re.search(r"^env \{(.*?)^\}", config, re.S | re.M)
+    assert env_block, "nextflow.config has no top-level env {} scope"
+    body = env_block.group(1)
+    for var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+                "NUMEXPR_MAX_THREADS", "POLARS_MAX_THREADS"):
+        assert re.search(rf"{var}\s*=\s*'1'", body), f"{var} not capped to 1 in env scope"
+
+    assignment = (REPO_ROOT / "modules/local/guide_assignment_sceptre/main.nf").read_text()
+    assert "export OMP_NUM_THREADS=${task.cpus} OPENBLAS_NUM_THREADS=${task.cpus}" in assignment
