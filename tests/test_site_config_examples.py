@@ -118,10 +118,10 @@ def test_the_parser_sees_the_defaults_it_is_asked_about():
     assert defaults["TAPSEQ_QC_MODE"] is False
     assert defaults["QC_min_genes_per_cell"] == 500
     assert defaults["QC_min_cells_per_gene"] == 0.05
-    assert defaults["QC_barcode_filter"] == "knee"  # from the last params block
-    assert defaults["GUIDE_ASSIGNMENT_capture_method"] == "direct-capture"
-    assert defaults["spacer_tag"] == "TAGCTCTTAAAC"
-    assert defaults["reverse_complement_guides"] is True
+    assert defaults["QC_barcode_filter"] == "knee2"  # from the last params block
+    assert defaults["GUIDE_ASSIGNMENT_capture_method"] == "CROP-seq"
+    assert defaults["spacer_tag"] == ""
+    assert defaults["reverse_complement_guides"] is False
     assert defaults["REFERENCE_restrict_genes_to_gtf"] is False
     assert defaults["INFERENCE_control_group"] == "auto"
     assert defaults["INFERENCE_PERTURBO_CRT_POOL"] == "from-moi"
@@ -225,12 +225,23 @@ def test_the_tapseq_example_records_the_single_lane_lesson():
 
 
 def test_the_tapseq_example_marks_the_library_chemistry_as_dataset_specific():
-    """These four worked for chr8; copying them unverified is the failure mode."""
-    params = _params(REPO_ROOT / "nextflow_tapseq.config")
+    """These four worked for chr8; copying them unverified is the failure mode.
+
+    Asserted on the EFFECTIVE configuration, not on the example's own lines. Three
+    of the four match nextflow.config's defaults, so the example must not restate
+    them (test_a_site_config_states_only_deltas enforces that) -- but launching
+    with `-c nextflow_tapseq.config` must still yield chr8's chemistry, and the
+    file must still tell the reader to check their own.
+    """
+    effective = _params(BASE_CONFIG)
+    effective.update(_params(REPO_ROOT / "nextflow_tapseq.config"))
     text = (REPO_ROOT / "nextflow_tapseq.config").read_text()
 
-    assert params["GUIDE_ASSIGNMENT_capture_method"] == "crop-seq"
-    assert params["spacer_tag"] == ""
-    assert params["reverse_complement_guides"] is False
-    assert params["QC_barcode_filter"] == "knee2"
+    assert effective["GUIDE_ASSIGNMENT_capture_method"] == "crop-seq"
+    assert effective["spacer_tag"] == ""
+    assert effective["reverse_complement_guides"] is False
+    assert effective["QC_barcode_filter"] == "knee2"
     assert "seqspec" in text.lower(), "point the reader at their own seqspec check"
+    # The alternatives stay visible, commented, so nobody has to rediscover them.
+    for alternative in ("spacer_tag", "reverse_complement_guides", "QC_barcode_filter"):
+        assert alternative in text, alternative

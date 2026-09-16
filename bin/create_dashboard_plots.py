@@ -152,6 +152,12 @@ def plot_sgRNA_frequencies(mudata, save_dir):
     plt.close()
 
 def plot_guides_per_cell(mudata, save_dir):
+    # Over the analysed cells. With QC_require_assigned_guide on (the default) the
+    # zero bin is empty by construction: the cells that would fill it were dropped
+    # upstream in mudata_concat. How many there were is reported from the counts
+    # that step recorded -- additional_qc/guide/guide_metrics.tsv, the QC metrics
+    # JSON's assigned_guide_filter block, and the dashboard's filtering waterfall --
+    # not read off this histogram.
     guides_per_cell = np.sum(mudata.mod['guide'].layers['guide_assignment'], axis=1)
     plt.figure(figsize=(10, 6))
     plt.hist(guides_per_cell, bins=50, alpha=0.6, color='skyblue', ec="steelblue")

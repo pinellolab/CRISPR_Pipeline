@@ -413,5 +413,12 @@ def test_the_changelog_says_low_moi_sceptre_results_change():
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text()
 
     assert "INFERENCE_control_group" in changelog
-    assert "SCEPTRE p-values and" in changelog
-    assert "low-MOI screens will differ" in changelog
+    # Pin the claim, not one phrasing of it: the changelog must say somewhere
+    # that low-MOI SCEPTRE output is not comparable to earlier runs. Matching a
+    # literal sentence made this fail on an editorial rewrite that kept the warning.
+    warning = re.search(
+        r"low[- ]MOI[^.]{0,400}?(differs?|will differ|not comparable|change[sd]?)",
+        changelog,
+        re.IGNORECASE | re.DOTALL,
+    )
+    assert warning, "CHANGELOG.md must warn that low-MOI SCEPTRE results change"

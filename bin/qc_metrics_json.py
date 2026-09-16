@@ -82,9 +82,13 @@ METRIC_CATALOG = {
             {"name": "guides_per_cell_min", "description": "Minimum assigned guides per cell.", "unit": "guides_per_cell"},
             {"name": "guides_per_cell_max", "description": "Maximum assigned guides per cell.", "unit": "guides_per_cell"},
             {"name": "guides_per_cell_median", "description": "Median assigned guides per cell.", "unit": "guides_per_cell"},
-            {"name": "n_cells_with_guide", "description": "Cells with at least one assigned guide.", "unit": "cells"},
+            {"name": "n_cells_with_guide", "description": "Cells with at least one assigned guide. On the overall row this is the count mudata_concat recorded before QC_require_assigned_guide dropped the unassigned cells, not a recount of the filtered object.", "unit": "cells"},
             {"name": "n_cells_exactly_1_guide", "description": "Cells with exactly one assigned guide.", "unit": "cells"},
-            {"name": "frac_cells_with_guide", "description": "Fraction of cells with at least one assigned guide.", "unit": "fraction"},
+            {"name": "frac_cells_with_guide", "description": "Fraction of cells with at least one assigned guide, measured over the cells present before QC_require_assigned_guide ran. This is the guide-assignment rate, so it is not n_cells_with_guide / n_cells once that filter has removed cells.", "unit": "fraction"},
+            {"name": "n_cells_before_assigned_guide_filter", "description": "Cells present when the assigned-guide filter ran, recorded by mudata_concat.", "unit": "cells"},
+            {"name": "n_cells_without_assigned_guide", "description": "Cells carrying no assigned guide when the filter ran; dropped when QC_require_assigned_guide is true.", "unit": "cells"},
+            {"name": "assigned_guide_filter_applied", "description": "Whether QC_require_assigned_guide actually removed the unassigned cells.", "unit": None},
+            {"name": "assigned_guide_counts_source", "description": "mudata_concat when the assignment counts come from the recorded pre-filter values, final_mudata when they were recounted from this object.", "unit": None},
             {"name": "n_guides_total", "description": "Number of guides in the final guide modality.", "unit": "guides"},
             *_stat_metrics("cells_per_guide", "of assigned cells per guide.", "cells_per_guide"),
         ],
@@ -298,6 +302,15 @@ def _matrix_mean_sum(matrix, axis):
 
 
 def _guide_assignment_summary(guide_mod):
+    """Assignment totals over the cells in the final object.
+
+    These are deliberately recomputed rather than recorded: they describe the
+    analysed population, and ``mean_guides_per_cell`` in particular is meant to
+    be read that way. It does rise when ``QC_require_assigned_guide`` removes
+    the zero-guide cells; the assignment *rate* is the metric that would have
+    been destroyed by that, and it is reported separately, from the recorded
+    pre-filter counts, by ``_assigned_guide_filter_summary``.
+    """
     assignment = None
     if hasattr(guide_mod, "layers"):
         try:
@@ -320,12 +333,45 @@ def _guide_assignment_summary(guide_mod):
     }
 
 
+ASSIGNED_GUIDE_FILTER_FIELDS = (
+    ("applied", "assigned_guide_filter_applied", bool),
+    ("counted_from", "assigned_guide_filter_source", str),
+    ("cells_before", "n_cells_before_assigned_guide_filter", int),
+    ("cells_after", "n_cells_after_assigned_guide_filter", int),
+    ("cells_with_assigned_guide", "n_cells_with_assigned_guide", int),
+    ("cells_without_assigned_guide", "n_cells_without_assigned_guide", int),
+    ("frac_cells_with_assigned_guide", "frac_cells_with_assigned_guide", float),
+)
+
+
+def _assigned_guide_filter_summary(mudata, params):
+    """The unassigned-cell count and fraction, as recorded before the filter ran.
+
+    ``bin/mudata_concat.py`` drops cells with no assigned guide and records what
+    it saw in ``uns``. Reporting those numbers here is the point: recounted from
+    the filtered object the assignment rate is 100% by construction, and a run
+    whose guide assignment failed would report nothing wrong.
+    """
+    uns = getattr(mudata, "uns", None) or {}
+    summary = {"QC_require_assigned_guide": params.get("QC_require_assigned_guide")}
+    for field, key, cast in ASSIGNED_GUIDE_FILTER_FIELDS:
+        value = uns.get(key)
+        summary[field] = None if value is None else cast(value)
+    if summary["cells_before"] is None:
+        summary["note"] = (
+            "No assigned-guide filter counts recorded; this MuData predates "
+            "QC_require_assigned_guide."
+        )
+    return summary
+
+
 def _selected_params(params):
     keys = [
         "QC_barcode_filter",
         "QC_min_genes_per_cell",
         "QC_min_counts_per_cell",
         "QC_min_cells_per_gene",
+        "QC_require_assigned_guide",
         "QC_pct_mito",
         "QC_batch_col",
         "ENABLE_SCRUBLET",
@@ -390,6 +436,7 @@ def build_pipeline_qc_metrics_payload(
             "params_source": qc_params.get("pct_mito_source"),
             "cells_after_filter": int(filtered_count) if filtered_count is not None else None,
         },
+        "assigned_guide_filter": _assigned_guide_filter_summary(mudata, params),
         "modality_intersection": {
             "rna_guide_intersection_cells": int(guide_intersection_count),
             "guide_unfiltered_intersection_cells": int(unfiltered_intersection),

@@ -24,6 +24,16 @@ Metrics computed (per batch and overall):
     - frac_cells_with_guide: Fraction of cells with any guide assignment
     - max_guides_per_cell: Maximum guides assigned to any single cell
 
+  The assignment rate is not recomputed from this object when the pipeline
+  recorded it. QC_require_assigned_guide drops cells with no assigned guide in
+  mudata_concat, so counting them here would return 100% by construction and a
+  run whose guide assignment failed would look perfect. When the counts
+  mudata_concat recorded in .uns are present, the overall row reports those --
+  n_cells_with_guide, frac_cells_with_guide, plus the explicit
+  n_cells_before_assigned_guide_filter and n_cells_without_assigned_guide --
+  and assigned_guide_counts_source says so. Per-batch rows are always counted
+  from this object, because the recorded numbers are screen-level totals.
+
   Per-guide metrics (from guide.var, overall only):
     - n_cells_per_guide: Number of cells each guide is assigned to (median, mean, std)
       * Derived from: np.sum(guide.layers["guide_assignment"] > 0, axis=0)
@@ -47,7 +57,8 @@ import seaborn as sns
 
 import mudata
 
-from qc_mudata_io import read_mudata_without_uns
+from qc_mudata_io import read_mudata_without_uns, read_uns_scalars
+from mudata_concat import ASSIGNED_GUIDE_FILTER_KEYS
 import numpy as np
 import pandas as pd
 from anndata import AnnData
@@ -147,6 +158,7 @@ def compute_guide_metrics(
     guides_per_cell_col: str = "n_guides_per_cell",
     cells_per_guide_col: str = "n_cells_per_guide",
     include_per_guide_stats: bool = True,
+    recorded_assignment_counts: dict | None = None,
 ) -> dict:
     """
     Compute guide mapping metrics for one subset of cells.
@@ -165,6 +177,11 @@ def compute_guide_metrics(
         Column in guide.var with number of cells per guide.
     include_per_guide_stats : bool
         Whether to include per-guide statistics (only meaningful for "all" batch).
+    recorded_assignment_counts : dict or None
+        The cell counts mudata_concat recorded in .uns before it applied the
+        assigned-guide filter. When given, they replace the counts this function
+        would otherwise take from the filtered object; pass them only for the
+        overall row, since they are screen-level totals.
 
     Returns
     -------
@@ -214,8 +231,30 @@ def compute_guide_metrics(
 
         # frac_cells_with_guide: fraction of cells with at least one guide
         metrics["frac_cells_with_guide"] = n_cells_with_guide / n_cells if n_cells > 0 else 0.0
+        metrics["assigned_guide_counts_source"] = "final_mudata"
     else:
         logger.warning(f"Column '{guides_per_cell_col}' not found in guide.obs")
+
+    # -----------------------------------------------------------------
+    # Assignment rate as recorded upstream, where it is still measurable.
+    # -----------------------------------------------------------------
+    recorded = recorded_assignment_counts or {}
+    if "n_cells_before_assigned_guide_filter" in recorded:
+        n_before = int(recorded["n_cells_before_assigned_guide_filter"])
+        metrics["n_cells_before_assigned_guide_filter"] = n_before
+        metrics["n_cells_without_assigned_guide"] = int(
+            recorded.get("n_cells_without_assigned_guide", 0)
+        )
+        metrics["assigned_guide_filter_applied"] = bool(
+            recorded.get("assigned_guide_filter_applied", False)
+        )
+        if "n_cells_with_assigned_guide" in recorded:
+            metrics["n_cells_with_guide"] = int(recorded["n_cells_with_assigned_guide"])
+        if "frac_cells_with_assigned_guide" in recorded:
+            metrics["frac_cells_with_guide"] = float(
+                recorded["frac_cells_with_assigned_guide"]
+            )
+        metrics["assigned_guide_counts_source"] = "mudata_concat"
 
     # -----------------------------------------------------------------
     # Per-guide statistics (from guide.var[cells_per_guide_col])
@@ -483,6 +522,17 @@ def run_guide_mapping_qc(
     # -----------------------------------------------------------------
     # Compute metrics: overall
     # -----------------------------------------------------------------
+    # The pre-filter cell counts mudata_concat recorded, read without pulling in
+    # the result tables that dominate this file. Absent on an object written
+    # before the filter existed, in which case the counts below are recomputed
+    # exactly as they always were.
+    recorded_assignment_counts = read_uns_scalars(input_path, ASSIGNED_GUIDE_FILTER_KEYS)
+    if recorded_assignment_counts:
+        logger.info(
+            "Using the assignment counts recorded by mudata_concat: "
+            f"{recorded_assignment_counts}"
+        )
+
     metrics_list = []
     metrics_all = compute_guide_metrics(
         guide, batch_label="all",
@@ -490,6 +540,7 @@ def run_guide_mapping_qc(
         guides_per_cell_col=guides_per_cell_col,
         cells_per_guide_col=cells_per_guide_col,
         include_per_guide_stats=True,  # Include guide.var stats for "all"
+        recorded_assignment_counts=recorded_assignment_counts,
     )
     metrics_list.append(metrics_all)
 

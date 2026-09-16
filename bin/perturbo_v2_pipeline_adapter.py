@@ -36,7 +36,12 @@ from intended_target_key_utils import (
     get_target_lookup,
 )
 from mudata_uns_io import write_uns_patch
-from inference_covariates import CANONICAL_COVARIATES, perturbo_covariate_arguments
+from inference_covariates import (
+    CANONICAL_COVARIATES,
+    GUIDE_UMI_COVARIATE,
+    derive_guide_umi_covariate,
+    perturbo_covariate_arguments,
+)
 from result_table_io import write_result_table
 
 
@@ -105,16 +110,18 @@ def _get_assignment_matrix(mdata: md.MuData):
 
 
 def _ensure_covariates(mdata: md.MuData) -> None:
-    guide_obs = mdata[GUIDE_MODALITY].obs
-    gene_obs = mdata[GENE_MODALITY].obs
-    if "total_guide_umis" in guide_obs.columns:
-        values = np.asarray(guide_obs["total_guide_umis"], dtype=float)
-    else:
-        values = np.asarray(_get_assignment_matrix(mdata).sum(axis=1)).ravel()
-        guide_obs["total_guide_umis"] = values
-    centered = np.log1p(values)
-    centered = centered - float(np.nanmean(centered))
-    gene_obs["log1p_total_guide_umis_centered"] = centered
+    """Take the derived guide-UMI covariate from upstream, or derive it once here.
+
+    The derivation lives in ``bin/inference_covariates.py``; the shared
+    preparation step already ran it over the analysed cells, so when the column
+    is present it is used as it stands. Recomputing it here is only for the input
+    paths that skip that step, and it now centres over the same cell population
+    either way, because the cells are decided once in ``bin/mudata_concat.py``.
+    """
+    if GUIDE_UMI_COVARIATE in mdata[GENE_MODALITY].obs.columns:
+        print(f"Using the upstream {GUIDE_UMI_COVARIATE} column.")
+        return
+    derive_guide_umi_covariate(mdata)
 
 
 def _ensure_library_size(mdata: md.MuData) -> None:
@@ -150,8 +157,10 @@ def _build_guide_identity_mapping(mdata: md.MuData) -> dict[str, str]:
 
 def _covariate_has_control_variance(input_path: Path, map_key: str, names_key: str) -> bool:
     with _open_mudata(input_path, backed="r") as mdata:
+        if GUIDE_UMI_COVARIATE not in mdata[GENE_MODALITY].obs.columns:
+            return False
         values = pd.to_numeric(
-            mdata[GENE_MODALITY].obs["log1p_total_guide_umis_centered"],
+            mdata[GENE_MODALITY].obs[GUIDE_UMI_COVARIATE],
             errors="coerce",
         ).to_numpy(dtype=float)
         guide = mdata[GUIDE_MODALITY]
@@ -523,14 +532,16 @@ def _run_perturbo(
     with _open_mudata(input_path, backed="r") as mdata:
         present = [c for c, _kind, _aliases in CANONICAL_COVARIATES if c in mdata[GENE_MODALITY].obs.columns]
     continuous, batch = perturbo_covariate_arguments(present)
-    if "log1p_total_guide_umis_centered" in continuous and not _covariate_has_control_variance(
+    # Only bites if the guide-UMI term is ever added to CANONICAL_COVARIATES; it is
+    # not one today, so neither method conditions on it.
+    if GUIDE_UMI_COVARIATE in continuous and not _covariate_has_control_variance(
         input_path, map_key, names_key
     ):
         print(
-            "Dropping log1p_total_guide_umis_centered: it has zero variance in the control cells "
+            f"Dropping {GUIDE_UMI_COVARIATE}: it has zero variance in the control cells "
             "PerTurbo fits its baseline on."
         )
-        continuous = [c for c in continuous if c != "log1p_total_guide_umis_centered"]
+        continuous = [c for c in continuous if c != GUIDE_UMI_COVARIATE]
     if continuous:
         cmd.extend(["--continuous-covariates", *continuous])
     if batch:

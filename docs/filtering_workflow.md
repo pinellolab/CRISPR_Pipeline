@@ -102,7 +102,8 @@ flowchart TD
     A2["CLEANSER assignment<br/>IGVFDS8721BKRO"]
     A3["CLEANSER assignment<br/>IGVFDS9613DDRB"]
     ACAT["Concatenate assigned MuData objects"]
-    GF["Global gene prevalence filter<br/>expression in more than<br/>QC_min_cells_per_gene x total cells"]
+    AGF["Assigned-guide cell filter<br/>keep cells with >= 1 assigned guide<br/>QC_require_assigned_guide"]
+    GF["Global gene prevalence filter<br/>expression in more than<br/>QC_min_cells_per_gene x retained cells"]
     DUAL{"DUAL_GUIDE?"}
     COLLAPSE["Collapse assigned guides<br/>to intended-target elements"]
     FINAL["concat_mudata.h5mu<br/>input to inference"]
@@ -114,7 +115,7 @@ flowchart TD
     A1 --> ACAT
     A2 --> ACAT
     A3 --> ACAT
-    ACAT --> GF --> DUAL
+    ACAT --> AGF --> GF --> DUAL
     DUAL -- "false" --> FINAL
     DUAL -- "true" --> COLLAPSE --> FINAL
 ```
@@ -196,10 +197,21 @@ and task objects under `gs://igvf-pertub-seq-pipeline-data/work`.
 - `mudata.h5mu` is one combined multimodal object containing all three batches.
   It is temporarily split by `batch` (`measurement_sets`) so guide assignment
   runs independently, then recombined as `concat_mudata.h5mu`.
+- `QC_require_assigned_guide` (default `true`) is the pipeline's only cell
+  filter after this point. It drops cells with no assigned guide, counted from
+  `guide.layers['guide_assignment']` binarized, and runs in `mudata_concat`
+  immediately after batch concatenation -- so both inference methods, every
+  derived per-cell covariate and both CRT pools inherit one cell population.
+  The counts as they stood before the filter are recorded in the MuData's
+  `.uns` and reported by the QC path, so the guide-assignment rate does not
+  become 100% by construction. Under `DUAL_GUIDE = true` the later
+  `collapse_guides` step keeps only cells with exactly two guides on one
+  element, which is stricter than this filter and subsumes it.
 - `QC_min_cells_per_gene` is a fraction in `[0, 1)` and is applied after guide
-  assignment and batch concatenation. A gene must be detected in strictly more
-  than `QC_min_cells_per_gene * total_cells`; `0` retains every gene detected
-  in at least one cell.
+  assignment, batch concatenation and the assigned-guide cell filter. A gene
+  must be detected in strictly more than
+  `QC_min_cells_per_gene * retained_cells`; `0` retains every gene detected in
+  at least one cell.
 - `TAPSEQ_QC_MODE = true` removes the standard 10-cell preprocessing floor so
   observed TAP-seq genes reach the final fractional filter. Pair it with a very
   small fraction (for example `0.000001`) when all observed genes should be

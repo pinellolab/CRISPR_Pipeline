@@ -1,9 +1,139 @@
 #!/usr/bin/env python
+"""Aggregate the guide-assigned MuData and decide, once, which cells are analysed.
+
+This step runs immediately after guide assignment and is the only place the
+pipeline chooses a cell population, so everything downstream -- both inference
+methods, every covariate, both CRT pools -- inherits the same one. Before that
+was true, SCEPTRE ran on ``bin/prepare_inference.py``'s cis subset (cells
+carrying a tested or control guide) while PerTurbo fitted on every barcode in
+the object, cells with no assigned guide included.
+
+Dropping those cells would also destroy the guide-assignment rate, which is a
+QC metric the dashboard reports: recomputed from the filtered object it reads
+100% by construction, and a run whose guide assignment failed would look
+perfect. So the counts as they stood before the filter are recorded in
+``.uns`` under the names in ``ASSIGNED_GUIDE_FILTER_KEYS``, and the QC path
+reads those rather than recounting.
+"""
 import argparse
 import math
 import os
 
+import numpy as np
 import pandas as pd
+from scipy.sparse import issparse
+
+
+ASSIGNMENT_LAYER = "guide_assignment"
+
+# Recorded in the MuData's top-level .uns by
+# ``filter_cells_without_assigned_guide``, whether or not the filter is applied,
+# so the QC path reads one set of names either way. ``write_uns_patch`` copies
+# .uns forward, and ``collapse_guides`` copies it too, so these survive into the
+# published inference MuData.
+ASSIGNED_GUIDE_FILTER_KEYS = (
+    "assigned_guide_filter_applied",
+    "assigned_guide_filter_source",
+    "n_cells_before_assigned_guide_filter",
+    "n_cells_after_assigned_guide_filter",
+    "n_cells_with_assigned_guide",
+    "n_cells_without_assigned_guide",
+    "frac_cells_with_assigned_guide",
+)
+
+
+def parse_bool(value):
+    """Accept Nextflow's rendered ``true``/``false`` as well as a real bool."""
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"true", "t", "yes", "y", "1"}:
+        return True
+    if text in {"false", "f", "no", "n", "0"}:
+        return False
+    raise ValueError(f"Expected a boolean, got {value!r}.")
+
+
+def assigned_guides_per_cell(mdata):
+    """Assigned guides per cell, from the binarized guide-assignment layer.
+
+    Returns the per-cell counts and the name of the matrix they came from. The
+    layer is the guide *calls*; ``guide.X`` is raw guide UMIs and is only a
+    fallback, because a cell with a stray guide read but no call would then
+    count as assigned. Say so when that happens rather than silently switching.
+    """
+    guide = mdata.mod["guide"]
+    if ASSIGNMENT_LAYER in guide.layers:
+        matrix = guide.layers[ASSIGNMENT_LAYER]
+        source = f"guide.layers['{ASSIGNMENT_LAYER}']"
+    else:
+        matrix = guide.X
+        source = "guide.X"
+        print(
+            f"WARNING: the guide modality has no '{ASSIGNMENT_LAYER}' layer; counting "
+            "assigned guides from raw guide UMIs in guide.X instead. A cell with guide "
+            "reads but no call will be counted as assigned."
+        )
+    binarized = matrix > 0
+    if issparse(binarized):
+        counts = np.asarray(binarized.sum(axis=1)).ravel()
+    else:
+        counts = np.asarray(np.asarray(binarized).sum(axis=1)).ravel()
+    return counts, source
+
+
+def filter_cells_without_assigned_guide(mdata, require_assigned_guide=True):
+    """Drop cells carrying no assigned guide, and record the pre-filter counts.
+
+    A cell with exactly one assigned guide is kept; only ``guides_per_cell == 0``
+    is dropped. The recorded counts describe the population as it stood here,
+    which is the only point at which the guide-assignment rate is measurable,
+    and they are written whether or not the filter is applied.
+    """
+    import mudata as md
+
+    guides_per_cell, source = assigned_guides_per_cell(mdata)
+    keep = guides_per_cell >= 1
+    n_before = int(mdata.n_obs)
+    n_with_guide = int(keep.sum())
+    n_without_guide = n_before - n_with_guide
+    n_after = n_with_guide if require_assigned_guide else n_before
+
+    mdata.uns["assigned_guide_filter_applied"] = bool(require_assigned_guide)
+    mdata.uns["assigned_guide_filter_source"] = source
+    mdata.uns["n_cells_before_assigned_guide_filter"] = n_before
+    mdata.uns["n_cells_after_assigned_guide_filter"] = n_after
+    mdata.uns["n_cells_with_assigned_guide"] = n_with_guide
+    mdata.uns["n_cells_without_assigned_guide"] = n_without_guide
+    mdata.uns["frac_cells_with_assigned_guide"] = (
+        float(n_with_guide) / n_before if n_before else 0.0
+    )
+
+    print(
+        f"{n_with_guide} of {n_before} cells carry at least one assigned guide "
+        f"({n_without_guide} carry none); counted from {source}"
+    )
+
+    if not require_assigned_guide:
+        print(
+            "QC_require_assigned_guide is off: keeping cells with no assigned guide. "
+            "Both inference methods will fit on them."
+        )
+        return mdata
+
+    if n_with_guide == 0:
+        raise ValueError(
+            "No cell carries an assigned guide, so the assigned-guide filter would "
+            "empty the object. Check guide assignment, or set "
+            "QC_require_assigned_guide = false to keep every cell."
+        )
+
+    if n_without_guide == 0:
+        print("No cell to drop; every cell carries an assigned guide.")
+        return mdata
+
+    print(f"Dropping {n_without_guide} cells with no assigned guide")
+    return mdata[keep].copy()
 
 
 def resolve_min_cells(n_obs, min_cells_fraction):
@@ -53,7 +183,23 @@ def preserve_source_guide_metadata(combined_guide_var, source_guide_var):
 
     return combined
 
-def concat_mudatas(input_files, output_file, min_cells_fraction=0.05):
+def apply_cell_and_gene_filters(mdata, min_cells_fraction, require_assigned_guide=True):
+    """The cell filter, then the gene filter, in that order.
+
+    Cells first: the gene threshold is a fraction of the *retained* cells, so a
+    gene has to be supported among the cells that are actually analysed. On a
+    screen with a large unassigned population the two orders disagree, and
+    measuring gene support over cells nothing is tested in is the wrong one.
+    """
+    mdata = filter_cells_without_assigned_guide(
+        mdata, require_assigned_guide=require_assigned_guide
+    )
+    return filter_genes_by_cells(mdata, min_cells_fraction)
+
+
+def concat_mudatas(
+    input_files, output_file, min_cells_fraction=0.05, require_assigned_guide=True
+):
     """
     Concatenate multiple MuData files. If only one file is provided, it's copied to the output.
     """
@@ -70,7 +216,9 @@ def concat_mudatas(input_files, output_file, min_cells_fraction=0.05):
     if len(files) == 1:
         print(f"Only one file found. Copying {files[0]} to {output_file}")
         single_mdata = md.read(files[0])
-        single_mdata = filter_genes_by_cells(single_mdata, min_cells_fraction)  # Filter genes based on minimum cells
+        single_mdata = apply_cell_and_gene_filters(
+            single_mdata, min_cells_fraction, require_assigned_guide
+        )
         print(f"Saving MuData with {single_mdata.n_obs} cells to {output_file}")
         single_mdata.write(output_file)
         return
@@ -88,8 +236,10 @@ def concat_mudatas(input_files, output_file, min_cells_fraction=0.05):
     )
 
 
-    print ('filtering genes')
-    combined_mdata = filter_genes_by_cells(combined_mdata, min_cells_fraction)  # Filter genes based on minimum cells
+    print('filtering cells and genes')
+    combined_mdata = apply_cell_and_gene_filters(
+        combined_mdata, min_cells_fraction, require_assigned_guide
+    )
 
 
     print(f"Saving combined MuData with {combined_mdata.n_obs} cells to {output_file}")
@@ -112,9 +262,27 @@ def main():
             "[0, 1); zero keeps every gene detected in at least one cell."
         ),
     )
+    parser.add_argument(
+        "--require-assigned-guide",
+        dest="require_assigned_guide",
+        type=parse_bool,
+        nargs="?",
+        const=True,
+        default=True,
+        help=(
+            "Keep only cells with at least one assigned guide (QC_require_assigned_guide). "
+            "This is the pipeline's single cell filter, inherited by both inference "
+            "methods. The pre-filter counts are recorded in .uns either way."
+        ),
+    )
     args = parser.parse_args()
 
-    concat_mudatas(args.input, args.output, args.gene_filter)
+    concat_mudatas(
+        args.input,
+        args.output,
+        args.gene_filter,
+        args.require_assigned_guide,
+    )
 
 if __name__ == "__main__":
     main()

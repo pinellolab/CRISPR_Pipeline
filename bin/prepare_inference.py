@@ -115,22 +115,30 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
         rna_subset = mudata.mod["gene"][:, gene_subset_mask]
         grna_subset = mudata.mod["guide"][:, guide_subset_mask]
 
-        targeted_cells = grna_subset.X.sum(axis=1) > 0
-        if not targeted_cells.any():
-            raise ValueError("No targeted cells found in the guide modality subset.")
-
-        print(
-            f"Keeping {targeted_cells.sum()} targeted cells out of {len(targeted_cells)} total cells"
-        )
-
+        # Genes and guides are subset here; cells are not, and must not be.
+        #
+        # The gene/guide asymmetry between the two methods is intended and
+        # harmless. SCEPTRE runs on this cis subset, while PerTurbo fits every
+        # gene so that one run yields the transcriptome-wide table as well: the
+        # per-gene stage-one fits are independent at --num-factors 0, the size
+        # factors come from the total_gene_umis obs column computed upstream
+        # rather than from whichever genes are retained, and the local table is
+        # Benjamini-Hochberg corrected over the requested pairs alone.
+        #
+        # The cell set is a different matter. It decides the CRT's null pool and
+        # the stage-one baseline, so it has exactly one definition, upstream in
+        # bin/mudata_concat.py (QC_require_assigned_guide), and both methods
+        # inherit it. This step used to narrow it again to
+        # `grna_subset.X.sum(axis=1) > 0`, which is what made SCEPTRE and
+        # PerTurbo analyse different cells.
         mdata_dict = {
-            "gene": rna_subset[targeted_cells],
-            "guide": grna_subset[targeted_cells],
+            "gene": rna_subset,
+            "guide": grna_subset,
         }
 
         for mod in mudata.mod.keys():
             if mod not in mdata_dict:
-                mdata_dict[mod] = mudata.mod[mod][targeted_cells]
+                mdata_dict[mod] = mudata.mod[mod]
 
         mudata_new = mu.MuData(mdata_dict)
         mudata_new.uns = mudata.uns.copy()

@@ -134,6 +134,33 @@ def read_result_columns(
     return pd.DataFrame(frame)
 
 
+def read_uns_scalars(path: str | Path, keys: Iterable[str]) -> dict:
+    """Scalar ``uns`` entries, read without touching the result tables.
+
+    ``read_mudata_without_uns`` deliberately skips ``uns`` entirely, but a few
+    recorded numbers live there -- the pre-filter cell counts from
+    ``bin/mudata_concat.py``, which the guide QC has to report rather than
+    recount from the filtered object. Only scalars are returned; a key that is
+    absent, or that holds a group (a result table), is skipped.
+    """
+    out: dict = {}
+    with h5py.File(path, "r") as handle:
+        uns = handle.get("uns")
+        if uns is None:
+            return out
+        for key in keys:
+            node = uns.get(key)
+            if node is None or not isinstance(node, h5py.Dataset) or node.shape != ():
+                continue
+            value = node[()]
+            if isinstance(value, bytes):
+                value = value.decode()
+            elif isinstance(value, np.generic):
+                value = value.item()
+            out[key] = value
+    return out
+
+
 def read_mudata_without_uns(path: str | Path):
     """A MuData carrying every modality but no ``uns`` result tables.
 

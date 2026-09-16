@@ -60,7 +60,17 @@ def collapse_guides(
     else:
         elements_per_cell = np.asarray(elements_per_cell).flatten()
 
-    # Filter for cells with no more than max_elements_per_cell elements and specified number of guides
+    # Filter for cells with no more than max_elements_per_cell elements and specified
+    # number of guides.
+    #
+    # This runs after mudata_concat's assigned-guide filter, in the same process
+    # script, and the two compose rather than duplicate: that filter keeps
+    # guides_per_cell >= 1, this one keeps guides_per_cell >= min_guides_per_cell
+    # (2), which is strictly stronger, so no cell is dropped twice and the order
+    # cannot matter. With QC_require_assigned_guide = false the zero-guide cells
+    # reach this point and this filter removes them anyway -- under DUAL_GUIDE the
+    # parameter therefore changes nothing about which cells survive, only which
+    # counts mudata_concat recorded on the way through.
     element_filter = elements_per_cell <= max_elements_per_cell
     guide_filter = (guides_per_cell >= min_guides_per_cell) & (
         guides_per_cell <= max_guides_per_cell

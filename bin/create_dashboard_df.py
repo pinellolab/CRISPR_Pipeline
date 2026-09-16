@@ -750,9 +750,34 @@ def _build_comprehensive_qc_report(
             ],
         )
     )
+    # The one cell filter both inference methods inherit. Its numbers come from
+    # the counts mudata_concat recorded before it ran, because after it ran the
+    # assignment rate is 100% by construction.
+    assigned_guide_uns = getattr(mudata, "uns", None) or {}
+    cells_before_guide_filter = assigned_guide_uns.get("n_cells_before_assigned_guide_filter")
+    cells_without_guide = assigned_guide_uns.get("n_cells_without_assigned_guide")
+    guide_filter_applied = bool(assigned_guide_uns.get("assigned_guide_filter_applied", False))
     waterfall_steps.append(
         _qc_step(
             step_num + 1,
+            "Assigned-guide cell filter",
+            "Cell QC" if guide_filter_applied else "Diagnostic only",
+            (
+                f"{_tip('QC_require_assigned_guide', 'Keep only cells with at least one assigned guide; applied in mudata_concat so both inference methods analyse the same cells.', code=True)}"
+                f" = {params.get('QC_require_assigned_guide', 'N/A')}. Counts are the ones recorded before the filter ran, so the assignment rate stays reportable."
+            ),
+            [
+                ("Cells before", _format_count(cells_before_guide_filter) if cells_before_guide_filter is not None else "N/A"),
+                ("No assigned guide", _format_count(cells_without_guide) if cells_without_guide is not None else "N/A"),
+                ("Cells with guide", _display(frac_cells_with_guide, digits=1, suffix="%")),
+                ("Applied", "Yes" if guide_filter_applied else "No"),
+            ],
+            state="warn" if (cells_without_guide and not guide_filter_applied) else "",
+        )
+    )
+    waterfall_steps.append(
+        _qc_step(
+            step_num + 2,
             "Final MuData diagnostics",
             "Derived checks",
             "Diagnostic values computed from final MuData. These explain quality but are not extra filters unless explicitly configured.",
@@ -773,6 +798,7 @@ def _build_comprehensive_qc_report(
         ("Min RNA UMIs per cell", _tip(f"QC_min_counts_per_cell = {qc_params.get('min_counts')}", "Minimum total RNA UMI count applied after barcode calling; zero disables it.", code=True), "Resolved params"),
         ("Mito cutoff", _tip(f"QC_pct_mito = {qc_params.get('pct_mito')}", "Maximum mitochondrial percentage allowed.", code=True), "Resolved params"),
         ("Min cells per gene", _tip(f"QC_min_cells_per_gene = {params.get('QC_min_cells_per_gene', 'N/A')}", "Minimum gene support before inference: a fraction in [0, 1); zero retains genes detected in at least one cell.", code=True), "Resolved params"),
+        ("Require assigned guide", _tip(f"QC_require_assigned_guide = {params.get('QC_require_assigned_guide', 'N/A')}", "Keep only cells with at least one assigned guide; the pipeline's single cell filter, applied in mudata_concat.", code=True), "Resolved params"),
         ("Scrublet", _tip(f"ENABLE_SCRUBLET = {params.get('ENABLE_SCRUBLET', False)}", "Whether Scrublet doublet removal was enabled.", code=True), "Resolved params"),
         ("Hashing", _tip(f"ENABLE_DATA_HASHING = {params.get('ENABLE_DATA_HASHING', False)}", "Whether hashing demultiplexing was enabled.", code=True), "Resolved params"),
         ("Inference mode", _tip(f"INFERENCE_method = {params.get('INFERENCE_method', 'N/A')}", "Configured inference method for local/global analysis.", code=True), "Resolved params"),
@@ -1420,6 +1446,10 @@ def create_dashboard_df(guide_fq_tbl, mudata_path, gene_ann_path, filtered_ann_p
 
     ### Create inference visualization df
     ##mean guides/cell
+    # Over the analysed cells, which under QC_require_assigned_guide all carry a
+    # guide. That is the intended reading here; the assignment rate itself is the
+    # "Cells with guide" KPI above, taken from the counts mudata_concat recorded
+    # before it dropped the unassigned cells.
     guides_per_cell = np.sum(guide_assignment_matrix, axis=1)
     mean_guides_per_cell = np.mean(guides_per_cell)
     ##mean cell/guides

@@ -224,6 +224,13 @@
                     "description": "Minimum cell support required to keep a gene.",
                     "help_text": "Fraction of retained cells required to keep a gene, passed to preprocessing and MuData guide-assignment aggregation. It must be in [0, 1); zero keeps genes detected in at least one cell."
                 },
+                "QC_require_assigned_guide": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Keep only cells with at least one assigned guide.",
+                    "help_text": "Applied in mudata_concat immediately after guide assignment, from guide.layers['guide_assignment'] binarized (guide.X only if that layer is absent, with a warning). This is the pipeline's single cell filter, so both inference methods, every derived per-cell covariate and both CRT pools see the same cells; the all-cells CRT pool therefore means all cells carrying an assigned guide. The counts as they stood before the filter are recorded in the MuData's .uns (n_cells_before_assigned_guide_filter, n_cells_after_assigned_guide_filter, n_cells_with_assigned_guide, n_cells_without_assigned_guide, frac_cells_with_assigned_guide) and the QC path reports those, so the guide-assignment rate is not silently 100%. Set false to analyse cells with no assigned guide as well. Under DUAL_GUIDE the later collapse_guides step keeps only cells with exactly two guides on one element, which is stricter than this filter and subsumes it.",
+                    "fa_icon": "fas fa-crosshairs"
+                },
                 "TAPSEQ_QC_MODE": {
                     "type": "boolean",
                     "default": false,
