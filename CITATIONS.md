@@ -10,9 +10,22 @@
 
 ## Pipeline tools
 
+### Statistical methods behind the inference step
 
+The pipeline's two inference methods both test conditional independence by resampling a
+perturbation's assignment. The conditional randomization test (CRT) they rest on, its power
+properties, its application to single-cell CRISPR screens, and the saddlepoint approximation
+that makes it affordable at screen scale are due to:
 
+> Candès E, Fan Y, Janson L, Lv J. Panning for gold: 'model-X' knockoffs for high dimensional controlled variable selection. J R Stat Soc Series B Stat Methodol. 2018;80(3):551-577. doi: 10.1111/rssb.12265. (Introduces the conditional randomization test.)
 
+> Katsevich E, Ramdas A. On the power of conditional independence testing under model-X. Electron J Stat. 2022;16(2):6348-6394. doi: 10.1214/22-EJS2085.
+
+> Barry T, Wang X, Morris JA, Roeder K, Katsevich E. SCEPTRE improves calibration and sensitivity in single-cell CRISPR screen analysis. Genome Biol. 2021;22. doi: 10.1186/s13059-021-02545-2. (SCEPTRE; the CRT applied to single-cell CRISPR screens.)
+
+> Barry T, Mason K, Roeder K, Katsevich E. Robust differential expression testing for single-cell CRISPR screens at low multiplicity of infection. Genome Biol. 2024;25. doi: 10.1186/s13059-024-03254-2. (Low-MOI analysis, the effective-sample-size diagnostic, and the non-targeting-cell contrast this pipeline's `INFERENCE_control_group = 'nt_cells'` selects.)
+
+> Niu Z, Huang Z, Ray Choudhury J, Katsevich E. Saddlepoint approximations for plug-in resampling. arXiv:2407.08911. (Introduces spaCRT, the saddlepoint approximation to the distilled CRT.)
 
 ## Software packaging/containerisation tools
 
