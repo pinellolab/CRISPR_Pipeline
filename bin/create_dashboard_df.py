@@ -993,6 +993,76 @@ def collect_additional_qc_blocks(additional_qc_dir):
             )
         )
 
+    # Optional clone detection/removal QC
+    clone_dir = os.path.join(additional_qc_dir, "clones")
+    clone_metrics = _safe_read_tsv(os.path.join(clone_dir, "clone_metrics.tsv"))
+    clone_row = _get_all_row(clone_metrics)
+    clone_highlight = ""
+    if clone_row is not None:
+        parts = []
+        if "detected_clone_groups" in clone_row:
+            parts.append(f"Clone groups: {human_format(clone_row['detected_clone_groups'])}")
+        if "clonal_cell_fraction" in clone_row:
+            parts.append(f"Clonal cells: {clone_row['clonal_cell_fraction']*100:.1f}%")
+        if "removed_cells" in clone_row:
+            parts.append(f"Removed: {human_format(clone_row['removed_cells'])}")
+        if clone_row.get("applicability") == "low_power_warning":
+            parts.append("Low-power design warning")
+        clone_highlight = ", ".join(parts)
+    clone_images, clone_descs = _collect_images(
+        clone_dir,
+        [("clone_filter_summary.png", "Clone-size distribution and cell-filter outcome.")],
+    )
+    if not clone_metrics.empty or clone_images:
+        blocks.append(
+            new_block(
+                "Guide",
+                "Clone filtering QC",
+                "Guide-barcode clone filtering",
+                clone_highlight,
+                bool(clone_highlight),
+                table=clone_metrics,
+                table_description="Hypergeometric clone-detection and removal summary",
+                image=clone_images,
+                image_description=clone_descs,
+            )
+        )
+
+    # Optional 10x-style RNA sequencing-saturation QC
+    saturation_dir = os.path.join(additional_qc_dir, "sequencing_saturation")
+    saturation_metrics = _safe_read_tsv(
+        os.path.join(saturation_dir, "sequencing_saturation_metrics.tsv")
+    )
+    saturation_row = _get_all_row(saturation_metrics)
+    saturation_highlight = ""
+    if saturation_row is not None:
+        parts = []
+        if "sequencing_saturation" in saturation_row:
+            parts.append(f"Saturation: {saturation_row['sequencing_saturation']*100:.1f}%")
+        if "mean_reads_per_cell" in saturation_row:
+            parts.append(f"Usable reads/cell: {human_format(saturation_row['mean_reads_per_cell'])}")
+        if "median_umis_per_cell" in saturation_row:
+            parts.append(f"Median UMIs: {human_format(saturation_row['median_umis_per_cell'])}")
+        saturation_highlight = ", ".join(parts)
+    saturation_images, saturation_descs = _collect_images(
+        saturation_dir,
+        [("sequencing_saturation_curve.png", "10x-style saturation, UMI, and gene rarefaction curves.")],
+    )
+    if not saturation_metrics.empty or saturation_images:
+        blocks.append(
+            new_block(
+                "scRNA",
+                "Sequencing saturation",
+                "RNA sequencing saturation",
+                saturation_highlight,
+                bool(saturation_highlight),
+                table=saturation_metrics,
+                table_description="Endpoint saturation metrics (aggregate and per batch)",
+                image=saturation_images,
+                image_description=saturation_descs,
+            )
+        )
+
     # Intended target QC
     intended_dir = os.path.join(additional_qc_dir, "intended_target")
     intended_metrics = _safe_read_tsv(os.path.join(intended_dir, "intended_target_metrics.tsv"))

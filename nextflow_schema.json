@@ -252,6 +252,44 @@
                     ],
                     "description": "RNA barcode filtering strategy based on total cell RNA UMI depth.",
                     "help_text": "The preprocessing script sums RNA UMIs per cell, sorts barcodes from highest to lowest total_gene_umis, plots log1p(total_gene_umis) versus barcode rank, and estimates up to two knees. 'knee' uses the first/basic knee: the barcode-rank point with maximum distance from the line joining the highest-UMI and lowest-UMI barcodes. This is more permissive and keeps cells with total_gene_umis greater than or equal to the UMI count at that first knee. 'knee2' first restricts the curve to the high-UMI segment before knee1 and then finds a second/advanced knee using spline curvature; this is stricter and is intended to remove additional low-quality or background barcodes inside the initially retained population. 'none' disables UMI-knee filtering and instead applies QC_min_genes_per_cell. If the requested knee cannot be determined, barcode filtering is skipped with a log message; preprocessing then continues, and because QC_barcode_filter is not 'none', the min-genes cell filter is also skipped. Cells tied at the selected UMI threshold are retained."
+                },
+                "ENABLE_CLONE_REMOVAL": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Detect guide-barcode clones after guide assignment and apply CLONE_REMOVAL_action before inference.",
+                    "help_text": "Opt-in because the Wang et al. hypergeometric method is intended for multiplexed high-MOI lineage barcodes. The paper recommends at least 1,000 guides and at least 10 detected guides per cell; the dashboard reports a low-power warning when those conditions are not met."
+                },
+                "CLONE_REMOVAL_action": {
+                    "type": "string",
+                    "default": "drop_clonal",
+                    "enum": ["mark_only", "drop_clonal", "keep_representative"],
+                    "description": "How detected clones affect the MuData passed to inference.",
+                    "help_text": "mark_only retains all cells and adds clone metadata; drop_clonal removes every member of clone groups meeting the minimum size plus ambiguous multi-clone cells; keep_representative retains the highest-RNA-UMI cell from each detected clone and removes ambiguous cells."
+                },
+                "CLONE_REMOVAL_alpha": {
+                    "type": "number",
+                    "default": 0.05,
+                    "exclusiveMinimum": 0,
+                    "maximum": 1,
+                    "description": "Family-wise alpha before the published all-cell-pair Bonferroni correction."
+                },
+                "CLONE_REMOVAL_min_clone_size": {
+                    "type": "integer",
+                    "default": 2,
+                    "minimum": 2,
+                    "description": "Minimum grouped cells required to classify a group as clonal for removal."
+                },
+                "ENABLE_SEQUENCING_SATURATION": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Generate 10x-style RNA sequencing saturation and complexity curves from corrected BUS records.",
+                    "help_text": "Uses cells retained by RNA preprocessing and unambiguously gene-mapped BUS records. This can add runtime proportional to the mapped read count but does not create downsampled FASTQs."
+                },
+                "SATURATION_downsample_fractions": {
+                    "type": "string",
+                    "default": "0.05,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0",
+                    "pattern": "^[0-9.,]+$",
+                    "description": "Strictly increasing comma-separated read fractions in (0,1] for saturation rarefaction."
                 }
             }
         },

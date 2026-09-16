@@ -10,6 +10,13 @@
 
 ## Pipeline tools
 
+- [Guide-barcode clone detection](https://doi.org/10.1186/s12864-022-08359-1)
+
+  > Wang Y, et al. Detection of clonal cells in high-throughput single-cell CRISPR screens. BMC Genomics. 2022;23:107. doi: 10.1186/s12864-022-08359-1.
+
+- [10x Genomics sequencing-saturation definition](https://www.10xgenomics.com/support/software/cell-ranger/9.0/analysis/outputs/cr-3p-outputs-metrics-count)
+
+  > Sequencing saturation is calculated as one minus the fraction of usable reads representing unique cell-barcode, UMI, and gene combinations.
 
 
 
