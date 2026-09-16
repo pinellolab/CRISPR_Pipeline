@@ -10,6 +10,7 @@ process CreateMuData {
     path gtf_file
     val moi
     val capture_method
+    val restrict_genes_to_gtf
     path adata_hashing
 
     output:
@@ -20,8 +21,9 @@ process CreateMuData {
     script:
         def hashing_arg = adata_hashing.name != 'NO_FILE' ? "--adata_hashing ${adata_hashing}" : ""
         def debug_arg = params.DEBUG_VAR ? "--debug_var" : ""
+        def restrict_arg = restrict_genes_to_gtf ? "--restrict-genes-to-gtf" : ""
         """
-        create_mdata.py ${adata_rna} ${adata_guide} ${guide_metadata} ${gtf_file} ${moi} ${capture_method} ${hashing_arg} ${debug_arg}
+        create_mdata.py ${adata_rna} ${adata_guide} ${guide_metadata} ${gtf_file} ${moi} ${capture_method} ${hashing_arg} ${debug_arg} ${restrict_arg}
         mv concatenated_adata.h5ad guide_concatenated_adata.h5ad
         """
 
