@@ -98,7 +98,7 @@ def plot_barcode_rank(knee_df, point_1, point_2, selected_rank, batch, outpath):
     plt.close(fig)
 
 
-def plot_qc_distributions(obs, limits, batch, outpath):
+def plot_qc_distributions(obs, limits, fixed_limits, batch, outpath):
     specs = [
         ("log1p_total_counts", "Log1p total RNA UMIs", limits["total_counts"]),
         ("log1p_n_genes_by_counts", "Log1p detected genes", limits["n_genes"]),
@@ -108,6 +108,11 @@ def plot_qc_distributions(obs, limits, batch, outpath):
     for ax, (column, label, (_median, _mad, lower, upper)) in zip(axes, specs):
         values = pd.to_numeric(obs[column], errors="coerce").dropna()
         ax.hist(values, bins=60, color="#60a5fa", edgecolor="white")
+        fixed_lower, fixed_upper = fixed_limits[column]
+        if np.isfinite(fixed_lower):
+            ax.axvline(fixed_lower, color="#059669", linestyle=":", label="Fixed bound")
+        if np.isfinite(fixed_upper):
+            ax.axvline(fixed_upper, color="#059669", linestyle=":", label="Fixed bound")
         if np.isfinite(lower):
             ax.axvline(lower, color="#dc2626", linestyle="--", label="MAD bound")
         if np.isfinite(upper):
@@ -219,7 +224,26 @@ def main(args):
         mad_keep &= (values >= lower) & (values <= upper)
     keep = fixed_keep & mad_keep
 
-    plot_qc_distributions(adata.obs, limits, batch, args.qc_dir / f"qc_distributions_scRNA_{label}.png")
+    fixed_plot_limits = {
+        "log1p_total_counts": (
+            np.log1p(args.min_counts) if args.min_counts > 0 else -np.inf,
+            np.inf,
+        ),
+        "log1p_n_genes_by_counts": (
+            np.log1p(args.min_genes)
+            if args.barcode_filter == "none" and args.min_genes > 0
+            else -np.inf,
+            np.inf,
+        ),
+        "pct_counts_mt": (-np.inf, args.pct_mito),
+    }
+    plot_qc_distributions(
+        adata.obs,
+        limits,
+        fixed_plot_limits,
+        batch,
+        args.qc_dir / f"qc_distributions_scRNA_{label}.png",
+    )
     retained = adata[keep].copy()
     retained.write_h5ad(f"{label}_filtered.h5ad")
 

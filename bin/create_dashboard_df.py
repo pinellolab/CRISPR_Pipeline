@@ -1451,7 +1451,7 @@ def create_dashboard_df(guide_fq_tbl, mudata_path, gene_ann_path, filtered_ann_p
     intersection_guides_and_scrna_unfitered = set(gene_ann.obs.index).intersection(guide_ann.obs.index)
     intersection_guidebc_scrnabc = len(intersection_guides_and_scrna_unfitered)
 
-    cn_highlight=f"Number of guide barcodes (unfiltered) intersecting with scRNA barcodes (unfiltered): {human_format(intersection_guidebc_scrnabc)},  Number of cells after filtering by the minimal number of genes to consider a cell usable: {human_format(gene_filtered_ann.shape[0])}, Number of cells after filtering doublets: {human_format(mudata.shape[0])}"
+    cn_highlight=f"Number of guide barcodes (unfiltered) intersecting with scRNA barcodes (unfiltered): {human_format(intersection_guidebc_scrnabc)},  Number of cells after per-measurement-set RNA QC: {human_format(gene_filtered_ann.shape[0])}, Number of cells after filtering doublets: {human_format(mudata.shape[0])}"
 
     gn_highlight=f"Number of genes detected after filtering: {human_format(mudata.mod['gene'].var.shape[0])}, Mean UMI counts per cell after filtering: {human_format(mudata.mod['gene'].X.sum(axis=1).mean())}"
     cell_stats = new_block('Filtering Summary', '', 'Filter to select high quality cells', cn_highlight, True)
