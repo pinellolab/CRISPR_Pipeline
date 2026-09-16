@@ -263,6 +263,13 @@ PLOTS = [
 SUMMARY = "controls_evaluation_summary.txt"
 SKIPPED = "controls_evaluation_skipped.txt"
 
+# Written for every run, whatever the result table holds: where the control
+# cells sit across obs["batch"] decides how the calibration numbers read.
+COMPOSITION = [
+    "control_batch_composition.tsv",
+    "control_batch_composition_note.txt",
+]
+
 
 def _summary(direct, non_targeting, auprc, auroc, dropped=0):
     return (
@@ -466,7 +473,9 @@ def test_reading_less_emits_the_same_metrics(tmp_path, case):
     run_evaluation_controls_from_path(str(path), str(outdir))
 
     assert (outdir / name).read_text(encoding="utf-8") == expected
-    assert sorted(p.name for p in outdir.iterdir()) == sorted([name, *plots])
+    assert sorted(p.name for p in outdir.iterdir()) == sorted(
+        [name, *plots, *COMPOSITION]
+    )
 
 
 def test_the_evaluation_never_loads_the_result_tables(tmp_path, monkeypatch):
@@ -564,4 +573,6 @@ def test_cli_writes_the_plots_the_task_publishes(tmp_path):
              "PYTHONPATH": str(BIN_DIR)},
     )
 
-    assert sorted(p.name for p in outdir.iterdir()) == sorted([SUMMARY, *PLOTS])
+    assert sorted(p.name for p in outdir.iterdir()) == sorted(
+        [SUMMARY, *PLOTS, *COMPOSITION]
+    )
