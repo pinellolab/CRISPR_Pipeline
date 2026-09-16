@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+import json
 import math
 import os
 from pathlib import Path
@@ -28,6 +29,7 @@ from scipy import sparse
 from scipy.stats import false_discovery_control
 
 from analysis_output_formatting import make_h5mu_safe_dataframe
+from control_group import SETTING_PARAM, normalize_moi
 from intended_target_key_utils import (
     annotate_intended_target_groups,
     enrich_pairs_with_target_metadata,
@@ -410,6 +412,30 @@ def _resolve_crt_pool(requested: str, moi: str | None) -> str:
     return "auto"
 
 
+def _record_control_group(artifact_dir: Path, record: dict | None) -> None:
+    """Write the control-group provenance beside the PerTurbo artifacts.
+
+    PerTurbo's own ``crt_metadata.json`` already names the pool it used; what it
+    cannot know is where that pool came from. Add the pipeline's side of the story
+    to each copy, and leave a standalone record at the top so it is findable
+    without walking into the element/guide directories.
+    """
+    if not record:
+        return
+    (artifact_dir / "control_group_resolution.json").write_text(
+        json.dumps(record, indent=2, default=str)
+    )
+    for metadata_path in sorted(artifact_dir.rglob("crt_metadata.json")):
+        try:
+            metadata = json.loads(metadata_path.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(metadata, dict):
+            continue
+        metadata["pipeline_control_group"] = record
+        metadata_path.write_text(json.dumps(metadata, indent=2, default=str))
+
+
 def _run_perturbo(
     input_path: Path,
     out_dir: Path,
@@ -578,7 +604,9 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
             test_all_pairs=args.test_all_pairs,
         )
 
-        args.resolved_crt_pool = _resolve_crt_pool(args.crt_pool, _read_moi(args.input, args.moi))
+        declared_moi = _read_moi(args.input, args.moi)
+        args.resolved_crt_pool = _resolve_crt_pool(args.crt_pool, declared_moi)
+        pool_reason = "requested outright" if args.crt_pool != "from-moi" else f"mapped from declared MOI {declared_moi!r}"
         if args.crt_pool == "from-moi":
             # The assignments outrank the declared setting. A screen whose cells each
             # carry one perturbation is a low-MOI screen whatever the samplesheet says,
@@ -593,8 +621,24 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
                     f"'{args.resolved_crt_pool}' from the declared MOI."
                 )
                 args.resolved_crt_pool = "control-anchored"
+                pool_reason = (
+                    f"every cell carries at most one perturbation and {control_only:,} carry only controls"
+                )
+        # The same facts the pipeline logged, written beside the results so a run can
+        # be read back without its log: which cells the test compared against, the
+        # shared setting it came from, and whether that setting was taken from the
+        # MOI, stated outright, or overridden for PerTurbo alone.
+        args.control_group_record = {
+            "method": "perturbo",
+            "crt_pool": args.resolved_crt_pool,
+            "crt_pool_requested": args.crt_pool,
+            "declared_moi": normalize_moi(declared_moi),
+            SETTING_PARAM: args.control_group_setting,
+            "provenance": args.control_group_provenance,
+            "reason": pool_reason,
+        }
         if args.crt:
-            print(f"PerTurbo CRT pool: {args.resolved_crt_pool} (requested {args.crt_pool}).")
+            print(f"PerTurbo CRT pool: {args.resolved_crt_pool} (requested {args.crt_pool}; {pool_reason}).")
         # The requested pairs (a cis window, usually) come from the MuData that
         # carries uns['pairs_to_test']; by default that is the input itself. The fit
         # is never restricted to them - they select the rows of the local tables.
@@ -713,6 +757,7 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
                 if target.exists():
                     shutil.rmtree(target)
                 shutil.copytree(source, target)
+            _record_control_group(artifact_dir, getattr(args, "control_group_record", None))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -752,6 +797,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Cells a perturbation is tested against; from-moi maps the pipeline's MOI setting (high -> all-cells, low -> control-anchored)",
     )
     parser.add_argument("--moi", default=None, help="Override the MOI setting read from guide.uns['moi']")
+    parser.add_argument(
+        "--control-group-setting",
+        default=None,
+        help=(
+            "The shared INFERENCE_control_group value --crt-pool came from, recorded in the "
+            "run's control-group provenance (see bin/control_group.py)"
+        ),
+    )
+    parser.add_argument(
+        "--control-group-provenance",
+        default=None,
+        choices=[None, "auto", "explicit", "per-method-override"],
+        help="How --crt-pool was decided: from the declared MOI, from an explicit shared setting, or from INFERENCE_PERTURBO_CRT_POOL overriding it",
+    )
     parser.add_argument(
         "--crt-test-control-elements",
         action=argparse.BooleanOptionalAction,

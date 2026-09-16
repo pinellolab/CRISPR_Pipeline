@@ -168,6 +168,7 @@ workflow CRISPR_PIPELINE {
             Preprocessing.gencode_gtf,
             params.Multiplicity_of_infection,
             params.GUIDE_ASSIGNMENT_capture_method,
+            params.REFERENCE_restrict_genes_to_gtf,
             Hashing_Concat.concatenated_hashing_demux
         )
 
@@ -228,6 +229,7 @@ workflow CRISPR_PIPELINE {
             Preprocessing.gencode_gtf,
             params.Multiplicity_of_infection,
             params.GUIDE_ASSIGNMENT_capture_method,
+            params.REFERENCE_restrict_genes_to_gtf,
             file("${workflow.projectDir}/dummy_hash.txt") // Dummy file for hashing parameter when not using hashing
         )
 

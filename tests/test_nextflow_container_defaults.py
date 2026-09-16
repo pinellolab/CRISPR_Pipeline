@@ -48,9 +48,9 @@ def test_library_thread_pools_are_capped_inside_tasks():
     container starts. A process that does real parallel work opts back in with
     task.cpus in its own script block.
     """
-    # nextflow_cc.config stands alone -- it never includes nextflow.config -- so the
-    # CC-Perturb-seq path only has the caps if this file carries its own copy.
-    for name in ("nextflow.config", "nextflow_cc.config"):
+    # The example site configs stand alone -- they never include nextflow.config
+    # -- so those paths only have the caps if each file carries its own copy.
+    for name in ("nextflow.config", "nextflow_cc.config", "nextflow_tapseq.config"):
         config = (REPO_ROOT / name).read_text()
         env_block = re.search(r"^env \{(.*?)^\}", config, re.S | re.M)
         assert env_block, f"{name} has no top-level env {{}} scope"

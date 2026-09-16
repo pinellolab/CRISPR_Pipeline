@@ -3,6 +3,12 @@ process inference_sceptre {
 
     input:
     path mudata_fp
+    // The cells a perturbation is compared against: 'nt_cells' or 'complement',
+    // resolved once from params.INFERENCE_control_group in the inference
+    // subworkflow (modules/local/control_group) so PerTurbo's CRT pool and this
+    // are the same choice. The R driver honours it and refuses the one
+    // combination SCEPTRE cannot provide (nt_cells at high MOI).
+    val control_group
 
     output:
     // Optional: nothing downstream reads a chunk's MuData (sceptre_chunk_merge takes
@@ -10,6 +16,7 @@ process inference_sceptre {
     path "inference_mudata.h5mu", optional: true, emit: inference_mudata
     path "sceptre_per_element_output.tsv.gz", emit: per_element_output
     path "sceptre_per_guide_output.tsv.gz", emit: per_guide_output
+    path "sceptre_control_group.json", optional: true, emit: control_group_metadata
 
     script:
     """
@@ -20,7 +27,7 @@ process inference_sceptre {
     ${params.INFERENCE_SCEPTRE_side}
     ${params.INFERENCE_SCEPTRE_grna_integration_strategy}
     ${params.INFERENCE_SCEPTRE_resampling_approximation}
-    ${params.INFERENCE_SCEPTRE_control_group}
+    ${control_group}
     ${params.INFERENCE_SCEPTRE_resampling_mechanism}
     ${task.cpus}
     EOF

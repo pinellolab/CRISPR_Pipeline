@@ -260,6 +260,119 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 }
 
 
+# Which cells a perturbation is compared against. "nt_cells" contrasts it with the
+# non-targeting cells, which is what PerTurbo's control-anchored pool does, so the
+# two methods answer the same question; "complement" contrasts it with every other
+# cell, which is the only option SCEPTRE offers at high MOI. The pipeline decides
+# once, for both methods, from INFERENCE_control_group (see
+# modules/local/control_group and bin/control_group.py); this honours that choice
+# and refuses the one combination SCEPTRE cannot provide, rather than substituting
+# the complement behind the caller's back -- which is how the two methods ended up
+# answering different questions.
+#
+# `requested` is what the pipeline asked for: "nt_cells", "complement", or one of
+# "auto"/"default"/""/NULL meaning "decide from the screen".
+resolve_sceptre_control_group <- function(requested, is_low_moi, n_nt_cells) {
+  requested_control_group <- if (is.null(requested) || length(requested) == 0) {
+    NA_character_
+  } else {
+    raw <- trimws(as.character(requested)[1])
+    if (is.na(raw) || raw == "" || tolower(raw) %in% c("auto", "default")) {
+      NA_character_
+    } else {
+      tolower(raw)
+    }
+  }
+  accepted_control_groups <- c("nt_cells", "complement")
+  if (!is.na(requested_control_group) && !(requested_control_group %in% accepted_control_groups)) {
+    stop(sprintf(
+      "control_group='%s' is not a SCEPTRE control group. Accepted values: %s (or 'auto' to take it from the screen). The pipeline sets this from INFERENCE_control_group.",
+      requested_control_group, paste(accepted_control_groups, collapse = ", ")
+    ))
+  }
+
+  low_moi <- isTRUE(is_low_moi)
+  nt_cells_available <- low_moi && !is.na(n_nt_cells) && n_nt_cells > 0
+  describe_moi <- if (low_moi) "low-MOI" else "high-MOI"
+  describe_nt <- if (is.na(n_nt_cells)) "an unknown number of" else format(n_nt_cells, big.mark = ",")
+
+  if (is.na(requested_control_group)) {
+    # No demand: take whichever the screen supports. This is where
+    # INFERENCE_control_group='auto' lands when the MOI was never declared.
+    resolved <- if (nt_cells_available) "nt_cells" else "complement"
+    return(list(
+      control_group = resolved,
+      requested = requested_control_group,
+      provenance = "auto",
+      message = sprintf(
+        "Control group not requested: the analysis is %s with %s non-targeting cells -> using control_group='%s'.",
+        describe_moi, describe_nt, resolved
+      )
+    ))
+  }
+
+  if (requested_control_group == "nt_cells" && !low_moi) {
+    stop(paste0(
+      "control_group='nt_cells' was requested but this is a high-MOI analysis: SCEPTRE's ",
+      "non-targeting-cell contrast needs at most one gRNA per cell. Set ",
+      "INFERENCE_control_group='complement' (or 'auto'), or declare the screen low-MOI ",
+      "if that is what it is."
+    ))
+  }
+  if (requested_control_group == "nt_cells" && !nt_cells_available) {
+    stop(sprintf(
+      paste0(
+        "control_group='nt_cells' was requested but the analysis has %s cells carrying only ",
+        "non-targeting gRNAs, so there is no control population to compare against. Set ",
+        "INFERENCE_control_group='complement' (or 'auto')."
+      ),
+      describe_nt
+    ))
+  }
+
+  list(
+    control_group = requested_control_group,
+    requested = requested_control_group,
+    provenance = "requested",
+    message = sprintf(
+      "Control group requested: using control_group='%s' on a %s analysis with %s non-targeting cells.",
+      requested_control_group, describe_moi, describe_nt
+    )
+  )
+}
+
+
+# A small record of which cells the test compared against, so a run can be read
+# back without parsing the log. The perturbo side writes the same facts into its
+# crt_metadata.json / control_group_resolution.json. Hand-rolled JSON: the
+# sceptre image is not guaranteed to carry jsonlite, and every value here is a
+# controlled string or count.
+write_control_group_metadata <- function(resolved, requested, provenance, is_low_moi, n_nt_cells,
+                                         path = "sceptre_control_group.json") {
+  json_string <- function(value) {
+    if (length(value) == 0 || is.na(value)) {
+      return("null")
+    }
+    sprintf('"%s"', gsub('"', '\\"', as.character(value)[1], fixed = TRUE))
+  }
+  json_number <- function(value) {
+    if (length(value) == 0 || is.na(value)) "null" else format(as.integer(value), scientific = FALSE)
+  }
+  lines <- c(
+    "{",
+    sprintf('  "method": "sceptre",'),
+    sprintf('  "control_group": %s,', json_string(resolved)),
+    sprintf('  "control_group_requested": %s,', json_string(requested)),
+    sprintf('  "provenance": %s,', json_string(provenance)),
+    sprintf('  "analysis_moi": %s,', json_string(if (isTRUE(is_low_moi)) "low" else "high")),
+    sprintf('  "non_targeting_cells": %s', json_number(n_nt_cells)),
+    "}"
+  )
+  try(writeLines(lines, con = path), silent = TRUE)
+  invisible(path)
+}
+
+
 inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
   # convert MuData object to sceptre object
   sceptre_object <- convert_mudata_to_sceptre_object_v1(mudata, remove_collinear_covariates = TRUE)
@@ -280,18 +393,10 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
     dplyr::distinct()
 
   args_list <- list(...)
-  requested_control_group <- if ("control_group" %in% names(args_list)) as.character(args_list$control_group)[1] else NA_character_
-
-  # Which cells a perturbation is compared against. "nt_cells" contrasts it with the
-  # non-targeting cells, which is what PerTurbo's low-MOI path does, so the two
-  # methods answer the same question; "complement" contrasts it with every other
-  # cell, which is the only option SCEPTRE offers at high MOI. The screen decides:
-  # nt_cells needs a low-MOI object (one gRNA per cell) and non-targeting cells to
-  # compare against.
-  object_moi <- tryCatch(sceptre_object@low_moi, error = function(e) NA)
-  is_low_moi <- isTRUE(object_moi)
   # The importer decided the multiplicity from the assignments; the object carries
   # the answer, and this function has no other view of it.
+  object_moi <- tryCatch(sceptre_object@low_moi, error = function(e) NA)
+  is_low_moi <- isTRUE(object_moi)
   observed_low_moi <- is_low_moi
   n_nt_cells <- tryCatch({
     targets <- sceptre_object@grna_target_data_frame
@@ -303,23 +408,20 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
     }
   }, error = function(e) NA_integer_)
 
-  if (is_low_moi && !is.na(n_nt_cells) && n_nt_cells > 0) {
-    args_list$control_group <- if (!is.na(requested_control_group)) requested_control_group else "nt_cells"
-    message(sprintf(
-      "Low-MOI object with %s non-targeting cells: using control_group='%s'.",
-      format(n_nt_cells, big.mark = ","), args_list$control_group
-    ))
-  } else {
-    if (!is.na(requested_control_group) && requested_control_group != "complement") {
-      warning(sprintf(
-        "Overriding control_group='%s' with 'complement': the object is %s and has %s non-targeting cells.",
-        requested_control_group,
-        if (is_low_moi) "low-MOI" else "high-MOI",
-        if (is.na(n_nt_cells)) "an unknown number of" else format(n_nt_cells, big.mark = ",")
-      ))
-    }
-    args_list$control_group <- "complement"
-  }
+  control_group_resolution <- resolve_sceptre_control_group(
+    requested = if ("control_group" %in% names(args_list)) args_list$control_group else NULL,
+    is_low_moi = is_low_moi,
+    n_nt_cells = n_nt_cells
+  )
+  args_list$control_group <- control_group_resolution$control_group
+  message(control_group_resolution$message)
+  write_control_group_metadata(
+    resolved = control_group_resolution$control_group,
+    requested = control_group_resolution$requested,
+    provenance = control_group_resolution$provenance,
+    is_low_moi = is_low_moi,
+    n_nt_cells = n_nt_cells
+  )
 
   # Check if pairs_to_test exists in metadata
   if (!is.null(MultiAssayExperiment::metadata(mudata)$pairs_to_test)) {

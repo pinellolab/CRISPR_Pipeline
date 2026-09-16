@@ -5,7 +5,10 @@
 // emits both the local (cis-scale) and the global (transcriptome-wide) tables,
 // and the separate cis-only process it replaces is gone. The conditional
 // randomization test runs beside the Bayesian effect estimates, against the pool
-// the pipeline's MOI setting implies (high -> all cells, low -> control-anchored).
+// params.INFERENCE_control_group names -- the same setting that decides SCEPTRE's
+// control group, resolved once in the inference subworkflow
+// (modules/local/control_group). 'auto' keeps the historical mapping from
+// Multiplicity_of_infection: high -> all cells, low -> control-anchored.
 process inference_perturbo {
     cache 'lenient'
     publishDir path: {
@@ -21,6 +24,7 @@ process inference_perturbo {
     path mudata                                   // the fit input: every gene
     path pairs_mudata, stageAs: 'pairs/*'         // carries uns['pairs_to_test']; may be the same file
     val inference_method
+    val control_group                             // resolveControlGroup()'s map: pool, provenance, reason
 
     output:
     // Optional: writing it byte-copies the input MuData and re-serialises the result
@@ -52,7 +56,9 @@ process inference_perturbo {
             ${write_mudata_arg} \\
             --v2-artifact-dir perturbo_v2_outputs \\
             ${crt_arg} \\
-            --crt-pool ${params.INFERENCE_PERTURBO_CRT_POOL} \\
+            --crt-pool ${control_group.perturbo_crt_pool} \\
+            --control-group-setting ${control_group.setting} \\
+            --control-group-provenance ${control_group.perturbo_provenance} \\
             --moi ${params.Multiplicity_of_infection} \\
             --device ${params.INFERENCE_PERTURBO_DEVICE} \\
             --batch-size 0 \\
