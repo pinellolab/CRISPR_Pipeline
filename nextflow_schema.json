@@ -281,7 +281,7 @@
                 },
                 "ENABLE_SEQUENCING_SATURATION": {
                     "type": "boolean",
-                    "default": false,
+                    "default": true,
                     "description": "Generate 10x-style RNA sequencing saturation and complexity curves from corrected BUS records.",
                     "help_text": "Uses cells retained by RNA preprocessing and unambiguously gene-mapped BUS records. This can add runtime proportional to the mapped read count but does not create downsampled FASTQs."
                 },

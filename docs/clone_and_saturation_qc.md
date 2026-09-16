@@ -1,7 +1,8 @@
 # Clone filtering and sequencing-saturation QC
 
-Both analyses run in the pipeline base container. They are disabled by default
-and can be enabled independently.
+Both analyses run in the pipeline base container. Clone filtering is disabled
+by default, while sequencing-saturation QC is enabled by default. They can be
+configured independently.
 
 ## Guide-barcode clone detection
 
@@ -59,7 +60,7 @@ Outputs are published under `clone_removal/` and copied into the dashboard:
 
 ## 10x-style sequencing saturation
 
-Enable RNA saturation curves:
+RNA saturation curves are enabled by default:
 
 ```groovy
 params {
