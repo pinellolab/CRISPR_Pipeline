@@ -207,11 +207,13 @@ The complete machine-readable QC output catalog is available as
 | `INFERENCE_PERTURBO_SIZE_FACTOR_MODE` | `observed` | PerTurbo size-factor mode | Size-factor handling passed to PerTurbo v2. |
 | `INFERENCE_PERTURBO_LIKELIHOOD` | `negbin` | PerTurbo likelihood name | Likelihood family passed to PerTurbo v2. |
 | `INFERENCE_PERTURBO_PRIOR` | `normal` | PerTurbo prior name | Perturbation-effect prior passed to PerTurbo v2. |
+| `INFERENCE_PERTURBO_CRT_POOL` | `from-moi` | `from-moi`, `auto`, `all-cells`, `control-anchored` | Per-method override for PerTurbo only. `from-moi` is the historical default and counts as unset, so `INFERENCE_control_group` decides; any other value overrides the shared setting for PerTurbo alone and the pipeline logs that the two methods are then deliberately inconsistent. |
 | `INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT` | `parquet` | `tsv.gz`, `parquet` | Serialization used for the global-analysis (all-by-all) PerTurbo v2 result tables and the final local/global/catalog result tables. Requires `pyarrow` in the base image (pinned by default); set `tsv.gz` for compatibility with older images. |
+| `INFERENCE_control_group` | `auto` | `auto`, `nt_cells`, `complement` | The cells a perturbation is compared against, for **both** SCEPTRE and PerTurbo, in SCEPTRE's vocabulary. `nt_cells` compares each perturbation with the non-targeting cells (PerTurbo's control-anchored pool); `complement` compares it with every other cell (PerTurbo's all-cells pool); `auto` takes whichever `Multiplicity_of_infection` implies (`low` -> `nt_cells`, `high` -> `complement`), and when the MOI is neither, PerTurbo measures the design while SCEPTRE falls back to `complement`. `nt_cells` is unavailable for a high-MOI screen and the run fails rather than substituting. See [Control group](#control-group). |
 | `INFERENCE_SCEPTRE_side` | `both` | `both`, `left`, `right` | Alternative-hypothesis side passed to SCEPTRE inference. |
 | `INFERENCE_SCEPTRE_grna_integration_strategy` | `union` | SCEPTRE strategy string | Guide RNA integration strategy passed to SCEPTRE inference. |
 | `INFERENCE_SCEPTRE_resampling_approximation` | `skew_normal` | SCEPTRE approximation string | Resampling approximation passed to SCEPTRE inference. |
-| `INFERENCE_SCEPTRE_control_group` | `complement` | SCEPTRE control group string | Control group strategy passed to SCEPTRE inference. |
+| `INFERENCE_SCEPTRE_control_group` | `complement` | `complement`, `nt_cells` | Per-method override for SCEPTRE only. `complement` is the historical default and counts as unset, so `INFERENCE_control_group` decides; `nt_cells` overrides the shared setting for SCEPTRE alone and the pipeline logs that the two methods are then deliberately inconsistent. To ask for the complement contrast on a low-MOI screen, set `INFERENCE_control_group = 'complement'`. |
 | `INFERENCE_SCEPTRE_resampling_mechanism` | `default` | SCEPTRE mechanism string | Resampling mechanism passed to SCEPTRE inference. |
 | `INFERENCE_SCEPTRE_CHUNK_MODE` | `auto` | `auto`, `off`, `force` | Controls gene chunking before SCEPTRE inference. `auto` chunks large matrices, `off` keeps a single input, and `force` chunks regardless of matrix size. |
 | `INFERENCE_SCEPTRE_MAX_MATRIX_ENTRIES` | `2147483647` | Integer `>= 1` | Cell-by-gene matrix size threshold used by SCEPTRE auto chunking. |
@@ -305,6 +307,56 @@ containers {
    perturbo = 'ghcr.io/pinellolab/perturbo@sha256:...'
 }
 ```
+
+## Control group
+
+`INFERENCE_control_group` names the cells a perturbation is compared against, once,
+for both inference methods. SCEPTRE and PerTurbo make the same statistical choice
+under different names, so the setting uses SCEPTRE's vocabulary and the pipeline
+translates it for PerTurbo:
+
+| `INFERENCE_control_group` | `Multiplicity_of_infection` | SCEPTRE `control_group` | PerTurbo `--crt-pool` |
+|---|---|---|---|
+| `auto` (default) | `low` | `nt_cells` | `control-anchored` |
+| `auto` (default) | `high` | `complement` | `all-cells` |
+| `auto` (default) | anything else | `complement` (the only universally valid contrast) | PerTurbo measures the design (`auto`) |
+| `nt_cells` | `low` | `nt_cells` | `control-anchored` |
+| `nt_cells` | `high` | **run fails** — SCEPTRE has no non-targeting-cell contrast at high MOI | — |
+| `nt_cells` | anything else | `nt_cells` | `control-anchored` |
+| `complement` | any | `complement` | `all-cells` |
+
+PerTurbo additionally overrides a declared MOI when the assignments disagree with
+it: a screen whose cells each carry at most one perturbation, with cells carrying
+only controls, uses the control-anchored pool whatever the samplesheet says. That
+behaviour is unchanged.
+
+The resolution is logged once, at the start of the inference subworkflow, as a
+single line naming the declared MOI, the setting, what each method resolved to,
+and why. It is also recorded beside the results: `control_group_resolution.json`
+and a `pipeline_control_group` block inside PerTurbo's `crt_metadata.json`, and
+`sceptre_control_group.json` on the SCEPTRE side.
+
+### Precedence with the older per-method parameters
+
+`INFERENCE_PERTURBO_CRT_POOL` and `INFERENCE_SCEPTRE_control_group` are kept for
+back-compatibility. Their historical defaults (`from-moi` and `complement`) count
+as "not set", since every config written before the shared setting existed carries
+them. Set either to any other value and it overrides `INFERENCE_control_group` for
+that method alone; the log line then says which setting won and warns that the two
+methods are deliberately inconsistent and their calls are not comparable.
+
+### SCEPTRE results on low-MOI screens change
+
+Before this setting existed, `INFERENCE_SCEPTRE_control_group` was threaded to the
+SCEPTRE driver and then discarded: the driver always used the complement contrast.
+Under the `auto` default, a declared-low-MOI screen now compares each perturbation
+against the non-targeting cells, which is the contrast SCEPTRE documents for
+low-MOI data and the one PerTurbo was already using. **SCEPTRE p-values and
+effect sizes on low-MOI screens will differ from every run made before this
+change.** High-MOI screens are unaffected, and PerTurbo's behaviour is unchanged
+for both. To reproduce the old low-MOI SCEPTRE behaviour, set
+`INFERENCE_control_group = 'complement'` — which also switches PerTurbo to the
+all-cells pool — or override SCEPTRE alone as described above.
 
 ## 🎯 Resource Sizing Guidelines
 
