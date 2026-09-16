@@ -291,6 +291,15 @@ def _build_flow_html(
         return note
 
     def barcode_filter_note():
+        if (filter_info or {}).get("per_measurement_set"):
+            thresholds = (filter_info or {}).get("thresholds", [])
+            span = ""
+            if thresholds:
+                span = f"; UMI thresholds {_format_count(min(thresholds))}-{_format_count(max(thresholds))}"
+            return with_default(
+                f"Applied independently to {(filter_info or {}).get('measurement_sets')} measurement sets{span}",
+                "barcode_filter_source",
+            )
         threshold = (filter_info or {}).get("threshold")
         knee_rank = (filter_info or {}).get("knee_rank")
         if threshold is None:
@@ -332,6 +341,7 @@ def _build_flow_html(
         ))
 
     barcode_filter = qc_params.get("barcode_filter")
+    per_measurement_set = bool((filter_info or {}).get("per_measurement_set"))
     if barcode_filter in {"knee", "knee2"}:
         steps.append(step_html(
             f"Barcode filter ({barcode_filter})",
@@ -341,17 +351,33 @@ def _build_flow_html(
         ))
     else:
         steps.append(step_html(
-            f"Min genes per cell (>= {qc_params.get('min_genes')})",
+            (
+                "Barcode knee disabled (none)"
+                if per_measurement_set
+                else f"Min genes per cell (>= {qc_params.get('min_genes')})"
+            ),
             count=filter_count,
             removed=removed(concat_count, filter_count),
-            note=with_default("Cell complexity filter", "min_genes_source"),
+            note=(
+                "Minimum-gene filtering is included in the per-measurement-set QC step below"
+                if per_measurement_set
+                else with_default("Cell complexity filter", "min_genes_source")
+            ),
         ))
 
     steps.append(step_html(
-        f"Mito filter (pct_counts_mt < {_format_pct(qc_params.get('pct_mito'))})",
+        (
+            "Fixed + MAD RNA QC (per measurement set)"
+            if per_measurement_set
+            else f"Mito filter (pct_counts_mt < {_format_pct(qc_params.get('pct_mito'))})"
+        ),
         count=filtered_count,
         removed=removed(filter_count, filtered_count),
-        note=with_default("Removes high mitochondrial fraction cells", "pct_mito_source"),
+        note=(
+            "Fixed RNA UMI/mitochondrial thresholds plus enabled metric-specific MAD bounds"
+            if per_measurement_set
+            else with_default("Removes high mitochondrial fraction cells", "pct_mito_source")
+        ),
     ))
 
     if hashing_counts:
@@ -418,6 +444,22 @@ def _safe_read_tsv(path):
         return pd.read_csv(path, sep="\t")
     except Exception:
         return pd.DataFrame()
+
+
+def _measurement_set_filter_state(measurement_qc, gene_ann, barcode_filter, min_genes):
+    required = {"measurement_set", "post_knee_cells", "knee_rank", "knee_umi_threshold"}
+    if measurement_qc.empty or not required.issubset(measurement_qc.columns):
+        return _compute_barcode_filter_count(gene_ann, barcode_filter, min_genes)
+    thresholds = pd.to_numeric(measurement_qc["knee_umi_threshold"], errors="coerce").dropna()
+    ranks = pd.to_numeric(measurement_qc["knee_rank"], errors="coerce").dropna()
+    kept = pd.to_numeric(measurement_qc["post_knee_cells"], errors="coerce").fillna(0)
+    return int(kept.sum()), {
+        "method": barcode_filter,
+        "per_measurement_set": True,
+        "measurement_sets": int(len(measurement_qc)),
+        "thresholds": thresholds.tolist(),
+        "knee_ranks": ranks.tolist(),
+    }
 
 
 def _get_all_row(metrics_df):
@@ -568,11 +610,21 @@ def _build_comprehensive_qc_report(
     )
     trans_row, _trans_metrics = _read_qc_metric_row(additional_qc_dir, "global_analysis", "global_analysis_metrics.tsv")
 
+    barcode_filter = qc_params.get("barcode_filter")
     threshold = (filter_info or {}).get("threshold")
     knee_rank = (filter_info or {}).get("knee_rank")
-    threshold_display = _display(threshold, digits=0)
+    per_measurement_set = bool((filter_info or {}).get("per_measurement_set"))
+    threshold_display = (
+        "Disabled" if barcode_filter == "none" else "Per set"
+    ) if per_measurement_set else _display(threshold, digits=0)
     threshold_rule = (
-        _tip(f"total_gene_umis >= {threshold_display}", "Minimum total RNA UMI count selected from the barcode-rank curve.", code=True)
+        (
+            "knee disabled; per-measurement-set minimum-gene filtering is used"
+            if barcode_filter == "none"
+            else "measurement-set-specific thresholds (see the RNA QC table)"
+        )
+        if per_measurement_set
+        else _tip(f"total_gene_umis >= {threshold_display}", "Minimum total RNA UMI count selected from the barcode-rank curve.", code=True)
         if threshold is not None
         else "Not determined"
     )
@@ -596,7 +648,6 @@ def _build_comprehensive_qc_report(
 
     params_status = "Resolved params loaded" if qc_params.get("params_found") else "Using dashboard defaults"
     params_state = "good" if qc_params.get("params_found") else "warn"
-    barcode_filter = qc_params.get("barcode_filter")
     min_genes_note = (
         "Skipped because barcode filtering is enabled"
         if barcode_filter in {"knee", "knee2"}
@@ -679,7 +730,7 @@ def _build_comprehensive_qc_report(
             2,
             "Concatenated scRNA AnnData",
             "Before QC",
-            f"Dashboard object {_tip('gene_ann', 'Concatenated unfiltered scRNA AnnData passed into create_dashboard_df.py.', code=True)} used for the RNA barcode-rank calculation.",
+            f"Dashboard object {_tip('gene_ann', 'Concatenated unfiltered scRNA AnnData passed into create_dashboard_df.py.', code=True)} retained for raw-count reporting; cell calling occurs before concatenation.",
             [
                 ("Cells", _format_count(concat_count)),
                 ("Removed from raw", removed(sample_total, concat_count)),
@@ -695,14 +746,14 @@ def _build_comprehensive_qc_report(
             [
                 ("Cells kept", _format_count(filter_count)),
                 ("Removed", removed(concat_count, filter_count)),
-                ("Knee rank", _format_count(knee_rank) if knee_rank is not None else "N/A"),
+                ("Knee rank", ("N/A" if barcode_filter == "none" else "Per set") if per_measurement_set else (_format_count(knee_rank) if knee_rank is not None else "N/A")),
                 ("Min genes", min_genes_note),
             ],
             state="active",
         ),
         _qc_step(
             4,
-            "RNA UMI floor and mitochondrial percentage filters",
+            "Per-measurement-set fixed and MAD filters" if per_measurement_set else "RNA UMI floor and mitochondrial percentage filters",
             "Cell QC",
             f"Rules: {_tip('total_counts', 'Cell-level RNA UMI total from Scanpy QC metrics.', code=True)} >= {_tip('QC_min_counts_per_cell', 'Resolved minimum RNA UMI parameter; zero disables this rule.', code=True)} and {_tip('pct_counts_mt', 'Cell-level mitochondrial percentage from Scanpy QC metrics.', code=True)} < {_tip('QC_pct_mito', 'Resolved maximum mitochondrial percentage parameter.', code=True)}.",
             [
@@ -772,6 +823,9 @@ def _build_comprehensive_qc_report(
         ("Min genes per cell", _tip(f"QC_min_genes_per_cell = {qc_params.get('min_genes')}", "Minimum detected genes per cell; skipped for knee/knee2.", code=True), "Resolved params"),
         ("Min RNA UMIs per cell", _tip(f"QC_min_counts_per_cell = {qc_params.get('min_counts')}", "Minimum total RNA UMI count applied after barcode calling; zero disables it.", code=True), "Resolved params"),
         ("Mito cutoff", _tip(f"QC_pct_mito = {qc_params.get('pct_mito')}", "Maximum mitochondrial percentage allowed.", code=True), "Resolved params"),
+        ("RNA UMI MAD", _tip(f"QC_MAD_total_counts = {params.get('QC_MAD_total_counts', 0)}", "Two-sided per-measurement-set log1p RNA UMI MAD filter; zero disables it.", code=True), "Resolved params"),
+        ("Detected-gene MAD", _tip(f"QC_MAD_n_genes = {params.get('QC_MAD_n_genes', 0)}", "Two-sided per-measurement-set log1p detected-gene MAD filter; zero disables it.", code=True), "Resolved params"),
+        ("Mito MAD", _tip(f"QC_MAD_pct_mito = {params.get('QC_MAD_pct_mito', 0)}", "Upper-tail per-measurement-set mitochondrial-percentage MAD filter; zero disables it.", code=True), "Resolved params"),
         ("Min cells per gene", _tip(f"QC_min_cells_per_gene = {params.get('QC_min_cells_per_gene', 'N/A')}", "Minimum gene support before inference: a fraction in [0, 1); zero retains genes detected in at least one cell.", code=True), "Resolved params"),
         ("Scrublet", _tip(f"ENABLE_SCRUBLET = {params.get('ENABLE_SCRUBLET', False)}", "Whether Scrublet doublet removal was enabled.", code=True), "Resolved params"),
         ("Hashing", _tip(f"ENABLE_DATA_HASHING = {params.get('ENABLE_DATA_HASHING', False)}", "Whether hashing demultiplexing was enabled.", code=True), "Resolved params"),
@@ -1406,8 +1460,9 @@ def create_dashboard_df(guide_fq_tbl, mudata_path, gene_ann_path, filtered_ann_p
     # Barcode filtering flow diagram
     sample_counts = _collect_unfiltered_counts(json_dir, prefix="trans-")
     concat_count = gene_ann.n_obs
-    filter_count, filter_info = _compute_barcode_filter_count(
-        gene_ann, qc_params.get("barcode_filter"), qc_params.get("min_genes")
+    measurement_qc = _safe_read_tsv("figures/measurement_set_qc_metrics.tsv")
+    filter_count, filter_info = _measurement_set_filter_state(
+        measurement_qc, gene_ann, qc_params.get("barcode_filter"), qc_params.get("min_genes")
     )
     filtered_count = gene_filtered_ann.n_obs
     guide_intersection_count = len(set(gene_filtered_ann.obs_names).intersection(guide_ann.obs_names))
@@ -1451,7 +1506,6 @@ def create_dashboard_df(guide_fq_tbl, mudata_path, gene_ann_path, filtered_ann_p
     )
 
     ### Create image/table block for per-measurement-set scRNA preprocessing
-    measurement_qc = _safe_read_tsv("figures/measurement_set_qc_metrics.tsv")
     knee_images = sorted(glob.glob("figures/knee_plot_scRNA_*.png"))
     distribution_images = sorted(glob.glob("figures/qc_distributions_scRNA_*.png"))
     rna_images = knee_images + distribution_images

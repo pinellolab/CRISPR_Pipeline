@@ -436,6 +436,10 @@ def build_pipeline_qc_metrics_payload(
         "barcode_filter": {
             "method": qc_params.get("barcode_filter"),
             "params_source": qc_params.get("barcode_filter_source"),
+            "per_measurement_set": bool((filter_info or {}).get("per_measurement_set")),
+            "measurement_sets": (filter_info or {}).get("measurement_sets"),
+            "total_gene_umis_thresholds": (filter_info or {}).get("thresholds", []),
+            "knee_ranks": (filter_info or {}).get("knee_ranks", []),
             "total_gene_umis_min": None if not filter_info else filter_info.get("threshold"),
             "knee_rank": None if not filter_info else filter_info.get("knee_rank"),
             "cells_after_filter": int(filter_count) if filter_count is not None else None,

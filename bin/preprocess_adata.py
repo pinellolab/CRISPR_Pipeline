@@ -129,6 +129,10 @@ def prepare_matrix(adata, use_multimapping):
             + adata.layers["nascent"].astype(np.float32)
             + adata.layers["ambiguous"].astype(np.float32)
         )
+        for layer in ("mature", "nascent", "ambiguous"):
+            adata.layers[layer] = normalize_sparse_index_dtypes(
+                to_sparse_counts(adata.layers[layer])
+            )
     if use_multimapping:
         if hasattr(adata.X, "data"):
             adata.X.data = np.round(adata.X.data)
