@@ -308,6 +308,31 @@ containers {
 }
 ```
 
+#### 4. Example Site Configurations
+
+Two worked examples live in the repository root and are passed with `-c`:
+
+| File | Assay | Run it with |
+|---|---|---|
+| `nextflow_cc.config` | CC-Perturb-seq (high MOI, whole transcriptome) | `nextflow run main.nf -c nextflow_cc.config -profile local --input <samplesheet>` |
+| `nextflow_tapseq.config` | TAP-seq (targeted panel), from a validated 126,154-cell / 68-gene chr8 screen | `nextflow run main.nf -c nextflow_tapseq.config -profile local --input <samplesheet>` |
+
+**`nextflow.config` is always loaded, including when one of these is passed with
+`-c`.** Each example therefore contains only deliberate *deltas* from
+`nextflow.config`'s defaults, and says in a comment why each one differs. Do not
+add a line to an example that restates a default: it does nothing today, and it
+silently disagrees with `nextflow.config` as soon as that default moves
+(`INFERENCE_PERTURBO_MAX_CHUNK_CELLS` and `containers.perturbo` both did).
+`tests/test_site_config_examples.py` enforces this.
+
+Both examples mark the values you must supply with `TO-DO`. For the TAP-seq
+example those are `REFERENCE_gtf_local_path` — which must point at the screen's
+own panel GTF, since that GTF is what `REFERENCE_restrict_genes_to_gtf` treats as
+the panel — the SLURM partition, the GCP project settings, and `max_cpus` /
+`max_memory`. The example also explains why it leaves `INFERENCE_control_group`
+alone even though the chr8 screen needed `complement`; see
+[Control group](#control-group) below.
+
 ## Control group
 
 `INFERENCE_control_group` names the cells a perturbation is compared against, once,
@@ -335,6 +360,21 @@ single line naming the declared MOI, the setting, what each method resolved to,
 and why. It is also recorded beside the results: `control_group_resolution.json`
 and a `pipeline_control_group` block inside PerTurbo's `crt_metadata.json`, and
 `sceptre_control_group.json` on the SCEPTRE side.
+
+### When `auto` is wrong: check where the control cells sit
+
+`auto` reads the declared MOI, which says nothing about how the non-targeting
+cells are distributed across the screen. On the TAP-seq chr8 screen all 30
+non-targeting guides had their cells in a single 10x lane — 2,033 of the 2,049
+control-only cells — so the non-targeting-anchored pool `auto` selects for a
+low-MOI screen was effectively one batch. That confounds every contrast with the
+lane, and it makes a non-targeting calibration check meaningless, because the
+check is scoring the pool it was built from. `INFERENCE_control_group =
+'complement'` was the right setting there despite the low measured MOI.
+
+Crosstab the control-only cells against your screen's batch column before
+trusting either choice. If they spread across batches, leave the setting at
+`auto`.
 
 ### Precedence with the older per-method parameters
 

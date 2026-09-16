@@ -71,6 +71,9 @@ def test_zero_overlap_is_an_error_not_an_empty_screen():
 def test_default_is_off_and_plumbed_through_both_call_sites():
     for name in ("nextflow.config", "nextflow_cc.config"):
         assert re.search(r"^\s*REFERENCE_restrict_genes_to_gtf\s*=\s*false", (REPO_ROOT / name).read_text(), re.M), name
+    # ...and on in the one example whose assay is a panel.
+    tapseq = (REPO_ROOT / "nextflow_tapseq.config").read_text()
+    assert re.search(r"^\s*REFERENCE_restrict_genes_to_gtf\s*=\s*true", tapseq, re.M)
     module = (REPO_ROOT / "modules/local/CreateMuData/main.nf").read_text()
     assert "val restrict_genes_to_gtf" in module and "--restrict-genes-to-gtf" in module
     workflow = (REPO_ROOT / "workflows/crispr_pipeline/main.nf").read_text()
