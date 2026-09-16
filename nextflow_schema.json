@@ -308,6 +308,17 @@
             "fa_icon": "fas fa-chart-line",
             "description": "Differential expression and perturbation inference settings.",
             "properties": {
+                "INFERENCE_control_group": {
+                    "type": "string",
+                    "default": "auto",
+                    "enum": [
+                        "auto",
+                        "nt_cells",
+                        "complement"
+                    ],
+                    "description": "Cells a perturbation is compared against, for both SCEPTRE and PerTurbo.",
+                    "help_text": "One setting, in SCEPTRE's vocabulary, governing both methods. nt_cells compares each perturbation with the non-targeting cells (PerTurbo's control-anchored pool); complement compares it with every other cell (PerTurbo's all-cells pool); auto takes whichever Multiplicity_of_infection implies (low -> nt_cells, high -> complement) and, when the MOI is neither, lets PerTurbo measure the design while SCEPTRE falls back to complement. nt_cells is not available for a high-MOI screen and the run fails rather than substituting complement. INFERENCE_PERTURBO_CRT_POOL and INFERENCE_SCEPTRE_control_group remain as per-method overrides: set either to something other than its historical default (from-moi, complement) and it wins for that method alone. NOTE: SCEPTRE results on low-MOI screens change under the default, because SCEPTRE previously ignored its own control_group parameter and always used the complement."
+                },
                 "INFERENCE_method": {
                     "type": "string",
                     "default": "default",
@@ -474,7 +485,8 @@
                     "type": "string",
                     "default": "from-moi",
                     "enum": ["from-moi", "auto", "all-cells", "control-anchored"],
-                    "description": "Cells a perturbation is tested against. from-moi follows Multiplicity_of_infection (high: every cell, each element a marginal association; low: the pure control cells plus the perturbation's own). auto lets PerTurbo measure the design from the median guides per cell."
+                    "description": "Per-method override for PerTurbo's CRT pool; from-moi means unset and INFERENCE_control_group decides.",
+                    "help_text": "Kept for back-compatibility. from-moi is the historical default and counts as unset, so INFERENCE_control_group governs: nt_cells -> control-anchored, complement -> all-cells, auto -> the mapping from Multiplicity_of_infection (high: every cell, each element a marginal association; low: the pure control cells plus the perturbation's own). Any other value here ('auto' lets PerTurbo measure the design from the median guides per cell) overrides the shared setting for PerTurbo alone, leaves SCEPTRE on the shared setting, and the pipeline logs that the two methods are deliberately inconsistent."
                 },
                 "INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT": {
                     "type": "string",
@@ -509,7 +521,12 @@
                 "INFERENCE_SCEPTRE_control_group": {
                     "type": "string",
                     "default": "complement",
-                    "description": "Control group strategy passed to SCEPTRE inference."
+                    "enum": [
+                        "complement",
+                        "nt_cells"
+                    ],
+                    "description": "Per-method override for SCEPTRE's control group; complement means unset and INFERENCE_control_group decides.",
+                    "help_text": "Kept for back-compatibility. complement is the historical default and counts as unset, so INFERENCE_control_group governs. Setting nt_cells overrides the shared setting for SCEPTRE alone, leaves PerTurbo on the shared setting, and the pipeline logs that the two methods are deliberately inconsistent. To ask for the complement contrast on a low-MOI screen, set INFERENCE_control_group = complement instead. Before this parameter was honoured the SCEPTRE driver discarded it and always used the complement."
                 },
                 "INFERENCE_SCEPTRE_resampling_mechanism": {
                     "type": "string",

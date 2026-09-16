@@ -439,6 +439,14 @@
 <td></td>
 </tr>
 <tr>
+<td><code>INFERENCE_control_group</code></td>
+<td>Cells a perturbation is compared against, for both SCEPTRE and PerTurbo. One setting, in SCEPTRE&#x27;s vocabulary, governing both methods: nt_cells compares each perturbation with the non-targeting cells (PerTurbo control-anchored), complement with every other cell (PerTurbo all-cells), auto takes whichever Multiplicity_of_infection implies. nt_cells is unavailable at high MOI and the run fails rather than substituting. SCEPTRE results on low-MOI screens change under the default, because SCEPTRE previously ignored its own control_group parameter.</td>
+<td><code>string</code></td>
+<td>auto</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
 <td><code>INFERENCE_SCEPTRE_resampling_approximation</code></td>
 <td>Resampling approximation passed to SCEPTRE inference.</td>
 <td><code>string</code></td>
@@ -448,7 +456,7 @@
 </tr>
 <tr>
 <td><code>INFERENCE_SCEPTRE_control_group</code></td>
-<td>Control group strategy passed to SCEPTRE inference.</td>
+<td>Per-method override for SCEPTRE only; <code>complement</code> is the historical default and counts as unset, so <code>INFERENCE_control_group</code> decides.</td>
 <td><code>string</code></td>
 <td>complement</td>
 <td></td>

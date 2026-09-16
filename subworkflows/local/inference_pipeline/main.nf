@@ -12,6 +12,7 @@ include { publishFiles } from '../../../modules/local/publishFiles'
 include { mergeMudata } from '../../../modules/local/mergeMudata'
 include { buildCatalogElement } from '../../../modules/local/buildCatalogElement'
 include { buildCatalogGuide } from '../../../modules/local/buildCatalogGuide'
+include { resolveControlGroupFromParams } from '../../../modules/local/control_group'
 
 workflow inference_pipeline {
 
@@ -21,6 +22,13 @@ workflow inference_pipeline {
 
     main:
     sort_paths = { paths -> paths.sort { a, b -> a.toString() <=> b.toString() } }
+
+    // The cells a perturbation is compared against, decided once for both methods
+    // and logged once. This is the line to read when you wonder why a screen used
+    // one pool. It aborts here if the setting is unusable, rather than three hours
+    // into a run.
+    def control_group = resolveControlGroupFromParams()
+    log.info(control_group.log_line)
 
     if (params.INFERENCE_target_guide_pairing_strategy == 'predefined_pairs') {
         PrepareInference = prepare_user_guide_inference(
@@ -56,7 +64,7 @@ workflow inference_pipeline {
 
     if (params.INFERENCE_method == "sceptre"){
         SceptreChunkInput = sceptre_chunk_prepare(mudata_input)
-        SceptreChunkResults = inference_sceptre(SceptreChunkInput.mudata_chunks.flatten())
+        SceptreChunkResults = inference_sceptre(SceptreChunkInput.mudata_chunks.flatten(), control_group.sceptre_control_group)
         TestResults = sceptre_chunk_merge(
             SceptreChunkResults.per_guide_output.collect().map(sort_paths),
             SceptreChunkResults.per_element_output.collect().map(sort_paths),
@@ -66,19 +74,19 @@ workflow inference_pipeline {
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "perturbo"){
-        TestResults = inference_perturbo(mudata_input, mudata_input, params.INFERENCE_method)
+        TestResults = inference_perturbo(mudata_input, mudata_input, params.INFERENCE_method, control_group)
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
         SceptreChunkInput = sceptre_chunk_prepare(mudata_input)
-        SceptreChunkResults = inference_sceptre(SceptreChunkInput.mudata_chunks.flatten())
+        SceptreChunkResults = inference_sceptre(SceptreChunkInput.mudata_chunks.flatten(), control_group.sceptre_control_group)
         SceptreResults = sceptre_chunk_merge(
             SceptreChunkResults.per_guide_output.collect().map(sort_paths),
             SceptreChunkResults.per_element_output.collect().map(sort_paths),
             mudata_input,
             SceptreChunkInput.chunk_manifest
         )
-        PerturboResults = inference_perturbo(mudata_input, mudata_input, "perturbo")
+        PerturboResults = inference_perturbo(mudata_input, mudata_input, "perturbo", control_group)
         MergedInference = mergedResults(
             SceptreResults.per_guide_output,
             SceptreResults.per_element_output,
@@ -95,7 +103,7 @@ workflow inference_pipeline {
         }
         // Process local-analysis results
         SceptreChunkInput_local = sceptre_chunk_prepare(PrepareInference.mudata_inference_input)
-        SceptreChunkResults_local = inference_sceptre(SceptreChunkInput_local.mudata_chunks.flatten())
+        SceptreChunkResults_local = inference_sceptre(SceptreChunkInput_local.mudata_chunks.flatten(), control_group.sceptre_control_group)
         SceptreResults_local = sceptre_chunk_merge(
             SceptreChunkResults_local.per_guide_output.collect().map(sort_paths),
             SceptreChunkResults_local.per_element_output.collect().map(sort_paths),
@@ -105,7 +113,7 @@ workflow inference_pipeline {
         // One PerTurbo run on every gene of concat_mudata yields both the local
         // (requested-pair) and the global (transcriptome-wide) tables; the pairs
         // come from the prepared inference input.
-        PerturboResults = inference_perturbo(mudata_concat, PrepareInference.mudata_inference_input, "perturbo")
+        PerturboResults = inference_perturbo(mudata_concat, PrepareInference.mudata_inference_input, "perturbo", control_group)
         MergedInference_local = mergedResults(
             SceptreResults_local.per_guide_output,
             SceptreResults_local.per_element_output,
