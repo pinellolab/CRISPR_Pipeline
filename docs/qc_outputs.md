@@ -69,6 +69,20 @@ This table is generated from `bin/qc_metrics_json.py`. The flat key combines the
 | additional_qc_guide.cells_per_guide_max | Maximum observed value. of assigned cells per guide. | cells_per_guide | overall row where batch == all, plus per-batch rows when batch metadata exists | additional_qc/guide/guide_metrics.tsv |
 | additional_qc_guide.cells_per_guide_q25 | Twenty-fifth percentile. of assigned cells per guide. | cells_per_guide | overall row where batch == all, plus per-batch rows when batch metadata exists | additional_qc/guide/guide_metrics.tsv |
 | additional_qc_guide.cells_per_guide_q75 | Seventy-fifth percentile. of assigned cells per guide. | cells_per_guide | overall row where batch == all, plus per-batch rows when batch metadata exists | additional_qc/guide/guide_metrics.tsv |
+| additional_qc_clones.action | Requested clone filtering action. |  | run-level | additional_qc/clones/clone_metrics.tsv |
+| additional_qc_clones.input_cells | Cells entering clone detection. | cells | run-level | additional_qc/clones/clone_metrics.tsv |
+| additional_qc_clones.retained_cells | Cells retained for inference. | cells | run-level | additional_qc/clones/clone_metrics.tsv |
+| additional_qc_clones.removed_cells | Cells removed before inference. | cells | run-level | additional_qc/clones/clone_metrics.tsv |
+| additional_qc_clones.detected_clone_groups | Clone groups meeting the configured minimum size. | clones | run-level | additional_qc/clones/clone_metrics.tsv |
+| additional_qc_clones.cells_in_detected_clones | Cells assigned to detected multi-cell clones. | cells | run-level | additional_qc/clones/clone_metrics.tsv |
+| additional_qc_clones.ambiguous_clone_matches | Cells significantly matching multiple clone representatives. | cells | run-level | additional_qc/clones/clone_metrics.tsv |
+| additional_qc_clones.clonal_cell_fraction | Fraction of input cells in detected clone groups. | fraction | run-level | additional_qc/clones/clone_metrics.tsv |
+| additional_qc_clones.applicability | Whether the guide-library size and guides per cell meet the published rule of thumb. |  | run-level | additional_qc/clones/clone_metrics.tsv |
+| additional_qc_sequencing_saturation.batch | Mapping batch or all for the aggregate. |  | aggregate row where batch == all, plus per-batch rows | additional_qc/sequencing_saturation/sequencing_saturation_metrics.tsv |
+| additional_qc_sequencing_saturation.mean_reads_per_cell | Usable reads divided by retained cells. | reads_per_cell | aggregate row where batch == all, plus per-batch rows | additional_qc/sequencing_saturation/sequencing_saturation_metrics.tsv |
+| additional_qc_sequencing_saturation.sequencing_saturation | Fraction of usable reads arising from already observed cell-barcode, UMI, gene molecules. | fraction | aggregate row where batch == all, plus per-batch rows | additional_qc/sequencing_saturation/sequencing_saturation_metrics.tsv |
+| additional_qc_sequencing_saturation.median_umis_per_cell | Median unique molecules per retained cell. | UMIs_per_cell | aggregate row where batch == all, plus per-batch rows | additional_qc/sequencing_saturation/sequencing_saturation_metrics.tsv |
+| additional_qc_sequencing_saturation.median_genes_per_cell | Median observed genes per retained cell. | genes_per_cell | aggregate row where batch == all, plus per-batch rows | additional_qc/sequencing_saturation/sequencing_saturation_metrics.tsv |
 | additional_qc_intended_target.n_guides_total | Total intended-target rows before dropping missing results. | guides | run-level | additional_qc/intended_target/intended_target_metrics.tsv |
 | additional_qc_intended_target.n_guides_tested | Guides with valid intended-target result values. | guides | run-level | additional_qc/intended_target/intended_target_metrics.tsv |
 | additional_qc_intended_target.fc_threshold | Fold-change threshold used to define strong knockdown. | fold_change | run-level | additional_qc/intended_target/intended_target_metrics.tsv |
@@ -102,6 +116,16 @@ This table is generated from `bin/qc_metrics_json.py`. The flat key combines the
 | additional_qc_global_analysis.n_validated_links | Validated trans links available for evaluation. | links | run-level | additional_qc/global_analysis/global_analysis_metrics.tsv |
 | additional_qc_global_analysis.n_eval_positives | Positive examples used for validated-link evaluation. | examples | run-level | additional_qc/global_analysis/global_analysis_metrics.tsv |
 | additional_qc_global_analysis.n_eval_negatives | Negative examples used for validated-link evaluation. | examples | run-level | additional_qc/global_analysis/global_analysis_metrics.tsv |
+| measurement_set_rna_qc.measurement_set | Samplesheet measurement-set identifier. |  | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.input_barcodes | Raw mapped RNA barcodes entering this measurement-set QC task. | barcodes | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.post_knee_cells | Cells after this measurement set's knee selection. | cells | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.post_fixed_threshold_cells | Cells passing fixed RNA UMI, detected-gene, and mitochondrial thresholds. | cells | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.retained_cells | Cells retained after fixed and enabled MAD filters. | cells | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.retained_fraction | Retained cells divided by input barcodes. | fraction | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.knee_umi_threshold | Measurement-set-specific RNA UMI threshold selected by the knee method. | UMIs | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.mad_total_counts_n | Configured two-sided MAD multiplier for log1p total RNA UMIs. | MADs | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.mad_n_genes_n | Configured two-sided MAD multiplier for log1p detected genes. | MADs | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.mad_pct_mito_n | Configured upper-tail MAD multiplier for mitochondrial percentage. | MADs | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
 | dashboard_derived.raw_scRNA_barcodes_per_measurement_set | Unfiltered scRNA barcode counts from kb inspect JSON files. | barcodes | measurement-set or run-level | pipeline_qc_metrics.json and dashboard.html Filtering Summary tab |
 | dashboard_derived.raw_scRNA_barcodes_total | Sum of unfiltered scRNA barcode counts across measurement sets. | barcodes | measurement-set or run-level | pipeline_qc_metrics.json and dashboard.html Filtering Summary tab |
 | dashboard_derived.concatenated_scRNA_cells | Cells in concatenated unfiltered scRNA AnnData before dashboard-attributed QC steps. | cells | measurement-set or run-level | pipeline_qc_metrics.json and dashboard.html Filtering Summary tab |

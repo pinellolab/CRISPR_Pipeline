@@ -133,7 +133,8 @@ workflow CRISPR_PIPELINE {
     // Common preprocessing for both workflows
     Preprocessing = preprocessing_pipeline(
         mapping_rna_pipeline.out.concat_anndata_rna,
-        mapping_rna_pipeline.out.trans_out_dir
+        mapping_rna_pipeline.out.trans_out_dir,
+        prepare_mapping_pipeline.out.parsed_covariate_file
     )
 
     if (params.ENABLE_SEQUENCING_SATURATION) {

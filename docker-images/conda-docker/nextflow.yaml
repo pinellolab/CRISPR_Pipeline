@@ -7,6 +7,9 @@ dependencies:
   - aria2
   - numpy  
   - scipy
+  # Numba 0.67.0 crashes while compiling Scanpy 1.11.5 sparse QC with NumPy
+  # 2.4.x; 0.66.x is the combination used by the previously working image.
+  - numba>=0.66,<0.67
   - pandas>=2.1.0,<3
   - pyarrow
   - pip

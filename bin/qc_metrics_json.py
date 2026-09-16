@@ -164,6 +164,23 @@ METRIC_CATALOG = {
             {"name": "n_eval_negatives", "description": "Negative examples used for validated-link evaluation.", "unit": "examples"},
         ],
     },
+    "measurement_set_rna_qc": {
+        "description": "Cell calling and RNA QC calculated independently before measurement-set concatenation.",
+        "source_artifact": "figures/measurement_set_qc_metrics.tsv",
+        "row_level": "one row per measurement set",
+        "metrics": [
+            {"name": "measurement_set", "description": "Samplesheet measurement-set identifier.", "unit": None},
+            {"name": "input_barcodes", "description": "Raw mapped RNA barcodes entering this measurement-set QC task.", "unit": "barcodes"},
+            {"name": "post_knee_cells", "description": "Cells after this measurement set's knee selection.", "unit": "cells"},
+            {"name": "post_fixed_threshold_cells", "description": "Cells passing fixed RNA UMI, detected-gene, and mitochondrial thresholds.", "unit": "cells"},
+            {"name": "retained_cells", "description": "Cells retained after fixed and enabled MAD filters.", "unit": "cells"},
+            {"name": "retained_fraction", "description": "Retained cells divided by input barcodes.", "unit": "fraction"},
+            {"name": "knee_umi_threshold", "description": "Measurement-set-specific RNA UMI threshold selected by the knee method.", "unit": "UMIs"},
+            {"name": "mad_total_counts_n", "description": "Configured two-sided MAD multiplier for log1p total RNA UMIs.", "unit": "MADs"},
+            {"name": "mad_n_genes_n", "description": "Configured two-sided MAD multiplier for log1p detected genes.", "unit": "MADs"},
+            {"name": "mad_pct_mito_n", "description": "Configured upper-tail MAD multiplier for mitochondrial percentage.", "unit": "MADs"},
+        ],
+    },
     "dashboard_derived": {
         "description": "Metrics calculated inside the dashboard builder from input AnnData/MuData objects and resolved parameters.",
         "source_artifact": "pipeline_qc_metrics.json and dashboard.html Filtering Summary tab",
@@ -358,6 +375,9 @@ def _selected_params(params):
         "QC_min_cells_per_gene",
         "QC_pct_mito",
         "QC_batch_col",
+        "QC_MAD_total_counts",
+        "QC_MAD_n_genes",
+        "QC_MAD_pct_mito",
         "ENABLE_SCRUBLET",
         "ENABLE_DATA_HASHING",
         "ENABLE_CLONE_REMOVAL",
@@ -394,6 +414,7 @@ def build_pipeline_qc_metrics_payload(
     additional_qc_dir=None,
     hashing_counts=None,
     use_default=False,
+    measurement_set_qc_path=None,
 ):
     params = params or {}
     gene_mod = mudata.mod["gene"]
@@ -474,11 +495,18 @@ def build_pipeline_qc_metrics_payload(
             "observed_metrics": {
                 "mapping_json": collect_mapping_json(json_dir),
                 "additional_qc": collect_additional_qc(additional_qc_dir),
+                "measurement_set_rna_qc": {
+                    "catalog_key": "measurement_set_rna_qc",
+                    "source_artifact": "figures/measurement_set_qc_metrics.tsv",
+                    "available": bool(measurement_set_qc_path and os.path.exists(measurement_set_qc_path)),
+                    "rows": _json_safe(_table_records(measurement_set_qc_path)),
+                },
             },
             "sources": {
                 "dashboard_builder": "create_dashboard_df_HASHING.py" if hashing_counts else "create_dashboard_df.py",
                 "mapping_json_dir": json_dir,
                 "additional_qc_dir": additional_qc_dir,
+                "measurement_set_qc_path": measurement_set_qc_path,
                 "gene_ann_cells": int(gene_ann.n_obs),
                 "gene_filtered_ann_cells": int(gene_filtered_ann.n_obs),
                 "guide_ann_cells": int(guide_ann.n_obs),

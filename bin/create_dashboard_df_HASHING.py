@@ -1407,10 +1407,39 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
         False
     )
 
-    ### Create image_df for scRNA preprocessing
-    rna_img_df = new_block('scRNA', 'scRNA preprocessing', 'Visualization','', False,
-        image = ['figures/knee_plot_scRNA.png', 'figures/scatterplot_scrna.png', 'figures/violinplot_scrna.png', 'figures/scRNA_barcodes_UMI_thresholds.png'],
-        image_description= ['Knee plot of UMI counts vs. barcode index.', 'Scatterplot of total counts vs. genes detected, colored by mitochondrial content.','Distribution of gene counts, total counts, and mitochondrial content.', 'Number of scRNA barcodes using different\nTotal UMI thresholds.'])
+    ### Create image/table block for per-measurement-set scRNA preprocessing
+    measurement_qc = _safe_read_tsv("figures/measurement_set_qc_metrics.tsv")
+    knee_images = sorted(glob.glob("figures/knee_plot_scRNA_*.png"))
+    distribution_images = sorted(glob.glob("figures/qc_distributions_scRNA_*.png"))
+    rna_images = knee_images + distribution_images
+    rna_descriptions = (
+        ["Measurement-set-specific RNA barcode-rank knee and selected threshold."] * len(knee_images)
+        + ["Measurement-set-specific RNA QC distributions and enabled MAD bounds."] * len(distribution_images)
+    )
+    if not rna_images:
+        rna_images = [
+            'figures/knee_plot_scRNA.png',
+            'figures/scatterplot_scrna.png',
+            'figures/violinplot_scrna.png',
+            'figures/scRNA_barcodes_UMI_thresholds.png',
+        ]
+        rna_descriptions = [
+            'Knee plot of UMI counts vs. barcode index.',
+            'Scatterplot of total counts vs. genes detected, colored by mitochondrial content.',
+            'Distribution of gene counts, total counts, and mitochondrial content.',
+            'Number of scRNA barcodes using different total UMI thresholds.',
+        ]
+    rna_img_df = new_block(
+        'scRNA',
+        'scRNA preprocessing',
+        'Per-measurement-set RNA QC',
+        f"Measurement sets audited: {len(measurement_qc)}" if not measurement_qc.empty else '',
+        not measurement_qc.empty,
+        table=measurement_qc,
+        table_description='Knee, fixed-threshold, MAD, and retained-cell metrics for each measurement set.',
+        image=rna_images,
+        image_description=rna_descriptions,
+    )
 
     ### Create image_df for guide
     guide_assignment_matrix = mudata.mod['guide'].layers['guide_assignment']
@@ -1520,6 +1549,7 @@ def create_dashboard_df(guide_fq_tbl, hashing_fq_tbl, mudata_path, gene_ann_path
             guide_ann=guide_ann,
             json_dir=json_dir,
             additional_qc_dir=additional_qc_dir,
+            measurement_set_qc_path="figures/measurement_set_qc_metrics.tsv",
             hashing_counts=hashing_counts,
             use_default=use_default,
         )

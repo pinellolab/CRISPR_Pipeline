@@ -21,6 +21,11 @@ RUN mamba env create -f /app/nextflow.yaml
 RUN /opt/conda/envs/nfenv/bin/python -c \
     "import anndata, matplotlib, mudata, numpy, pandas, scipy"
 
+# Exercise the Scanpy sparse QC path during the build. This catches package
+# resolutions that import successfully but fail only when Numba compiles QC.
+RUN /opt/conda/envs/nfenv/bin/python -c \
+    "import anndata as ad, numba, numpy as np, scanpy as sc; from scipy import sparse; assert tuple(map(int, numba.__version__.split('.')[:2])) < (0,67); a=ad.AnnData(sparse.csr_matrix(np.eye(501, dtype=np.int32))); sc.pp.calculate_qc_metrics(a, inplace=True, log1p=True, percent_top=(50,100,200,500)); assert 'pct_counts_in_top_500_genes' in a.obs"
+
 # Put the env on PATH
 # (assuming the env is named "nfenv" inside nextflow.yaml)
 ENV PATH="/opt/conda/envs/nfenv/bin:${PATH}"

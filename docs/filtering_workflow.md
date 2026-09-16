@@ -31,23 +31,17 @@ flowchart TD
         R1["Map RNA 6244"]
         R2["Map RNA 8721"]
         R3["Map RNA 9613"]
-        RC["Concatenate RNA AnnData<br/>barcodes qualified by measurement set"]
-        RK{"QC_barcode_filter"}
-        RUMI["Knee or knee2 barcode filter<br/>keep cells above total RNA UMI threshold"]
-        RGENE["Minimum genes per cell<br/>QC_min_genes_per_cell"]
-        RGB["Standard gene prefilter<br/>gene detected in at least 10 cells"]
-        RMITO["Mitochondrial filter<br/>percent_mito less than QC_pct_mito"]
+        RQ1["QC RNA 6244<br/>own knee, fixed + MAD filters"]
+        RQ2["QC RNA 8721<br/>own knee, fixed + MAD filters"]
+        RQ3["QC RNA 9613<br/>own knee, fixed + MAD filters"]
+        RC["Concatenate retained RNA AnnData<br/>barcodes qualified by measurement set"]
+        RGB["Global gene-support prefilter<br/>10 cells, or 1 in TAP-seq mode"]
         RF["filtered_anndata.h5ad"]
 
-        R1 --> RC
-        R2 --> RC
-        R3 --> RC
-        RC --> RK
-        RK -- "knee / knee2" --> RUMI
-        RK -- "none" --> RGENE
-        RUMI --> RGB
-        RGENE --> RGB
-        RGB --> RMITO --> RF
+        R1 --> RQ1 --> RC
+        R2 --> RQ2 --> RC
+        R3 --> RQ3 --> RC
+        RC --> RGB --> RF
     end
 
     subgraph GUIDE["Guide-count processing"]
@@ -181,8 +175,11 @@ and task objects under `gs://igvf-pertub-seq-pipeline-data/work`.
   Its intersections remained same-batch because all three modality
   concatenations used the same sorted measurement-set order. The updated code
   removes that ordering dependency by using the measurement-set ID directly.
-- With `QC_barcode_filter = 'knee'` or `'knee2'`, total RNA UMI depth selects
-  cells and `QC_min_genes_per_cell` is skipped. With
+- RNA cell calling, fixed cell thresholds, mitochondrial filtering, and enabled
+  MAD filters run independently per `measurement_sets` value before RNA
+  concatenation. Each measurement set gets its own barcode-rank knee plot.
+- With `QC_barcode_filter = 'knee'` or `'knee2'`, per-measurement-set total RNA
+  UMI depth selects cells and `QC_min_genes_per_cell` is skipped. With
   `QC_barcode_filter = 'none'`, the minimum-gene filter is used instead.
 - The guide count matrix is not filtered by a fixed UMI cutoff before MuData
   creation. SCEPTRE or CLEANSER assigns guides from the per-cell guide counts

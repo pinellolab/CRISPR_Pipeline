@@ -585,6 +585,132 @@
     "source_artifact": "additional_qc/guide/guide_metrics.tsv"
   },
   {
+    "flat_key": "additional_qc_clones.action",
+    "section": "additional_qc_clones",
+    "metric": "action",
+    "description": "Requested clone filtering action.",
+    "unit": null,
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/clones/clone_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_clones.input_cells",
+    "section": "additional_qc_clones",
+    "metric": "input_cells",
+    "description": "Cells entering clone detection.",
+    "unit": "cells",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/clones/clone_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_clones.retained_cells",
+    "section": "additional_qc_clones",
+    "metric": "retained_cells",
+    "description": "Cells retained for inference.",
+    "unit": "cells",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/clones/clone_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_clones.removed_cells",
+    "section": "additional_qc_clones",
+    "metric": "removed_cells",
+    "description": "Cells removed before inference.",
+    "unit": "cells",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/clones/clone_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_clones.detected_clone_groups",
+    "section": "additional_qc_clones",
+    "metric": "detected_clone_groups",
+    "description": "Clone groups meeting the configured minimum size.",
+    "unit": "clones",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/clones/clone_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_clones.cells_in_detected_clones",
+    "section": "additional_qc_clones",
+    "metric": "cells_in_detected_clones",
+    "description": "Cells assigned to detected multi-cell clones.",
+    "unit": "cells",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/clones/clone_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_clones.ambiguous_clone_matches",
+    "section": "additional_qc_clones",
+    "metric": "ambiguous_clone_matches",
+    "description": "Cells significantly matching multiple clone representatives.",
+    "unit": "cells",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/clones/clone_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_clones.clonal_cell_fraction",
+    "section": "additional_qc_clones",
+    "metric": "clonal_cell_fraction",
+    "description": "Fraction of input cells in detected clone groups.",
+    "unit": "fraction",
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/clones/clone_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_clones.applicability",
+    "section": "additional_qc_clones",
+    "metric": "applicability",
+    "description": "Whether the guide-library size and guides per cell meet the published rule of thumb.",
+    "unit": null,
+    "row_level": "run-level",
+    "source_artifact": "additional_qc/clones/clone_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_sequencing_saturation.batch",
+    "section": "additional_qc_sequencing_saturation",
+    "metric": "batch",
+    "description": "Mapping batch or all for the aggregate.",
+    "unit": null,
+    "row_level": "aggregate row where batch == all, plus per-batch rows",
+    "source_artifact": "additional_qc/sequencing_saturation/sequencing_saturation_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_sequencing_saturation.mean_reads_per_cell",
+    "section": "additional_qc_sequencing_saturation",
+    "metric": "mean_reads_per_cell",
+    "description": "Usable reads divided by retained cells.",
+    "unit": "reads_per_cell",
+    "row_level": "aggregate row where batch == all, plus per-batch rows",
+    "source_artifact": "additional_qc/sequencing_saturation/sequencing_saturation_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_sequencing_saturation.sequencing_saturation",
+    "section": "additional_qc_sequencing_saturation",
+    "metric": "sequencing_saturation",
+    "description": "Fraction of usable reads arising from already observed cell-barcode, UMI, gene molecules.",
+    "unit": "fraction",
+    "row_level": "aggregate row where batch == all, plus per-batch rows",
+    "source_artifact": "additional_qc/sequencing_saturation/sequencing_saturation_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_sequencing_saturation.median_umis_per_cell",
+    "section": "additional_qc_sequencing_saturation",
+    "metric": "median_umis_per_cell",
+    "description": "Median unique molecules per retained cell.",
+    "unit": "UMIs_per_cell",
+    "row_level": "aggregate row where batch == all, plus per-batch rows",
+    "source_artifact": "additional_qc/sequencing_saturation/sequencing_saturation_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_sequencing_saturation.median_genes_per_cell",
+    "section": "additional_qc_sequencing_saturation",
+    "metric": "median_genes_per_cell",
+    "description": "Median observed genes per retained cell.",
+    "unit": "genes_per_cell",
+    "row_level": "aggregate row where batch == all, plus per-batch rows",
+    "source_artifact": "additional_qc/sequencing_saturation/sequencing_saturation_metrics.tsv"
+  },
+  {
     "flat_key": "additional_qc_intended_target.n_guides_total",
     "section": "additional_qc_intended_target",
     "metric": "n_guides_total",
@@ -880,6 +1006,96 @@
     "unit": "examples",
     "row_level": "run-level",
     "source_artifact": "additional_qc/global_analysis/global_analysis_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.measurement_set",
+    "section": "measurement_set_rna_qc",
+    "metric": "measurement_set",
+    "description": "Samplesheet measurement-set identifier.",
+    "unit": null,
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.input_barcodes",
+    "section": "measurement_set_rna_qc",
+    "metric": "input_barcodes",
+    "description": "Raw mapped RNA barcodes entering this measurement-set QC task.",
+    "unit": "barcodes",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.post_knee_cells",
+    "section": "measurement_set_rna_qc",
+    "metric": "post_knee_cells",
+    "description": "Cells after this measurement set's knee selection.",
+    "unit": "cells",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.post_fixed_threshold_cells",
+    "section": "measurement_set_rna_qc",
+    "metric": "post_fixed_threshold_cells",
+    "description": "Cells passing fixed RNA UMI, detected-gene, and mitochondrial thresholds.",
+    "unit": "cells",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.retained_cells",
+    "section": "measurement_set_rna_qc",
+    "metric": "retained_cells",
+    "description": "Cells retained after fixed and enabled MAD filters.",
+    "unit": "cells",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.retained_fraction",
+    "section": "measurement_set_rna_qc",
+    "metric": "retained_fraction",
+    "description": "Retained cells divided by input barcodes.",
+    "unit": "fraction",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.knee_umi_threshold",
+    "section": "measurement_set_rna_qc",
+    "metric": "knee_umi_threshold",
+    "description": "Measurement-set-specific RNA UMI threshold selected by the knee method.",
+    "unit": "UMIs",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.mad_total_counts_n",
+    "section": "measurement_set_rna_qc",
+    "metric": "mad_total_counts_n",
+    "description": "Configured two-sided MAD multiplier for log1p total RNA UMIs.",
+    "unit": "MADs",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.mad_n_genes_n",
+    "section": "measurement_set_rna_qc",
+    "metric": "mad_n_genes_n",
+    "description": "Configured two-sided MAD multiplier for log1p detected genes.",
+    "unit": "MADs",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.mad_pct_mito_n",
+    "section": "measurement_set_rna_qc",
+    "metric": "mad_pct_mito_n",
+    "description": "Configured upper-tail MAD multiplier for mitochondrial percentage.",
+    "unit": "MADs",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
   },
   {
     "flat_key": "dashboard_derived.raw_scRNA_barcodes_per_measurement_set",

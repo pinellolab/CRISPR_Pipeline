@@ -17,6 +17,8 @@ A comprehensive pipeline for single-cell Perturb-Seq analysis that enables robus
 
 Optional guide-barcode clone filtering and 10x-style sequencing-saturation QC
 are documented in [docs/clone_and_saturation_qc.md](docs/clone_and_saturation_qc.md).
+RNA cell calling, per-measurement-set QC, and optional MAD filters are documented
+in [docs/per_measurement_set_rna_qc.md](docs/per_measurement_set_rna_qc.md).
 
 
 ## Documentation Links
@@ -175,8 +177,11 @@ The complete machine-readable QC output catalog is available as
 | `QC_min_cells_per_gene` | `0.05` | Fraction in `[0, 1)` | Minimum retained-cell fraction required to keep a gene during guide-assignment aggregation. `0` retains every gene detected in at least one cell. |
 | `TAPSEQ_QC_MODE` | `false` | `true`, `false` | TAP-seq gene-retention mode. It removes the standard 10-cell preprocessing floor, retaining every observed gene before the final fractional support filter. Use a small fraction such as `0.000001` when all observed TAP-seq genes should be retained. |
 | `QC_pct_mito` | `15` | `0` to `100` | Maximum mitochondrial read percentage allowed per cell during preprocessing. |
+| `QC_MAD_total_counts` | `0` | Non-negative number | Two-sided per-measurement-set MAD cutoff on `log1p(total RNA UMIs)`; `0` disables it. |
+| `QC_MAD_n_genes` | `0` | Non-negative number | Two-sided per-measurement-set MAD cutoff on `log1p(detected genes)`; `0` disables it. |
+| `QC_MAD_pct_mito` | `0` | Non-negative number | Upper-tail per-measurement-set MAD cutoff on mitochondrial percentage; `0` disables it. |
 | `QC_batch_col` | `batch` | Observation column name | Batch column used in additional QC plots. |
-| `QC_barcode_filter` | `knee2` | `none`, `knee`, `knee2` | RNA barcode filtering strategy based on total cell RNA UMIs. `knee` uses the first barcode-rank knee and is more permissive; `knee2` searches the high-UMI segment before knee1 for a second, stricter knee; `none` skips UMI-knee filtering and applies `QC_min_genes_per_cell`. If the requested knee cannot be found, barcode filtering is skipped and the min-gene filter is not applied. |
+| `QC_barcode_filter` | `knee2` | `none`, `knee`, `knee2` | Per-measurement-set RNA barcode filtering based on total cell RNA UMIs. `knee` uses the first barcode-rank knee and is more permissive; `knee2` searches the high-UMI segment before knee1 for a second, stricter knee; `none` skips UMI-knee filtering and applies `QC_min_genes_per_cell`. If the requested knee cannot be found, barcode filtering is skipped and the min-gene filter is not applied. |
 
 ##### Guide assignment options
 
