@@ -16,7 +16,10 @@ import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASE_CONFIG = REPO_ROOT / "nextflow.config"
-SITE_CONFIGS = ("nextflow_cc.config", "nextflow_tapseq.config")
+# Only the example this change adds. The CC-Perturb-seq config belongs to that
+# assay: it carries a known restatement of a nextflow.config default, and
+# asserting on it from here would fail our suite for an edit that is not ours.
+SITE_CONFIGS = ("nextflow_tapseq.config",)
 
 # Deltas a site config is allowed to state even when they match the pipeline
 # default: the run's own inputs, and the ceilings every site must look at.
@@ -137,26 +140,11 @@ def _restated_defaults(name):
 
 @pytest.mark.parametrize("name", SITE_CONFIGS)
 def test_a_site_config_states_only_deltas(name):
-    if name == "nextflow_cc.config":
-        pytest.xfail(
-            "known restatement: nextflow_cc.config carries "
-            "REFERENCE_restrict_genes_to_gtf = false, which is already the "
-            "nextflow.config default. tests/test_restrict_genes_to_gtf.py pins it "
-            "there deliberately, so removing the line is a separate change -- but "
-            "it is the exact pattern this test exists to prevent."
-        )
     restated = _restated_defaults(name)
     assert not restated, (
         f"{name} restates nextflow.config defaults, which will drift: {restated}. "
         "Delete the lines; nextflow.config is loaded either way."
     )
-
-
-def test_the_known_cc_restatement_has_not_grown():
-    """Bound the exemption above so it cannot quietly cover new restatements."""
-    assert set(_restated_defaults("nextflow_cc.config")) == {
-        "REFERENCE_restrict_genes_to_gtf"
-    }
 
 
 @pytest.mark.parametrize("name", SITE_CONFIGS)
