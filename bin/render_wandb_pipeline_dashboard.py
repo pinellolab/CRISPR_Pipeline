@@ -28,12 +28,66 @@ FAMILIES = [
     ("final", "Final dashboard", "Published report and artifacts"),
 ]
 
+CATEGORY_FLOWS = {
+    "input": [
+        ("Validate inputs", "Samplesheet paths, modalities, measurement sets, guide metadata and provenance"),
+        ("Prepare references", "Download or reuse genome/GTF resources and build guide/hash references"),
+        ("Resolve covariates", "Prepare the covariates and batch fields requested for inference"),
+    ],
+    "seqspec": [
+        ("Parse read structure", "Resolve barcode, UMI, cDNA and guide regions from each SeqSpec"),
+        ("Inspect capture", "Score candidate configurations and select the winning read structure"),
+        ("Publish QC", "Report hit ratio, positional purity, flank purity and the selected configuration"),
+    ],
+    "mapping": [
+        ("Quantify RNA", "Pseudoalign transcript reads and create an unfiltered RNA count matrix"),
+        ("Quantify guides", "Map feature-barcode reads against the validated guide reference"),
+        ("Assemble matrices", "Concatenate lane-level outputs deterministically within each modality"),
+    ],
+    "preprocessing": [
+        ("Call cells per measurement set", "Calculate an independent barcode-rank knee for every measurement set"),
+        ("Apply cell filters", "Apply configured RNA UMI, detected-gene, mitochondrial and optional MAD thresholds"),
+        ("Concatenate retained cells", "Combine only filtered measurement-set matrices"),
+        ("Filter genes globally", "Apply the post-concatenation absolute floor and fractional cell-support threshold"),
+    ],
+    "mudata": [
+        ("Intersect barcodes", "Align retained RNA and guide cells, plus hashing cells when enabled"),
+        ("Assemble modalities", "Create the shared MuData object and preserve QC/provenance fields"),
+        ("Concatenate batches", "Merge measurement sets while retaining deterministic cell identities"),
+    ],
+    "guide_assignment": [
+        ("Prepare assignment", "Select the configured capture and assignment model"),
+        ("Call guide-positive cells", "Convert guide UMI evidence into guide_assignment values"),
+        ("Audit recovery", "Report assignment rate, multiplicity, cells per guide and recovered guides"),
+    ],
+    "inference": [
+        ("Define tests", "Build intended/local guide–gene pairs and global tests from validated metadata"),
+        ("Fit methods", "Run configured SCEPTRE and/or PerTurbo local and global analyses"),
+        ("Merge chunks", "Combine chunked results, preserve method-native statistics and build catalogs"),
+    ],
+    "evaluation": [
+        ("Optional clone filter", "Detect or remove clonal guide-barcode groups only when enabled"),
+        ("Sequencing saturation", "Estimate 10x-style RNA library saturation when enabled"),
+        ("Evaluate controls", "Compare intended effects, non-targeting controls and benchmark truth sets"),
+    ],
+    "final": [
+        ("Collect outputs", "Gather QC, inference, evaluation and provenance artifacts"),
+        ("Build report", "Create the complete local pipeline dashboard"),
+        ("Publish current state", "Refresh the single visible advanced W&B execution dashboard"),
+    ],
+}
+
 
 def family_for(process: str) -> str:
     value = process.lower()
     leaf = value.split(":")[-1]
     if "seqspec" in value:
         return "seqspec"
+    if any(key in leaf for key in (
+        "downloadreference", "skipgenomedownload", "skipgtfdownload",
+        "createguideref", "createhashingref", "prepare_covariate",
+    )):
+        return "input"
     if any(key in value for key in ("mapping_rna_pipeline", "mapping_guide_pipeline", "mapping_hashing_pipeline")):
         if any(key in leaf for key in ("downloadreference", "seqspecparser", "createguideref", "createhashingref")):
             return "input"
@@ -46,7 +100,10 @@ def family_for(process: str) -> str:
         return "guide_assignment"
     if any(key in value for key in ("inference", "sceptre_chunk", "perturbo", "mergedresults", "catalog", "mergemudata")):
         return "inference"
-    if any(key in value for key in ("evaluation", "additional_qc", "benchmark")):
+    if any(key in value for key in (
+        "evaluation", "additional_qc", "benchmark", "sequencing_saturation",
+        "remove_clonal_cells", "clone_removal",
+    )):
         return "evaluation"
     if "dashboard" in value or "publishfiles" in value:
         return "final"
@@ -156,6 +213,37 @@ def searchable_table(
 def overall_row(section: dict[str, Any]) -> dict[str, Any]:
     rows = section.get("rows", []) if isinstance(section, dict) else []
     return next((row for row in rows if row.get("batch") == "all"), rows[0] if rows else {})
+
+
+def category_flow(data: dict[str, Any], family: str) -> str:
+    steps = CATEGORY_FLOWS.get(family, [])
+    if not steps:
+        return ""
+    nodes = "".join(
+        '<div class="flow-step"><strong>' + html.escape(title) + '</strong>'
+        '<span>' + html.escape(description) + '</span></div>'
+        for title, description in steps
+    )
+    resolved = ""
+    if family == "preprocessing" and data:
+        params = data.get("parameters", {}).get("selected_qc_and_inference_params", {})
+        fields = [
+            ("Barcode caller", params.get("QC_barcode_filter")),
+            ("Minimum RNA UMI", params.get("QC_min_counts_per_cell")),
+            ("Minimum genes", params.get("QC_min_genes_per_cell")),
+            ("Maximum mito %", params.get("QC_pct_mito")),
+            ("RNA UMI MAD", params.get("QC_MAD_total_counts")),
+            ("Detected-gene MAD", params.get("QC_MAD_n_genes")),
+            ("Mito MAD", params.get("QC_MAD_pct_mito")),
+            ("Minimum gene cell fraction", params.get("QC_min_cells_per_gene")),
+        ]
+        resolved = '<h4>Resolved filter values</h4><div class="filter-chips">' + "".join(
+            '<span><b>' + html.escape(label) + ':</b> ' + html.escape(display_value(value)) + '</span>'
+            for label, value in fields if value is not None
+        ) + '</div><p class="flow-note">Minimum genes is active only with barcode caller <code>none</code>; '
+        'MAD value 0 means disabled. Cell filters run independently per measurement set. The fractional '
+        'gene-support filter runs after concatenation.</p>'
+    return '<div class="process-flow"><h3>Processing and filter flow</h3><div class="flow-steps">' + nodes + '</div>' + resolved + '</div>'
 
 
 def qc_metrics_content(data: dict[str, Any], family: str) -> str:
@@ -523,7 +611,7 @@ def render(args: argparse.Namespace) -> str:
             metric_card("Cached", state["cached"], "processes"),
             metric_card("Task runtime", fmt_seconds(state["runtime"]), "aggregate"),
         ]
-        extra = qc_metrics_content(qc_data, family)
+        extra = category_flow(qc_data, family) + qc_metrics_content(qc_data, family)
         if family == "input" and guide:
             cards.extend([
                 metric_card("Guides", guide.get("row_count", "—"), "validated"),
@@ -563,6 +651,7 @@ def render(args: argparse.Namespace) -> str:
 .node.completed .node-status,.completed.status-badge{{background:var(--green)}} .node.running .node-status,.running.status-badge{{background:var(--cyan);box-shadow:0 0 12px var(--cyan)}} .node.failed .node-status,.failed.status-badge{{background:var(--red)}} .node.pending{{opacity:.65}} .family-panel{{display:none}} .family-panel.active{{display:block}} .family-heading{{display:flex;justify-content:space-between;align-items:flex-start}} .status-badge{{border-radius:99px;padding:5px 10px;text-transform:uppercase;font-size:10px;font-weight:800;color:#06121e;background:var(--grey)}}
 .table-wrap{{overflow:auto;border:1px solid var(--line);border-radius:10px}} table{{border-collapse:collapse;width:100%;min-width:700px}} th,td{{text-align:left;padding:10px 12px;border-bottom:1px solid #e2e8f0}} th{{color:#475569;background:#f1f5f9;font-size:11px;text-transform:uppercase;letter-spacing:.06em}} td{{font-family:ui-monospace,monospace;font-size:12px}} .pill{{padding:3px 7px;border-radius:99px;background:#e2e8f0;font-size:10px}} .pill.completed,.pill.cached{{background:#dcfce7;color:#166534}} .pill.failed,.pill.aborted{{background:#ffe4e6;color:#be123c}} figure{{margin:18px 0;background:#fff;border-radius:12px;padding:10px}} figure img{{display:block;max-width:100%;margin:auto}} figcaption{{color:#50647b;padding:8px 4px 2px}} .empty{{color:var(--muted);border:1px dashed var(--line);border-radius:10px;padding:20px}} footer{{color:#607994;font-size:11px;margin:20px 2px}}
 .gallery{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}} .gallery figure{{margin:0;min-width:0}} .failure-evidence{{background:#fff1f2;border:1px solid #fecdd3;border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 12px 30px #0f172a12}} details{{background:#fff;border:1px solid #fecdd3;border-radius:10px;margin-top:10px;padding:10px 12px}} summary{{cursor:pointer;font-weight:700;color:#be123c}} pre{{white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;background:#f8fafc;border-radius:8px;padding:12px;color:#334155;font:11px/1.45 ui-monospace,monospace}} .evidence-note{{color:var(--amber)}} .table-search{{width:min(520px,100%);background:#fff;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin:0 0 10px}} .result-block{{border-top:1px solid var(--line);margin-top:22px;padding-top:2px}} .qc-callout{{border:1px solid #fde68a;background:#fffbeb;border-radius:10px;padding:12px;margin:10px 0}}
+.process-flow{{border:1px solid var(--line);background:#f8fafc;border-radius:12px;padding:14px;margin:18px 0}} .flow-steps{{display:flex;align-items:stretch;overflow-x:auto;gap:24px;padding:4px 2px}} .flow-step{{position:relative;flex:1 0 180px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px}} .flow-step:not(:last-child):after{{content:'→';position:absolute;right:-18px;top:38%;color:#94a3b8;font-size:20px}} .flow-step strong,.flow-step span{{display:block}} .flow-step span{{color:var(--muted);font-size:11px;margin-top:5px}} .filter-chips{{display:flex;flex-wrap:wrap;gap:7px}} .filter-chips span{{background:#e0f2fe;color:#0c4a6e;border-radius:99px;padding:5px 9px;font-size:11px}} .flow-note{{margin-top:9px;font-size:12px}}
 @media(max-width:700px){{.shell{{padding:15px}}header{{display:block}}.live{{margin-top:12px;width:max-content}}}}
 </style></head><body><div class="shell">
 <header><div><span class="eyebrow">CRISPR Pipeline · execution dashboard</span><h1>{html.escape(args.run_name)}</h1><div class="run-id">{html.escape(args.run_id)}</div></div><div class="live {html.escape(args.status.lower())}"><i></i><span>{html.escape(args.status.upper())}</span></div></header>

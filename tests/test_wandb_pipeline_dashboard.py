@@ -10,6 +10,12 @@ assert SPEC.loader is not None
 SPEC.loader.exec_module(dashboard)
 
 
+def test_special_qc_processes_are_routed_to_expected_categories():
+    assert dashboard.family_for("workflow:skipGTFDownload") == "input"
+    assert dashboard.family_for("workflow:sequencing_saturation") == "evaluation"
+    assert dashboard.family_for("workflow:remove_clonal_cells") == "evaluation"
+
+
 def test_render_builds_clickable_family_dashboard(tmp_path):
     trace = tmp_path / "trace.tsv"
     trace.write_text(

@@ -980,6 +980,10 @@ controls the per-update HTML limit and defaults to 50 MB. Live replacement is
 enabled by default; set `WANDB_PUBLISH_LIVE_HTML=false` only to suppress
 intermediate dashboard updates.
 
+The required live-update lifecycle, process-category flowcharts, process
+routing, and exact cell/gene filter order are documented in
+[`docs/live_wandb_execution_dashboard.md`](docs/live_wandb_execution_dashboard.md).
+
 Launch it with the wrapper after the dataset-specific provenance `prepare` and
 `check` steps have succeeded:
 

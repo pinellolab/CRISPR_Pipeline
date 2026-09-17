@@ -109,3 +109,9 @@ def test_wrapper_preserves_nextflow_exit_when_telemetry_is_unavailable(tmp_path)
         "status": "failed", "exit_code": 7,
     }
     assert "pipeline continues without W&B" in completed.stderr
+
+
+def test_wrapper_defaults_to_live_visible_replacement():
+    wrapper = (BIN / "run_with_wandb.sh").read_text(encoding="utf-8")
+    assert '${WANDB_PUBLISH_LIVE_HTML:-true}' in wrapper
+    assert '${WANDB_REPLACE_RUN:-true}' in wrapper
