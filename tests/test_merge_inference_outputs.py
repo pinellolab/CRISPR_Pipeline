@@ -82,6 +82,9 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
             "guide_id": ["g1", "g2"],
             "log2_fc": [0.5, -0.5],
             "p_value": [0.01, 0.2],
+            # The adapter's per-pair CRT diagnostics ride along for debugging.
+            "perturbo_crt_low_information": [True, False],
+            "perturbo_crt_observed_nonzero": [0, 15],
         }
     )
     perturbo_element = pd.DataFrame(
@@ -121,6 +124,9 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
 
     guide_out = pd.read_csv(tmp_path / "per_guide_output.tsv.gz", sep="\t")
     element_out = pd.read_csv(tmp_path / "per_element_output.tsv.gz", sep="\t")
+
+    assert list(guide_out.sort_values("guide_id")["perturbo_crt_low_information"]) == [True, False]
+    assert list(guide_out.sort_values("guide_id")["perturbo_crt_observed_nonzero"]) == [0, 15]
 
     for observed in (guide_out, element_out):
         assert "sceptre_q_value" in observed.columns

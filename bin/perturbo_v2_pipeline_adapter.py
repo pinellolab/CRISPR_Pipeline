@@ -321,6 +321,7 @@ def convert_element_effects(
             "p_value",
             "perturbo_posterior_prob",
         ]
+        + _carried_diagnostic_columns(out)
     ]
     out["perturbo_q_value"] = _bh_adjust(out["p_value"])
     return out
@@ -337,9 +338,37 @@ def convert_guide_effects(
     out = _convert_common_effect_columns(effects, crt=crt)
     out["guide_id"] = out["element"].map(guide_name_map).fillna(out["element"]).astype(str)
     out = _maybe_filter_pairs(out, prepared_mudata_path, inference_type="guide", test_all_pairs=test_all_pairs)
-    out = out[["gene_id", "guide_id", "log2_fc", "perturbo_fc_se", "p_value", "perturbo_posterior_prob"]]
+    out = out[
+        ["gene_id", "guide_id", "log2_fc", "perturbo_fc_se", "p_value", "perturbo_posterior_prob"]
+        + _carried_diagnostic_columns(out)
+    ]
     out["perturbo_q_value"] = _bh_adjust(out["p_value"])
     return out
+
+
+# Per-pair CRT diagnostics PerTurbo writes beside the p-value. They travel
+# into the pipeline's result tables under a `perturbo_` prefix so that a call
+# can be read against how much data it rests on and how its tail probability
+# was obtained, without opening PerTurbo's own artifact directory. None of them
+# filters anything: `crt_low_information` is an annotation, not a gate, and the
+# tail columns record why an approximation was replaced, not that the
+# replacement is invalid. Whichever of them a PerTurbo version emits are carried;
+# the tail-policy columns (`crt_tail_failure_reason` onward) arrive with the
+# Chernoff-fallback release and are simply absent before it.
+CRT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
+    "crt_low_information",
+    "crt_observed_nonzero",
+    "crt_expected_nonzero",
+    "crt_saddlepoint_valid",
+    "crt_tail_failure_reason",
+    "crt_used_chernoff",
+    "crt_used_conservative_one",
+    "crt_root_residual_null_sd",
+)
+
+
+def _carried_diagnostic_columns(frame: pd.DataFrame) -> list[str]:
+    return [f"perturbo_{c}" for c in CRT_DIAGNOSTIC_COLUMNS if f"perturbo_{c}" in frame.columns]
 
 
 def _convert_common_effect_columns(effects: pd.DataFrame, *, crt: bool = False) -> pd.DataFrame:
@@ -373,6 +402,9 @@ def _convert_common_effect_columns(effects: pd.DataFrame, *, crt: bool = False) 
     else:
         out["p_value"] = p_value.where(p_value.notna(), posterior)
     out["perturbo_posterior_prob"] = posterior
+    for column in CRT_DIAGNOSTIC_COLUMNS:
+        if column in out.columns:
+            out[f"perturbo_{column}"] = out[column]
     out["gene_id"] = out["gene"].astype(str)
     out["log2_fc"] = pd.to_numeric(out["posterior_mean"], errors="coerce") / math.log(2.0)
     out["perturbo_fc_se"] = pd.to_numeric(out["posterior_scale"], errors="coerce") / math.log(2.0)

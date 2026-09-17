@@ -181,6 +181,11 @@ def test_convert_guide_effects_restores_control_guide_ids_and_filters_pairs(tmp_
             "posterior_scale": [np.log(2) / 10, np.log(2) / 9, np.log(2)],
             "posterior_prob": [0.05, 0.07, 0.8],
             "empirical_p_value": [np.nan, np.nan, 0.9],
+            # Diagnostics PerTurbo writes beside the p-value; the tail-policy
+            # column is one of the Chernoff-fallback release's, the others rc9's.
+            "crt_low_information": [True, False, False],
+            "crt_observed_nonzero": [0, 12, 40],
+            "crt_tail_failure_reason": [16, 0, -1],
         }
     )
 
@@ -190,6 +195,12 @@ def test_convert_guide_effects_restores_control_guide_ids_and_filters_pairs(tmp_
         prepared_path,
         test_all_pairs=False,
     )
+
+    # Carried under the method prefix, as they come, without filtering rows.
+    assert list(observed["perturbo_crt_low_information"]) == [True, False]
+    assert list(observed["perturbo_crt_observed_nonzero"]) == [0, 40]
+    assert list(observed["perturbo_crt_tail_failure_reason"]) == [16, -1]
+    assert "perturbo_crt_used_chernoff" not in observed.columns  # absent upstream, absent here
 
     assert list(observed["guide_id"]) == ["gA", "nt1"]
     assert list(observed["gene_id"]) == ["GENE1", "GENE1"]
