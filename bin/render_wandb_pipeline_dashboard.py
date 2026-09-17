@@ -117,6 +117,34 @@ def read_trace(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle, delimiter="\t"))
 
 
+TASK_HANDLER_RE = re.compile(
+    r"TaskHandler\[id:\s*(?P<task_id>\d+);\s*name:\s*(?P<name>.*?);\s*"
+    r"status:\s*(?P<status>[A-Z]+);\s*exit:\s*(?P<exit>.*?);\s*"
+    r"error:\s*.*?;\s*workDir:\s*(?P<workdir>[^\]]+)\]"
+)
+
+
+def merge_live_tasks(rows: list[dict[str, str]], nextflow_log: Path | None) -> list[dict[str, str]]:
+    """Add the latest still-running TaskHandlers omitted from Nextflow trace.tsv."""
+    if not nextflow_log or not nextflow_log.exists():
+        return rows
+    text = nextflow_log.read_bytes()[-2_000_000:].decode("utf-8", "replace")
+    latest: dict[str, dict[str, str]] = {}
+    for match in TASK_HANDLER_RE.finditer(text):
+        item = match.groupdict()
+        item["process"] = item["name"]
+        item["duration"] = "in progress"
+        item["realtime"] = "in progress"
+        item["peak_rss"] = "—"
+        latest[item["task_id"]] = item
+    recorded = {row.get("task_id", "") for row in rows}
+    live = [
+        item for task_id, item in latest.items()
+        if task_id not in recorded and item["status"] in {"NEW", "SUBMITTED", "RUNNING"}
+    ]
+    return rows + live
+
+
 def number(value: Any) -> float | None:
     try:
         return float(str(value).replace("%", "").replace(",", ""))
@@ -136,6 +164,8 @@ def family_state(rows: list[dict[str, str]], family: str, run_status: str) -> di
     failed = statuses["FAILED"] + statuses["ABORTED"]
     if failed:
         status = "failed"
+    elif statuses["RUNNING"] + statuses["SUBMITTED"] + statuses["NEW"]:
+        status = "running"
     elif selected:
         status = "completed"
     else:
@@ -149,6 +179,7 @@ def family_state(rows: list[dict[str, str]], family: str, run_status: str) -> di
         "rows": selected,
         "completed": statuses["COMPLETED"] + statuses["CACHED"],
         "failed": failed,
+        "running": statuses["RUNNING"] + statuses["SUBMITTED"] + statuses["NEW"],
         "cached": statuses["CACHED"],
         "runtime": sum(duration_seconds(row.get("realtime") or row.get("duration", "")) for row in selected),
     }
@@ -510,7 +541,12 @@ def sanitized_tail(path: Path, lines: int) -> str:
 def failure_content(rows: list[dict[str, str]], nextflow_log: Path | None, tail_lines: int) -> str:
     failed = [row for row in rows if row.get("status", "").upper() in {"FAILED", "ABORTED"}]
     log_tail = sanitized_tail(nextflow_log, max(tail_lines * 2, 40)) if nextflow_log else ""
-    if not failed and not any(marker in log_tail for marker in ("ERROR", "Exception", "Error executing")):
+    has_pipeline_error = bool(re.search(
+        r"(?im)^(?:ERROR\s*~|.*Error executing process|.*Execution cancelled|"
+        r".*terminated with an error|.*Session aborted\s*--\s*Cause)",
+        log_tail,
+    ))
+    if not failed and not has_pipeline_error:
         return ""
     blocks = []
     for row in failed:
@@ -577,7 +613,9 @@ def seqspec_content(table_path: Path, image_path: Path | None) -> str:
 
 
 def render(args: argparse.Namespace) -> str:
-    trace_rows = read_trace(args.trace)
+    trace_rows = merge_live_tasks(
+        read_trace(args.trace), getattr(args, "nextflow_log", None)
+    )
     family_states = {family: family_state(trace_rows, family, args.status) for family, _, _ in FAMILIES}
     counts = Counter(row.get("status", "UNKNOWN").upper() for row in trace_rows)
     total_runtime = sum(duration_seconds(row.get("realtime") or row.get("duration", "")) for row in trace_rows)
@@ -599,7 +637,7 @@ def render(args: argparse.Namespace) -> str:
             f'<button class="node {state["status"]}" data-family="{family}" onclick="selectFamily(\'{family}\')">'
             f'<span class="node-index">{index:02d}</span><span class="node-status"></span>'
             f'<strong>{html.escape(title)}</strong><small>{html.escape(subtitle)}</small>'
-            f'<span class="node-count">{state["completed"]} complete · {state["failed"]} failed</span></button>'
+            f'<span class="node-count">{state["completed"]} complete · {state["running"]} running · {state["failed"]} failed</span></button>'
         )
 
     sections = []
@@ -607,6 +645,7 @@ def render(args: argparse.Namespace) -> str:
         state = family_states[family]
         cards = [
             metric_card("Completed", state["completed"], "processes"),
+            metric_card("Running", state["running"], "processes"),
             metric_card("Failed", state["failed"], "processes"),
             metric_card("Cached", state["cached"], "processes"),
             metric_card("Task runtime", fmt_seconds(state["runtime"]), "aggregate"),
@@ -649,13 +688,13 @@ def render(args: argparse.Namespace) -> str:
 .summary,.metrics{{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:18px 0}} .metric{{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 5px 18px #0f172a0d}} .metric-label{{color:var(--muted);font-size:12px}} .metric-value{{font-size:24px;font-weight:750;margin-top:4px}} .metric-detail{{color:#66809d;font-size:11px}}
 .graph-card,.family-panel{{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 12px 30px #0f172a12}} .graph-head{{display:flex;justify-content:space-between;align-items:center}} .graph{{display:flex;align-items:stretch;overflow-x:auto;padding:20px 2px 10px}} .node{{position:relative;flex:0 0 145px;min-height:132px;text-align:left;color:var(--text);background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:.18s}} .node:hover,.node.active{{transform:translateY(-3px);border-color:var(--cyan);box-shadow:0 0 0 2px #0f8fc522}} .node:not(:last-child){{margin-right:29px}} .node:not(:last-child):after{{content:'→';position:absolute;right:-23px;top:49px;color:#94a3b8;font-size:22px}} .node strong,.node small,.node-count{{display:block}} .node strong{{margin-top:18px}} .node small{{color:var(--muted);font-size:11px;min-height:34px}} .node-count{{font-size:10px;color:#7890aa;margin-top:7px}} .node-index{{font:600 10px ui-monospace,monospace;color:#6c86a1}} .node-status{{position:absolute;right:12px;top:12px;width:10px;height:10px;border-radius:50%;background:var(--grey)}}
 .node.completed .node-status,.completed.status-badge{{background:var(--green)}} .node.running .node-status,.running.status-badge{{background:var(--cyan);box-shadow:0 0 12px var(--cyan)}} .node.failed .node-status,.failed.status-badge{{background:var(--red)}} .node.pending{{opacity:.65}} .family-panel{{display:none}} .family-panel.active{{display:block}} .family-heading{{display:flex;justify-content:space-between;align-items:flex-start}} .status-badge{{border-radius:99px;padding:5px 10px;text-transform:uppercase;font-size:10px;font-weight:800;color:#06121e;background:var(--grey)}}
-.table-wrap{{overflow:auto;border:1px solid var(--line);border-radius:10px}} table{{border-collapse:collapse;width:100%;min-width:700px}} th,td{{text-align:left;padding:10px 12px;border-bottom:1px solid #e2e8f0}} th{{color:#475569;background:#f1f5f9;font-size:11px;text-transform:uppercase;letter-spacing:.06em}} td{{font-family:ui-monospace,monospace;font-size:12px}} .pill{{padding:3px 7px;border-radius:99px;background:#e2e8f0;font-size:10px}} .pill.completed,.pill.cached{{background:#dcfce7;color:#166534}} .pill.failed,.pill.aborted{{background:#ffe4e6;color:#be123c}} figure{{margin:18px 0;background:#fff;border-radius:12px;padding:10px}} figure img{{display:block;max-width:100%;margin:auto}} figcaption{{color:#50647b;padding:8px 4px 2px}} .empty{{color:var(--muted);border:1px dashed var(--line);border-radius:10px;padding:20px}} footer{{color:#607994;font-size:11px;margin:20px 2px}}
+.table-wrap{{overflow:auto;border:1px solid var(--line);border-radius:10px}} table{{border-collapse:collapse;width:100%;min-width:700px}} th,td{{text-align:left;padding:10px 12px;border-bottom:1px solid #e2e8f0}} th{{color:#475569;background:#f1f5f9;font-size:11px;text-transform:uppercase;letter-spacing:.06em}} td{{font-family:ui-monospace,monospace;font-size:12px}} .pill{{padding:3px 7px;border-radius:99px;background:#e2e8f0;font-size:10px}} .pill.completed,.pill.cached{{background:#dcfce7;color:#166534}} .pill.running,.pill.submitted,.pill.new{{background:#e0f2fe;color:#075985}} .pill.failed,.pill.aborted{{background:#ffe4e6;color:#be123c}} figure{{margin:18px 0;background:#fff;border-radius:12px;padding:10px}} figure img{{display:block;max-width:100%;margin:auto}} figcaption{{color:#50647b;padding:8px 4px 2px}} .empty{{color:var(--muted);border:1px dashed var(--line);border-radius:10px;padding:20px}} footer{{color:#607994;font-size:11px;margin:20px 2px}}
 .gallery{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}} .gallery figure{{margin:0;min-width:0}} .failure-evidence{{background:#fff1f2;border:1px solid #fecdd3;border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 12px 30px #0f172a12}} details{{background:#fff;border:1px solid #fecdd3;border-radius:10px;margin-top:10px;padding:10px 12px}} summary{{cursor:pointer;font-weight:700;color:#be123c}} pre{{white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;background:#f8fafc;border-radius:8px;padding:12px;color:#334155;font:11px/1.45 ui-monospace,monospace}} .evidence-note{{color:var(--amber)}} .table-search{{width:min(520px,100%);background:#fff;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin:0 0 10px}} .result-block{{border-top:1px solid var(--line);margin-top:22px;padding-top:2px}} .qc-callout{{border:1px solid #fde68a;background:#fffbeb;border-radius:10px;padding:12px;margin:10px 0}}
 .process-flow{{border:1px solid var(--line);background:#f8fafc;border-radius:12px;padding:14px;margin:18px 0}} .flow-steps{{display:flex;align-items:stretch;overflow-x:auto;gap:24px;padding:4px 2px}} .flow-step{{position:relative;flex:1 0 180px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px}} .flow-step:not(:last-child):after{{content:'→';position:absolute;right:-18px;top:38%;color:#94a3b8;font-size:20px}} .flow-step strong,.flow-step span{{display:block}} .flow-step span{{color:var(--muted);font-size:11px;margin-top:5px}} .filter-chips{{display:flex;flex-wrap:wrap;gap:7px}} .filter-chips span{{background:#e0f2fe;color:#0c4a6e;border-radius:99px;padding:5px 9px;font-size:11px}} .flow-note{{margin-top:9px;font-size:12px}}
 @media(max-width:700px){{.shell{{padding:15px}}header{{display:block}}.live{{margin-top:12px;width:max-content}}}}
 </style></head><body><div class="shell">
 <header><div><span class="eyebrow">CRISPR Pipeline · execution dashboard</span><h1>{html.escape(args.run_name)}</h1><div class="run-id">{html.escape(args.run_id)}</div></div><div class="live {html.escape(args.status.lower())}"><i></i><span>{html.escape(args.status.upper())}</span></div></header>
-<div class="summary">{metric_card("Completed", counts["COMPLETED"] + counts["CACHED"], "tasks")}{metric_card("Failed", counts["FAILED"] + counts["ABORTED"], "tasks")}{metric_card("Cached", counts["CACHED"], "tasks")}{metric_card("Task runtime", fmt_seconds(total_runtime), "aggregate")}{metric_card("Guides", guide.get("row_count", "—"), "validated")}</div>
+<div class="summary">{metric_card("Completed", counts["COMPLETED"] + counts["CACHED"], "tasks")}{metric_card("Running", counts["RUNNING"] + counts["SUBMITTED"] + counts["NEW"], "tasks")}{metric_card("Failed", counts["FAILED"] + counts["ABORTED"], "tasks")}{metric_card("Cached", counts["CACHED"], "tasks")}{metric_card("Task runtime", fmt_seconds(total_runtime), "aggregate")}{metric_card("Guides", guide.get("row_count", "—"), "validated")}</div>
 <div class="graph-card"><div class="graph-head"><div><span class="eyebrow">Live dependency view</span><h2>Pipeline execution</h2></div><p>Click a family to inspect its QC and tasks</p></div><nav class="graph">{"".join(graph_nodes)}</nav></div>
 {failures}{"".join(sections)}<footer>Generated {generated} · Self-contained W&amp;B HTML media · No credentials, FASTQs or unbounded task logs embedded</footer></div>
 <script>function selectFamily(id){{const node=document.querySelector('[data-family="'+id+'"]'),panel=document.getElementById('family-'+id);if(!node||!panel)return;document.querySelectorAll('.node,.family-panel').forEach(x=>x.classList.remove('active'));node.classList.add('active');panel.classList.add('active');if(location.hash!=='#'+id)history.replaceState(null,'','#'+id);}}function filterTable(id,q){{q=q.toLowerCase();document.querySelectorAll('#'+id+' tbody tr').forEach(r=>r.style.display=r.textContent.toLowerCase().includes(q)?'':'none');}}selectFamily(location.hash.slice(1)||'input');window.addEventListener('hashchange',()=>selectFamily(location.hash.slice(1)));</script>

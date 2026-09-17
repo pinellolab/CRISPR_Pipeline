@@ -22,6 +22,12 @@ Runs launched with `bin/run_with_wandb.sh` use these defaults:
 - W&B remains fail-open: telemetry cannot change the Nextflow exit status or
   scientific outputs.
 
+Nextflow appends completed tasks to `trace.tsv`; therefore the monitor also
+reads bounded `TaskHandler` records from the Nextflow log to display submitted
+and running tasks before they complete. A red failure-evidence panel is shown
+only for a failed/aborted trace task or an explicit pipeline-error marker.
+Routine debug fields such as `error: -` do not trigger it.
+
 The newest successfully uploaded run is retained when replacement fails. This
 prevents a transient network or W&B error from removing the last usable view.
 

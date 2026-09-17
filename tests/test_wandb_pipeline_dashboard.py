@@ -69,6 +69,22 @@ def test_processes_are_mapped_to_expected_families():
     assert dashboard.family_for("pipeline:dashboard") == "final"
 
 
+def test_live_tasks_are_added_from_nextflow_log_without_false_failure_panel(tmp_path):
+    trace_rows = [{"task_id": "1", "process": "pipeline:mappingGuide", "status": "COMPLETED"}]
+    log = tmp_path / "nextflow.log"
+    log.write_text(
+        "DEBUG Unable to get file attributes -- Cause: missing\n"
+        "TaskHandler[id: 2; name: NFCORE_CRISPR:CRISPR_PIPELINE:mapping_rna_pipeline:mappingscRNA (1); "
+        "status: RUNNING; exit: -; error: -; workDir: /work/aa/bb]\n",
+        encoding="utf-8",
+    )
+    merged = dashboard.merge_live_tasks(trace_rows, log)
+    assert len(merged) == 2
+    assert merged[-1]["status"] == "RUNNING"
+    assert dashboard.family_for(merged[-1]["process"]) == "mapping"
+    assert dashboard.failure_content(merged, log, 30) == ""
+
+
 def test_qc_catalog_and_sanitized_failure_evidence_are_embedded(tmp_path):
     workdir = tmp_path / "work"
     workdir.mkdir()

@@ -50,6 +50,18 @@ def test_signature_changes_when_trace_changes(tmp_path):
     assert monitor.input_signature(paths, trace, status) != first
 
 
+def test_signature_changes_when_nextflow_log_reports_live_progress(tmp_path):
+    trace = tmp_path / "trace.tsv"
+    status = tmp_path / "status.json"
+    log = tmp_path / "nextflow.log"
+    trace.write_text("status\n", encoding="utf-8")
+    log.write_text("submitted\n", encoding="utf-8")
+    paths = {"missing": tmp_path / "missing"}
+    first = monitor.input_signature(paths, trace, status, log)
+    log.write_text("submitted\nrunning\n", encoding="utf-8")
+    assert monitor.input_signature(paths, trace, status, log) != first
+
+
 def test_final_update_keeps_advanced_execution_dashboard(tmp_path):
     dashboard_dir = tmp_path / "pipeline_dashboard"
     figures = dashboard_dir / "figures"

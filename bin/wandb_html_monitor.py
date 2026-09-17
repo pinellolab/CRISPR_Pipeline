@@ -44,9 +44,13 @@ def discovered_paths(outdir: Path, run_name: str) -> dict[str, Path]:
     }
 
 
-def input_signature(paths: dict[str, Path], trace: Path, status_file: Path) -> str:
+def input_signature(
+    paths: dict[str, Path], trace: Path, status_file: Path, nextflow_log: Path | None = None
+) -> str:
     records = []
-    for path in [trace, status_file, *paths.values()]:
+    for path in [trace, status_file, nextflow_log, *paths.values()]:
+        if path is None:
+            continue
         if path.exists():
             stat = path.stat()
             records.append((str(path), stat.st_size, stat.st_mtime_ns))
@@ -165,7 +169,7 @@ def main() -> int:
         while True:
             status, final = read_final_status(args.status_file)
             paths = discovered_paths(args.outdir, args.run_name)
-            signature = input_signature(paths, args.trace, args.status_file)
+            signature = input_signature(paths, args.trace, args.status_file, args.nextflow_log)
             if signature != previous or final:
                 try:
                     if final or publish_live_html:
