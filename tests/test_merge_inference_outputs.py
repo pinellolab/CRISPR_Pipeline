@@ -438,6 +438,9 @@ def test_merge_local_global_results_uses_fast_parquet_path(tmp_path, monkeypatch
             "perturbo_fc_se": np.array([0.1, 0.2], dtype=np.float32),
             "p_value": np.array([0.05, 0.5], dtype=np.float32),
             "perturbo_q_value": [0.1, 0.5],
+            # The adapter's per-pair CRT diagnostics must survive the streaming path.
+            "perturbo_crt_low_information": [True, False],
+            "perturbo_crt_used_chernoff": [False, True],
         }
     )
     global_element = pd.DataFrame(
@@ -487,8 +490,9 @@ def test_merge_local_global_results_uses_fast_parquet_path(tmp_path, monkeypatch
         "guide_start", "guide_end", "guide_strand", "pam",
         "intended_target_name", "intended_target_chr",
         "intended_target_start", "intended_target_end", "gene_name",
-        "nPerturbedCells",
+        "nPerturbedCells", "perturbo_crt_low_information", "perturbo_crt_used_chernoff",
     ]
+    assert list(observed_guide.sort_values("guide_id")["perturbo_crt_used_chernoff"]) == [False, True]
     assert list(observed_element.columns) == [
         "gene_id", "intended_target_name", "intended_target_chr",
         "intended_target_start", "intended_target_end", "perturbo_log2_fc",
