@@ -262,6 +262,48 @@ def plot_scrublet_scores(scores, predicted, threshold, batch, outpath):
     plt.close(fig)
 
 
+def run_scrublet_with_pca_fallback(
+    counts, expected_doublet_rate, requested_n_prin_comps, adaptive_pca_fallback,
+):
+    """Run Scrublet, retrying only its explicit PCA-dimension failure."""
+    import scrublet as scr
+
+    def run(n_prin_comps):
+        model = scr.Scrublet(
+            counts,
+            expected_doublet_rate=expected_doublet_rate,
+            random_state=42,
+        )
+        scores, predicted = model.scrub_doublets(n_prin_comps=n_prin_comps)
+        return model, scores, predicted
+
+    try:
+        model, scores, predicted = run(requested_n_prin_comps)
+        return model, scores, predicted, requested_n_prin_comps, False
+    except ValueError as error:
+        match = re.search(
+            r"n_components=\d+ must be between 1 and "
+            r"min\(n_samples, n_features\)=(\d+)",
+            str(error),
+        )
+        if not adaptive_pca_fallback or match is None:
+            raise
+        usable_dimension = int(match.group(1))
+        fallback_n_prin_comps = min(requested_n_prin_comps - 1, usable_dimension - 1)
+        if fallback_n_prin_comps < 1:
+            raise ValueError(
+                "Scrublet adaptive PCA fallback cannot run because fewer than "
+                "two usable PCA dimensions remain"
+            ) from error
+        print(
+            "Scrublet PCA fallback: requested "
+            f"{requested_n_prin_comps}, retrying with {fallback_n_prin_comps} "
+            f"because the usable dimension is {usable_dimension}."
+        )
+        model, scores, predicted = run(fallback_n_prin_comps)
+        return model, scores, predicted, fallback_n_prin_comps, True
+
+
 def prepare_matrix(adata, use_multimapping):
     if all(layer in adata.layers for layer in ("mature", "nascent", "ambiguous")):
         adata.X = (
@@ -441,15 +483,13 @@ def main(args):
     pre_scrublet_keep = current_keep.copy()
     scrublet_removed = 0
     if args.enable_scrublet:
-        import scrublet as scr
-
         selected = np.flatnonzero(current_keep)
-        scrub = scr.Scrublet(
+        scrub, scores, predicted, scrublet_n_prin_comps_used, scrublet_pca_fallback_used = run_scrublet_with_pca_fallback(
             adata.X[selected],
-            expected_doublet_rate=args.scrublet_expected_doublet_rate,
-            random_state=42,
+            args.scrublet_expected_doublet_rate,
+            args.scrublet_n_prin_comps,
+            args.scrublet_adaptive_pca_fallback,
         )
-        scores, predicted = scrub.scrub_doublets()
         threshold = float(scrub.threshold_) if scrub.threshold_ is not None else np.nan
         adata.obs["doublet_scores"] = np.nan
         adata.obs.iloc[selected, adata.obs.columns.get_loc("doublet_scores")] = scores
@@ -466,7 +506,12 @@ def main(args):
             "step_order": len(flow_rows) + 1,
             "filter_name": "scrublet_doublet_score",
             "filter_label": "Scrublet doublet removal",
-            "threshold": f"expected_doublet_rate = {args.scrublet_expected_doublet_rate:g}; call threshold = {threshold:.3g}",
+            "threshold": (
+                f"expected_doublet_rate = {args.scrublet_expected_doublet_rate:g}; "
+                f"PCA components = {scrublet_n_prin_comps_used}"
+                f"{' (adaptive fallback)' if scrublet_pca_fallback_used else ''}; "
+                f"call threshold = {threshold:.3g}"
+            ),
             "applied": True,
             "cells_before": before_count,
             "cells_after": after_count,
@@ -494,6 +539,8 @@ def main(args):
             args.qc_dir / f"scrublet_scores_scRNA_{label}.png",
         )
     else:
+        scrublet_n_prin_comps_used = np.nan
+        scrublet_pca_fallback_used = False
         count = int(current_keep.sum())
         flow_rows.append({
             "measurement_set": batch,
@@ -554,6 +601,10 @@ def main(args):
         "mad_n_genes_n": args.mad_n_genes,
         "scrublet_enabled": args.enable_scrublet,
         "scrublet_expected_doublet_rate": args.scrublet_expected_doublet_rate,
+        "scrublet_n_prin_comps_requested": args.scrublet_n_prin_comps,
+        "scrublet_n_prin_comps_used": scrublet_n_prin_comps_used,
+        "scrublet_pca_fallback_enabled": args.scrublet_adaptive_pca_fallback,
+        "scrublet_pca_fallback_used": scrublet_pca_fallback_used,
     }
     for key, prefix in (("total_counts", "total_counts"), ("n_genes", "n_genes")):
         median, mad, lower, upper = limits[key]
@@ -579,10 +630,14 @@ if __name__ == "__main__":
     parser.add_argument("--mad-n-genes", type=float, default=5)
     parser.add_argument("--enable-scrublet", action="store_true")
     parser.add_argument("--scrublet-expected-doublet-rate", type=float, default=0.08)
+    parser.add_argument("--scrublet-n-prin-comps", type=int, default=30)
+    parser.add_argument("--scrublet-adaptive-pca-fallback", action="store_true")
     parser.add_argument("--bc-replacement", action="store_true")
     parser.add_argument("--use-multimapping", action="store_true")
     parsed = parser.parse_args()
     for name in ("mad_total_counts", "mad_n_genes"):
         if getattr(parsed, name) < 0:
             parser.error(f"--{name.replace('_', '-')} must be non-negative")
+    if parsed.scrublet_n_prin_comps < 1:
+        parser.error("--scrublet-n-prin-comps must be at least 1")
     main(parsed)

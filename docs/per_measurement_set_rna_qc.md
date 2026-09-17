@@ -47,6 +47,8 @@ params {
     ENABLE_SCRUBLET = true
     SCRUBLET_assay_type = 'droplet'
     SCRUBLET_expected_doublet_rate = null
+    SCRUBLET_n_prin_comps = 30
+    SCRUBLET_adaptive_pca_fallback = true
 }
 ```
 
@@ -83,3 +85,9 @@ remain visible with zero removal.
 `SCRUBLET_assay_type = 'droplet'` resolves an automatic expected-doublet rate
 of `0.08`; `cc-perturb-seq` resolves to `0.025`. A numeric
 `SCRUBLET_expected_doublet_rate` overrides the profile.
+
+When `SCRUBLET_adaptive_pca_fallback=true`, only Scrublet's explicit
+`n_components` dimensionality error is retried. The retry uses one fewer
+component than Scrublet's reported usable dimension. Requested and actual PCA
+dimensions and whether fallback occurred are saved in
+`measurement_set_qc_metrics.tsv`; unrelated Scrublet errors remain fatal.

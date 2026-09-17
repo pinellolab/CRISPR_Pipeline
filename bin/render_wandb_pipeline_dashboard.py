@@ -289,6 +289,8 @@ def category_flow(data: dict[str, Any], family: str) -> str:
             ("Scrublet", params.get("ENABLE_SCRUBLET")),
             ("Scrublet profile", params.get("SCRUBLET_assay_type")),
             ("Scrublet rate override", params.get("SCRUBLET_expected_doublet_rate")),
+            ("Scrublet PCA components", params.get("SCRUBLET_n_prin_comps")),
+            ("Scrublet adaptive PCA fallback", params.get("SCRUBLET_adaptive_pca_fallback")),
             ("Post-concat maximum mito %", params.get("QC_pct_mito")),
             ("Minimum gene cell fraction", params.get("QC_min_cells_per_gene")),
         ]

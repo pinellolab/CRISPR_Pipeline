@@ -42,6 +42,9 @@ def validate_fractional_qc_params(params):
     scrublet_rate = params.get("SCRUBLET_expected_doublet_rate")
     if scrublet_rate is not None and not 0 < float(scrublet_rate) < 1:
         raise ValueError("SCRUBLET_expected_doublet_rate must be null or in (0, 1).")
+    scrublet_n_prin_comps = int(params.get("SCRUBLET_n_prin_comps", 30))
+    if scrublet_n_prin_comps < 1:
+        raise ValueError("SCRUBLET_n_prin_comps must be at least 1.")
     return value, tapseq_mode
 
 

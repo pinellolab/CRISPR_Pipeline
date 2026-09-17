@@ -807,6 +807,8 @@ def _build_comprehensive_qc_report(
         ("Min cells per gene", _tip(f"QC_min_cells_per_gene = {params.get('QC_min_cells_per_gene', 'N/A')}", "Minimum gene support before inference: a fraction in [0, 1); zero retains genes detected in at least one cell.", code=True), "Resolved params"),
         ("Scrublet", _tip(f"ENABLE_SCRUBLET = {params.get('ENABLE_SCRUBLET', False)}", "Whether Scrublet doublet removal was enabled.", code=True), "Resolved params"),
         ("Scrublet profile", _tip(f"SCRUBLET_assay_type = {params.get('SCRUBLET_assay_type', 'droplet')}", "Resolves 0.08 for droplet or 0.025 for cc-perturb-seq unless overridden.", code=True), "Resolved params"),
+        ("Scrublet PCA", _tip(f"SCRUBLET_n_prin_comps = {params.get('SCRUBLET_n_prin_comps', 30)}", "Initial PCA component count requested from Scrublet.", code=True), "Resolved params"),
+        ("Scrublet PCA fallback", _tip(f"SCRUBLET_adaptive_pca_fallback = {params.get('SCRUBLET_adaptive_pca_fallback', True)}", "Retries only Scrublet's explicit PCA-dimension failure with a valid smaller component count.", code=True), "Resolved params"),
         ("Hashing", _tip(f"ENABLE_DATA_HASHING = {params.get('ENABLE_DATA_HASHING', False)}", "Whether hashing demultiplexing was enabled.", code=True), "Resolved params"),
         ("Inference mode", _tip(f"INFERENCE_method = {params.get('INFERENCE_method', 'N/A')}", "Configured inference method for local/global analysis.", code=True), "Resolved params"),
     ]

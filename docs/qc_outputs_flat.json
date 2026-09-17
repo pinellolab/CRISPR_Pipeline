@@ -1152,6 +1152,42 @@
     "source_artifact": "figures/measurement_set_qc_metrics.tsv"
   },
   {
+    "flat_key": "measurement_set_rna_qc.scrublet_n_prin_comps_requested",
+    "section": "measurement_set_rna_qc",
+    "metric": "scrublet_n_prin_comps_requested",
+    "description": "Principal components initially requested for Scrublet.",
+    "unit": "components",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.scrublet_n_prin_comps_used",
+    "section": "measurement_set_rna_qc",
+    "metric": "scrublet_n_prin_comps_used",
+    "description": "Principal components actually used by Scrublet after any adaptive fallback.",
+    "unit": "components",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.scrublet_pca_fallback_enabled",
+    "section": "measurement_set_rna_qc",
+    "metric": "scrublet_pca_fallback_enabled",
+    "description": "Whether the narrow PCA-dimension fallback was enabled.",
+    "unit": null,
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.scrublet_pca_fallback_used",
+    "section": "measurement_set_rna_qc",
+    "metric": "scrublet_pca_fallback_used",
+    "description": "Whether this measurement set required the adaptive PCA fallback.",
+    "unit": null,
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
     "flat_key": "dashboard_derived.raw_scRNA_barcodes_per_measurement_set",
     "section": "dashboard_derived",
     "metric": "raw_scRNA_barcodes_per_measurement_set",

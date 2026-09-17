@@ -132,6 +132,10 @@ This table is generated from `bin/qc_metrics_json.py`. The flat key combines the
 | measurement_set_rna_qc.mad_n_genes_n | Configured two-sided MAD multiplier for log1p detected genes. | MADs | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
 | measurement_set_rna_qc.scrublet_enabled | Whether Scrublet doublet calling was enabled for this measurement set. |  | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
 | measurement_set_rna_qc.scrublet_expected_doublet_rate | Expected doublet rate supplied to Scrublet. | fraction | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.scrublet_n_prin_comps_requested | Principal components initially requested for Scrublet. | components | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.scrublet_n_prin_comps_used | Principal components actually used by Scrublet after any adaptive fallback. | components | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.scrublet_pca_fallback_enabled | Whether the narrow PCA-dimension fallback was enabled. |  | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.scrublet_pca_fallback_used | Whether this measurement set required the adaptive PCA fallback. |  | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
 | dashboard_derived.raw_scRNA_barcodes_per_measurement_set | Unfiltered scRNA barcode counts from kb inspect JSON files. | barcodes | measurement-set or run-level | pipeline_qc_metrics.json and dashboard.html Filtering Summary tab |
 | dashboard_derived.raw_scRNA_barcodes_total | Sum of unfiltered scRNA barcode counts across measurement sets. | barcodes | measurement-set or run-level | pipeline_qc_metrics.json and dashboard.html Filtering Summary tab |
 | dashboard_derived.concatenated_scRNA_cells | Cells in concatenated unfiltered scRNA AnnData before dashboard-attributed QC steps. | cells | measurement-set or run-level | pipeline_qc_metrics.json and dashboard.html Filtering Summary tab |

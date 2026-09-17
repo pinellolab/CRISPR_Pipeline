@@ -26,7 +26,9 @@ workflow preprocessing_pipeline {
         params.QC_MAD_total_counts,
         params.QC_MAD_n_genes,
         params.ENABLE_SCRUBLET,
-        scrublet_expected_doublet_rate
+        scrublet_expected_doublet_rate,
+        params.SCRUBLET_n_prin_comps,
+        params.SCRUBLET_adaptive_pca_fallback
     )
 
     filtered_measurement_sets = Preprocessed_AnnData.filtered_measurement_set

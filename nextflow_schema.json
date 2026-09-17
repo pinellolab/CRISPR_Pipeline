@@ -72,6 +72,18 @@
                     "description": "Optional explicit Scrublet expected-doublet rate.",
                     "help_text": "Leave null to resolve the rate from SCRUBLET_assay_type."
                 },
+                "SCRUBLET_n_prin_comps": {
+                    "type": "integer",
+                    "default": 30,
+                    "minimum": 1,
+                    "description": "Requested number of principal components for Scrublet."
+                },
+                "SCRUBLET_adaptive_pca_fallback": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Retry Scrublet with a smaller valid PCA dimension when the requested count exceeds the usable matrix dimension.",
+                    "help_text": "This catches only Scrublet's explicit n_components dimensionality error. Requested and actual dimensions and whether fallback occurred are recorded in measurement_set_qc_metrics.tsv. Other failures remain fatal."
+                },
                 "is_10x3v3": {
                     "type": "boolean",
                     "default": true,

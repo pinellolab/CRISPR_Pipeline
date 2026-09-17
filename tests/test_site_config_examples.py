@@ -122,6 +122,8 @@ def test_the_parser_sees_the_defaults_it_is_asked_about():
     assert defaults["QC_MAD_n_genes"] == 5
     assert defaults["ENABLE_SCRUBLET"] is True
     assert defaults["SCRUBLET_assay_type"] == "droplet"
+    assert defaults["SCRUBLET_n_prin_comps"] == 30
+    assert defaults["SCRUBLET_adaptive_pca_fallback"] is True
     assert defaults["QC_min_cells_per_gene"] == 0.05
     assert defaults["QC_barcode_filter"] == "knee"  # from the last params block
     assert defaults["GUIDE_ASSIGNMENT_capture_method"] == "direct-capture"

@@ -14,6 +14,8 @@ process PreprocessAnnData {
     val mad_n_genes
     val enable_scrublet
     val scrublet_expected_doublet_rate
+    val scrublet_n_prin_comps
+    val scrublet_adaptive_pca_fallback
 
     output:
     path "*_filtered.h5ad", emit: filtered_measurement_set
@@ -25,6 +27,7 @@ process PreprocessAnnData {
         def bcArg = params.replace_barcodes ? '--bc-replacement' : ''
         def mmArg = params.use_multimapping ? '--use-multimapping' : ''
         def scrubletArg = enable_scrublet ? '--enable-scrublet' : ''
+        def scrubletFallbackArg = scrublet_adaptive_pca_fallback ? '--scrublet-adaptive-pca-fallback' : ''
         """
         export MPLCONFIGDIR="./tmp/mplconfigdir"
         mkdir -p \${MPLCONFIGDIR}
@@ -37,6 +40,7 @@ process PreprocessAnnData {
             --mad-total-counts ${mad_total_counts} \
             --mad-n-genes ${mad_n_genes} \
             --scrublet-expected-doublet-rate ${scrublet_expected_doublet_rate} \
-            ${scrubletArg} ${bcArg} ${mmArg}
+            --scrublet-n-prin-comps ${scrublet_n_prin_comps} \
+            ${scrubletArg} ${scrubletFallbackArg} ${bcArg} ${mmArg}
         """
 }

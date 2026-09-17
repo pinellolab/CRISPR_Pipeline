@@ -1,4 +1,6 @@
 import importlib.util
+import sys
+import types
 from argparse import Namespace
 from pathlib import Path
 
@@ -75,6 +77,8 @@ def test_one_measurement_set_is_filtered_and_audited(tmp_path, monkeypatch):
             mad_n_genes=0,
             enable_scrublet=False,
             scrublet_expected_doublet_rate=0.08,
+            scrublet_n_prin_comps=30,
+            scrublet_adaptive_pca_fallback=True,
             bc_replacement=False,
             use_multimapping=False,
         )
@@ -105,6 +109,33 @@ def test_one_measurement_set_is_filtered_and_audited(tmp_path, monkeypatch):
     assert count_step["cells_before"] == 4
     assert count_step["cells_after"] == 3
     assert count_step["cells_removed"] == 1
+
+
+def test_scrublet_pca_fallback_retries_only_dimension_error(monkeypatch):
+    calls = []
+
+    class FakeScrublet:
+        def __init__(self, counts, expected_doublet_rate, random_state):
+            self.threshold_ = 0.25
+
+        def scrub_doublets(self, n_prin_comps):
+            calls.append(n_prin_comps)
+            if n_prin_comps == 30:
+                raise ValueError(
+                    "n_components=30 must be between 1 and "
+                    "min(n_samples, n_features)=17 with svd_solver='arpack'"
+                )
+            return np.array([0.1, 0.4]), np.array([False, True])
+
+    monkeypatch.setitem(sys.modules, "scrublet", types.SimpleNamespace(Scrublet=FakeScrublet))
+    model, scores, predicted, used, fallback_used = MODULE.run_scrublet_with_pca_fallback(
+        sparse.csr_matrix([[1, 0], [0, 1]]), 0.08, 30, True
+    )
+    assert calls == [30, 16]
+    assert used == 16
+    assert fallback_used is True
+    assert scores.tolist() == [0.1, 0.4]
+    assert predicted.tolist() == [False, True]
 
 
 def test_concatenated_gene_metrics_are_recomputed():
