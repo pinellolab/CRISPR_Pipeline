@@ -51,7 +51,10 @@ params {
 
 ## Outputs
 
-The dashboard `figures/` directory contains:
+The combined artifacts are published immediately under
+`measurement_set_qc/` so the live W&B execution dashboard can display them
+before the final dashboard process runs. The final dashboard `figures/`
+directory also contains:
 
 - `knee_plot_scRNA_<measurement_set>.png`;
 - `qc_distributions_scRNA_<measurement_set>.png`; and
