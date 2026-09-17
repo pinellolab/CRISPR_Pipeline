@@ -3,14 +3,13 @@ process mudata_concat {
 
     input:
         path (mudata_input, name: "?/*")
-        val fraction_cells
         val dual_guide
     output:
         path "concat_mudata.h5mu", emit: concat_mudata
 
     script:
     """
-        python ${projectDir}/bin/mudata_concat.py -i ${mudata_input} -o concat_mudata.h5mu -g ${fraction_cells}
+        python ${projectDir}/bin/mudata_concat.py -i ${mudata_input} -o concat_mudata.h5mu
 
         if [ "${dual_guide}" = "true" ]; then
             echo "Dual guide mode enabled, processing accordingly."
@@ -22,7 +21,6 @@ process mudata_concat {
         fi
     """
 }
-
 
 
 

@@ -8,6 +8,7 @@ process collect_measurement_set_qc {
 
     input:
     path measurement_set_qc_dirs
+    path post_concat_qc
 
     output:
     path "figures", emit: figures_dir
@@ -15,6 +16,6 @@ process collect_measurement_set_qc {
     script:
     def inputs = measurement_set_qc_dirs.collect { it.toString() }.sort().join(' ')
     """
-    collect_measurement_set_qc.py ${inputs} --output figures
+    collect_measurement_set_qc.py ${inputs} --post-concat-qc ${post_concat_qc} --output figures
     """
 }

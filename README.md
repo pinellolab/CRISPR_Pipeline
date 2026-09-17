@@ -136,7 +136,9 @@ Demo mode is strictly for pre-runs. The pipeline prints warnings at startup and 
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
 | `ENABLE_DATA_HASHING` | `false` | `true`, `false` | Enables the hashing workflow: hash seqspec checks, hash mapping, hashtag filtering, demultiplexing, hash-aware MuData creation, and hash dashboard sections. |
-| `ENABLE_SCRUBLET` | `false` | `true`, `false` | Runs Scrublet doublet detection before guide assignment in the non-hashing workflow. |
+| `ENABLE_SCRUBLET` | `true` | `true`, `false` | Runs Scrublet independently after UMI/MAD filtering in every RNA measurement set. |
+| `SCRUBLET_assay_type` | `droplet` | `droplet`, `cc-perturb-seq` | Resolves the automatic expected-doublet rate: `0.08` for droplet data and `0.025` for CC-Perturb-seq. |
+| `SCRUBLET_expected_doublet_rate` | `null` | `null` or fraction in `(0,1)` | Optional explicit expected-doublet rate overriding the assay profile. |
 | `is_10x3v3` | `true` | `true`, `false` | Controls 10x Genomics 3' v3 feature-barcode chemistry (`10XV3`, `kite:10xFB`) for guide or hashing mapping depending on `ENABLE_DATA_HASHING`. RNA mapping always uses the RNA seqspec. Case 1: when `ENABLE_DATA_HASHING = false` and `is_10x3v3 = true`, guide mapping uses the 10x v3 feature-barcode kb settings instead of deriving guide chemistry from the guide seqspec. Case 2: when `ENABLE_DATA_HASHING = true` and `is_10x3v3 = true`, guide and RNA mapping use their seqspecs, while hash/HTO mapping uses the 10x v3 feature-barcode kb settings. This second case supports 10x v3 HTO data where barcode replacement/translation may be needed so hash, RNA, and guide barcodes match downstream. |
 | `reverse_complement_guides` | `false` | `true`, `false` | Reverse-complements guide spacer sequences while building the guide reference, preserving the metadata fields. |
 | `spacer_tag` | `GAGTACATGGGG` | DNA sequence, empty string, or `null` | Recommended 12 bp sequence immediately upstream of the guide spacer. When provided, guide mapping searches the whole guide read around this tag instead of relying only on fixed seqspec feature coordinates. |
@@ -172,16 +174,16 @@ The complete machine-readable QC output catalog is available as
 
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
-| `QC_min_genes_per_cell` | `800` | Integer | Minimum detected genes required to keep a cell when `QC_barcode_filter = 'none'`. A gene is counted as present in a cell when its RNA count is greater than zero. |
-| `QC_min_counts_per_cell` | `0` | Non-negative integer | Minimum total RNA UMI count required after barcode calling. It is active with `none`, `knee`, and `knee2`; `0` disables the filter. |
-| `QC_min_cells_per_gene` | `0.05` | Fraction in `[0, 1)` | Minimum retained-cell fraction required to keep a gene during guide-assignment aggregation. `0` retains every gene detected in at least one cell. |
-| `TAPSEQ_QC_MODE` | `false` | `true`, `false` | TAP-seq gene-retention mode. It removes the standard 10-cell preprocessing floor, retaining every observed gene before the final fractional support filter. Use a small fraction such as `0.000001` when all observed TAP-seq genes should be retained. |
-| `QC_pct_mito` | `15` | `0` to `100` | Maximum mitochondrial read percentage allowed per cell during preprocessing. |
-| `QC_MAD_total_counts` | `0` | Non-negative number | Two-sided per-measurement-set MAD cutoff on `log1p(total RNA UMIs)`; `0` disables it. |
-| `QC_MAD_n_genes` | `0` | Non-negative number | Two-sided per-measurement-set MAD cutoff on `log1p(detected genes)`; `0` disables it. |
-| `QC_MAD_pct_mito` | `0` | Non-negative number | Upper-tail per-measurement-set MAD cutoff on mitochondrial percentage; `0` disables it. |
+| `QC_min_genes_per_cell` | `0` | Integer | Deprecated compatibility setting; fixed detected-gene cell filtering is inactive. |
+| `QC_min_counts_per_cell` | `500` | Non-negative integer | Minimum total RNA UMI count applied per measurement set immediately after barcode calling. |
+| `QC_min_cells_per_gene` | `0.05` | Fraction in `[0, 1)` | Minimum cell fraction required to keep a gene after RNA measurement-set concatenation and mitochondrial filtering. |
+| `TAPSEQ_QC_MODE` | `false` | `true`, `false` | Deprecated compatibility setting; gene retention is controlled directly by `QC_min_cells_per_gene`. |
+| `QC_pct_mito` | `15` | `0` to `100` | Maximum mitochondrial percentage applied to cells after RNA measurement-set concatenation. |
+| `QC_MAD_total_counts` | `5` | Non-negative number | Two-sided per-measurement-set MAD cutoff on `log1p(total RNA UMIs)`; `0` disables it. |
+| `QC_MAD_n_genes` | `5` | Non-negative number | Two-sided per-measurement-set MAD cutoff on `log1p(detected genes)`; `0` disables it. |
+| `QC_MAD_pct_mito` | `0` | Non-negative number | Deprecated compatibility setting; mitochondrial MAD filtering is inactive. |
 | `QC_batch_col` | `batch` | Observation column name | Batch column used in additional QC plots. |
-| `QC_barcode_filter` | `knee2` | `none`, `knee`, `knee2` | Per-measurement-set RNA barcode filtering based on total cell RNA UMIs. `knee` uses the first barcode-rank knee and is more permissive; `knee2` searches the high-UMI segment before knee1 for a second, stricter knee; `none` skips UMI-knee filtering and applies `QC_min_genes_per_cell`. If the requested knee cannot be found, barcode filtering is skipped and the min-gene filter is not applied. |
+| `QC_barcode_filter` | `knee` | `none`, `knee`, `knee2` | Per-measurement-set RNA barcode filtering based on total RNA UMIs. `none` skips knee calling but does not activate a fixed detected-gene filter. |
 
 ##### Guide assignment options
 

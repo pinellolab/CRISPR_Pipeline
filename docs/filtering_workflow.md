@@ -175,12 +175,15 @@ and task objects under `gs://igvf-pertub-seq-pipeline-data/work`.
   Its intersections remained same-batch because all three modality
   concatenations used the same sorted measurement-set order. The updated code
   removes that ordering dependency by using the measurement-set ID directly.
-- RNA cell calling, fixed cell thresholds, mitochondrial filtering, and enabled
-  MAD filters run independently per `measurement_sets` value before RNA
-  concatenation. Each measurement set gets its own barcode-rank knee plot.
-- With `QC_barcode_filter = 'knee'` or `'knee2'`, per-measurement-set total RNA
-  UMI depth selects cells and `QC_min_genes_per_cell` is skipped. With
-  `QC_barcode_filter = 'none'`, the minimum-gene filter is used instead.
+- RNA cell calling, the `QC_min_counts_per_cell` floor, two-sided RNA-count and
+  detected-gene MAD filters, and Scrublet run independently per
+  `measurement_sets` value before RNA concatenation. Each measurement set gets
+  its own barcode-rank, sequential-filter, boxplot, and Scrublet plots.
+- `QC_min_genes_per_cell` and mitochondrial MAD filtering are retired from the
+  active path. `QC_barcode_filter = 'none'` skips knee calling but does not
+  enable a fixed detected-gene threshold.
+- After RNA concatenation, `QC_pct_mito` filters cells and then
+  `QC_min_cells_per_gene` filters genes using the retained concatenated cells.
 - The guide count matrix is not filtered by a fixed UMI cutoff before MuData
   creation. SCEPTRE or CLEANSER assigns guides from the per-cell guide counts
   after the modalities have been intersected.
@@ -188,16 +191,15 @@ and task objects under `gs://igvf-pertub-seq-pipeline-data/work`.
   RNA QC. `CreateMuData` then performs the final barcode intersection across
   the gene, guide, and demultiplexed hashing modalities.
 - When hashing is disabled, the final intersection uses only gene and guide
-  barcodes. Optional Scrublet doublet removal runs on the resulting MuData
-  before guide assignment.
+  barcodes. Scrublet has already run per RNA measurement set.
 - `mudata.h5mu` is one combined multimodal object containing all three batches.
   It is temporarily split by `batch` (`measurement_sets`) so guide assignment
   runs independently, then recombined as `concat_mudata.h5mu`.
-- `QC_min_cells_per_gene` is a fraction in `[0, 1)` and is applied after guide
-  assignment and batch concatenation. A gene must be detected in strictly more
+- `QC_min_cells_per_gene` is a fraction in `[0, 1)` and is applied immediately
+  after RNA measurement-set concatenation and mitochondrial filtering. A gene
+  must be detected in strictly more
   than `QC_min_cells_per_gene * total_cells`; `0` retains every gene detected
   in at least one cell.
-- `TAPSEQ_QC_MODE = true` removes the standard 10-cell preprocessing floor so
-  observed TAP-seq genes reach the final fractional filter. Pair it with a very
-  small fraction (for example `0.000001`) when all observed genes should be
-  retained.
+- Clone calling/removal remains downstream of guide-assignment aggregation and
+  therefore necessarily occurs after mitochondrial filtering. It is still
+  controlled by `ENABLE_CLONE_REMOVAL` and `CLONE_REMOVAL_action`.

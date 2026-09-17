@@ -68,14 +68,13 @@ def test_one_measurement_set_is_filtered_and_audited(tmp_path, monkeypatch):
             mapping_dir=str(mapping),
             covariates=str(covariates),
             qc_dir=tmp_path / "B1_qc",
-            min_genes=2,
-            min_counts=0,
-            pct_mito=90,
+            min_counts=2,
             reference="human",
             barcode_filter="none",
             mad_total_counts=0,
             mad_n_genes=0,
-            mad_pct_mito=0,
+            enable_scrublet=False,
+            scrublet_expected_doublet_rate=0.08,
             bc_replacement=False,
             use_multimapping=False,
         )
@@ -98,17 +97,14 @@ def test_one_measurement_set_is_filtered_and_audited(tmp_path, monkeypatch):
     assert flow["filter_label"].tolist() == [
         "QC_barcode_filter = none",
         "QC_min_counts_per_cell",
-        "QC_min_genes_per_cell",
         "QC_MAD_total_counts",
         "QC_MAD_n_genes",
-        "QC_pct_mito",
-        "QC_MAD_pct_mito",
+        "Scrublet doublet removal",
     ]
-    assert flow.iloc[-2:]["filter_label"].tolist() == ["QC_pct_mito", "QC_MAD_pct_mito"]
-    gene_step = flow.loc[flow["filter_label"] == "QC_min_genes_per_cell"].iloc[0]
-    assert gene_step["cells_before"] == 4
-    assert gene_step["cells_after"] == 3
-    assert gene_step["cells_removed"] == 1
+    count_step = flow.loc[flow["filter_label"] == "QC_min_counts_per_cell"].iloc[0]
+    assert count_step["cells_before"] == 4
+    assert count_step["cells_after"] == 3
+    assert count_step["cells_removed"] == 1
 
 
 def test_concatenated_gene_metrics_are_recomputed():
@@ -120,6 +116,42 @@ def test_concatenated_gene_metrics_are_recomputed():
     assert detected.tolist() == [2, 1]
     assert combined.var["total_counts"].tolist() == [3, 3]
     assert combined.var["pct_dropout_by_counts"].tolist() == [0, 50]
+
+
+def test_post_concat_mito_then_fractional_gene_filter(tmp_path, monkeypatch):
+    var = pd.DataFrame(index=["g1", "g2"])
+    first = ad.AnnData(
+        X=sparse.csr_matrix([[2, 0], [2, 1]], dtype=np.int32),
+        obs=pd.DataFrame({"pct_counts_mt": [5.0, 30.0]}, index=["c1", "c2"]),
+        var=var.copy(),
+    )
+    second = ad.AnnData(
+        X=sparse.csr_matrix([[2, 0], [2, 1]], dtype=np.int32),
+        obs=pd.DataFrame({"pct_counts_mt": [6.0, 7.0]}, index=["c3", "c4"]),
+        var=var.copy(),
+    )
+    first.write_h5ad(tmp_path / "a.h5ad")
+    second.write_h5ad(tmp_path / "b.h5ad")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "concat_preprocessed_rna.py",
+            str(tmp_path / "a.h5ad"),
+            str(tmp_path / "b.h5ad"),
+            "--output", str(tmp_path / "filtered.h5ad"),
+            "--qc-dir", str(tmp_path / "post_qc"),
+            "--pct-mito", "15",
+            "--min-cells-fraction", "0.5",
+        ],
+    )
+    CONCAT_MODULE.main()
+    filtered = ad.read_h5ad(tmp_path / "filtered.h5ad")
+    assert filtered.obs_names.tolist() == ["c1", "c3", "c4"]
+    assert filtered.var_names.tolist() == ["g1"]
+    flow = pd.read_csv(tmp_path / "post_qc" / "post_concat_qc_filter_flow.tsv", sep="\t")
+    assert flow["filter"].tolist() == ["QC_pct_mito", "QC_min_cells_per_gene"]
+    assert flow.loc[0, ["before", "after"]].tolist() == [4, 3]
+    assert flow.loc[1, ["before", "after"]].tolist() == [2, 1]
 
 
 def test_covariate_file_is_broadcast_to_every_measurement_set():

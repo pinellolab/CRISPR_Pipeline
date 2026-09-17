@@ -46,9 +46,9 @@ CATEGORY_FLOWS = {
     ],
     "preprocessing": [
         ("Call cells per measurement set", "Calculate an independent barcode-rank knee for every measurement set"),
-        ("Apply cell filters", "Apply configured RNA UMI, detected-gene, mitochondrial and optional MAD thresholds"),
-        ("Concatenate retained cells", "Combine only filtered measurement-set matrices"),
-        ("Filter genes globally", "Apply the post-concatenation absolute floor and fractional cell-support threshold"),
+        ("Apply per-set cell filters", "Apply the RNA UMI floor, two-sided RNA-complexity MAD bounds and Scrublet"),
+        ("Concatenate retained cells", "Combine independently filtered measurement-set matrices"),
+        ("Apply global QC", "Apply the mitochondrial cell cutoff, then fractional gene-support filtering"),
     ],
     "mudata": [
         ("Intersect barcodes", "Align retained RNA and guide cells, plus hashing cells when enabled"),
@@ -284,19 +284,20 @@ def category_flow(data: dict[str, Any], family: str) -> str:
         fields = [
             ("Barcode caller", params.get("QC_barcode_filter")),
             ("Minimum RNA UMI", params.get("QC_min_counts_per_cell")),
-            ("Minimum genes", params.get("QC_min_genes_per_cell")),
-            ("Maximum mito %", params.get("QC_pct_mito")),
             ("RNA UMI MAD", params.get("QC_MAD_total_counts")),
             ("Detected-gene MAD", params.get("QC_MAD_n_genes")),
-            ("Mito MAD", params.get("QC_MAD_pct_mito")),
+            ("Scrublet", params.get("ENABLE_SCRUBLET")),
+            ("Scrublet profile", params.get("SCRUBLET_assay_type")),
+            ("Scrublet rate override", params.get("SCRUBLET_expected_doublet_rate")),
+            ("Post-concat maximum mito %", params.get("QC_pct_mito")),
             ("Minimum gene cell fraction", params.get("QC_min_cells_per_gene")),
         ]
         resolved = '<h4>Resolved filter values</h4><div class="filter-chips">' + "".join(
             '<span><b>' + html.escape(label) + ':</b> ' + html.escape(display_value(value)) + '</span>'
             for label, value in fields if value is not None
-        ) + '</div><p class="flow-note">Minimum genes is active only with barcode caller <code>none</code>; '
-        'MAD value 0 means disabled. Cell filters run independently per measurement set. The fractional '
-        'gene-support filter runs after concatenation.</p>'
+        ) + '</div><p class="flow-note">The RNA-count and detected-gene MAD filters are two-sided. '
+        'Knee calling, the 500-UMI floor, MAD filtering and Scrublet run independently per measurement set. '
+        'The mitochondrial and fractional gene-support filters run after concatenation.</p>'
     return '<div class="process-flow"><h3>Processing and filter flow</h3><div class="flow-steps">' + nodes + '</div>' + resolved + '</div>'
 
 

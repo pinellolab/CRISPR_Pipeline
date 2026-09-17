@@ -1035,10 +1035,19 @@
     "source_artifact": "figures/measurement_set_qc_metrics.tsv"
   },
   {
-    "flat_key": "measurement_set_rna_qc.post_fixed_threshold_cells",
+    "flat_key": "measurement_set_rna_qc.post_min_counts_cells",
     "section": "measurement_set_rna_qc",
-    "metric": "post_fixed_threshold_cells",
-    "description": "Cells passing fixed RNA UMI, detected-gene, and mitochondrial thresholds.",
+    "metric": "post_min_counts_cells",
+    "description": "Cells passing the fixed RNA UMI minimum after knee calling.",
+    "unit": "cells",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.post_mad_cells",
+    "section": "measurement_set_rna_qc",
+    "metric": "post_mad_cells",
+    "description": "Cells passing the sequential two-sided total-count and detected-gene MAD filters.",
     "unit": "cells",
     "row_level": "one row per measurement set",
     "source_artifact": "figures/measurement_set_qc_metrics.tsv"
@@ -1047,7 +1056,7 @@
     "flat_key": "measurement_set_rna_qc.retained_cells",
     "section": "measurement_set_rna_qc",
     "metric": "retained_cells",
-    "description": "Cells retained after fixed and enabled MAD filters.",
+    "description": "Cells retained after per-measurement-set knee, UMI, MAD, and Scrublet filtering.",
     "unit": "cells",
     "row_level": "one row per measurement set",
     "source_artifact": "figures/measurement_set_qc_metrics.tsv"
@@ -1062,10 +1071,46 @@
     "source_artifact": "figures/measurement_set_qc_metrics.tsv"
   },
   {
+    "flat_key": "measurement_set_rna_qc.removed_by_scrublet",
+    "section": "measurement_set_rna_qc",
+    "metric": "removed_by_scrublet",
+    "description": "Cells called as doublets and removed by Scrublet.",
+    "unit": "cells",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.barcode_filter",
+    "section": "measurement_set_rna_qc",
+    "metric": "barcode_filter",
+    "description": "Configured knee-cell-calling method for this measurement set.",
+    "unit": null,
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.knee_rank",
+    "section": "measurement_set_rna_qc",
+    "metric": "knee_rank",
+    "description": "Selected barcode rank for knee cell calling.",
+    "unit": "rank",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
     "flat_key": "measurement_set_rna_qc.knee_umi_threshold",
     "section": "measurement_set_rna_qc",
     "metric": "knee_umi_threshold",
     "description": "Measurement-set-specific RNA UMI threshold selected by the knee method.",
+    "unit": "UMIs",
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.fixed_min_counts",
+    "section": "measurement_set_rna_qc",
+    "metric": "fixed_min_counts",
+    "description": "Configured fixed RNA UMI minimum applied after cell calling.",
     "unit": "UMIs",
     "row_level": "one row per measurement set",
     "source_artifact": "figures/measurement_set_qc_metrics.tsv"
@@ -1089,11 +1134,20 @@
     "source_artifact": "figures/measurement_set_qc_metrics.tsv"
   },
   {
-    "flat_key": "measurement_set_rna_qc.mad_pct_mito_n",
+    "flat_key": "measurement_set_rna_qc.scrublet_enabled",
     "section": "measurement_set_rna_qc",
-    "metric": "mad_pct_mito_n",
-    "description": "Configured upper-tail MAD multiplier for mitochondrial percentage.",
-    "unit": "MADs",
+    "metric": "scrublet_enabled",
+    "description": "Whether Scrublet doublet calling was enabled for this measurement set.",
+    "unit": null,
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.scrublet_expected_doublet_rate",
+    "section": "measurement_set_rna_qc",
+    "metric": "scrublet_expected_doublet_rate",
+    "description": "Expected doublet rate supplied to Scrublet.",
+    "unit": "fraction",
     "row_level": "one row per measurement set",
     "source_artifact": "figures/measurement_set_qc_metrics.tsv"
   },

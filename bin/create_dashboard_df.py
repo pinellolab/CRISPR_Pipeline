@@ -87,16 +87,16 @@ def _load_params(params_json=None, params_dir=None):
 
 def _get_qc_params(params):
     has_params = bool(params)
-    min_genes = params.get("QC_min_genes_per_cell", 500)
-    min_counts = params.get("QC_min_counts_per_cell", 0)
-    pct_mito = params.get("QC_pct_mito", 20)
+    min_genes = params.get("QC_min_genes_per_cell", 0)
+    min_counts = params.get("QC_min_counts_per_cell", 500)
+    pct_mito = params.get("QC_pct_mito", 15)
     barcode_filter = params.get("QC_barcode_filter", "knee")
     return {
         "min_genes": min_genes,
         "min_counts": min_counts,
         "pct_mito": pct_mito,
         "barcode_filter": str(barcode_filter).lower(),
-        "enable_scrublet": _as_bool(params.get("ENABLE_SCRUBLET", False)),
+        "enable_scrublet": _as_bool(params.get("ENABLE_SCRUBLET", True)),
         "params_found": has_params,
         "barcode_filter_source": "params" if "QC_barcode_filter" in params else "default",
         "min_genes_source": "params" if "QC_min_genes_per_cell" in params else "default",
@@ -351,17 +351,11 @@ def _build_flow_html(
         ))
     else:
         steps.append(step_html(
-            (
-                "Barcode knee disabled (none)"
-                if per_measurement_set
-                else f"Min genes per cell (>= {qc_params.get('min_genes')})"
-            ),
+            "Barcode knee disabled (none)",
             count=filter_count,
             removed=removed(concat_count, filter_count),
             note=(
-                "Minimum-gene filtering is included in the per-measurement-set QC step below"
-                if per_measurement_set
-                else with_default("Cell complexity filter", "min_genes_source")
+                "No fixed detected-gene filter; RNA complexity is controlled by two-sided MAD rules"
             ),
         ))
 
@@ -374,7 +368,7 @@ def _build_flow_html(
         count=filtered_count,
         removed=removed(filter_count, filtered_count),
         note=(
-            "Fixed RNA UMI/mitochondrial thresholds plus enabled metric-specific MAD bounds"
+            "RNA UMI floor, two-sided complexity MAD bounds, per-set Scrublet, then post-concatenation mitochondrial QC"
             if per_measurement_set
             else with_default("Removes high mitochondrial fraction cells", "pct_mito_source")
         ),
@@ -413,23 +407,15 @@ def _build_flow_html(
             note="Filtered RNA intersect guide",
         ))
 
-        if qc_params.get("enable_scrublet"):
-            steps.append(step_html(
-                "Doublet removal (Scrublet)",
-                count=final_count,
-                removed=removed(guide_intersection_count, final_count),
-                note="Applied after RNA + guide merge",
-            ))
-        else:
-            final_note = "No additional filtering configured"
-            if final_count is not None and guide_intersection_count is not None and int(final_count) != int(guide_intersection_count):
-                final_note = "Final count differs from RNA + guide intersection"
-            steps.append(step_html(
-                "Final cells in MuData",
-                count=final_count,
-                removed=removed(guide_intersection_count, final_count),
-                note=final_note,
-            ))
+        final_note = "Scrublet was already applied independently per RNA measurement set"
+        if final_count is not None and guide_intersection_count is not None and int(final_count) != int(guide_intersection_count):
+            final_note = "Final count differs from RNA + guide intersection"
+        steps.append(step_html(
+            "Final cells in MuData",
+            count=final_count,
+            removed=removed(guide_intersection_count, final_count),
+            note=final_note,
+        ))
 
     arrow = '<span class="flow-arrow" aria-hidden="true">&darr;</span>'
     html = '<span class="flowchart">' + arrow.join(steps) + '</span>'
@@ -753,9 +739,9 @@ def _build_comprehensive_qc_report(
         ),
         _qc_step(
             4,
-            "Per-measurement-set fixed and MAD filters" if per_measurement_set else "RNA UMI floor and mitochondrial percentage filters",
+            "Per-set UMI/MAD/Scrublet then post-concat mitochondrial QC" if per_measurement_set else "RNA UMI floor and mitochondrial percentage filters",
             "Cell QC",
-            f"Rules: {_tip('total_counts', 'Cell-level RNA UMI total from Scanpy QC metrics.', code=True)} >= {_tip('QC_min_counts_per_cell', 'Resolved minimum RNA UMI parameter; zero disables this rule.', code=True)} and {_tip('pct_counts_mt', 'Cell-level mitochondrial percentage from Scanpy QC metrics.', code=True)} < {_tip('QC_pct_mito', 'Resolved maximum mitochondrial percentage parameter.', code=True)}.",
+            f"Per set: {_tip('total_counts', 'Cell-level RNA UMI total from Scanpy QC metrics.', code=True)} >= {_tip('QC_min_counts_per_cell', 'Resolved minimum RNA UMI parameter.', code=True)}, two-sided count/gene MAD rules, and Scrublet. After concatenation: {_tip('pct_counts_mt', 'Cell-level mitochondrial percentage.', code=True)} < {_tip('QC_pct_mito', 'Resolved maximum mitochondrial percentage parameter.', code=True)}.",
             [
                 ("Cells kept", _format_count(filtered_count)),
                 ("Removed", removed(filter_count, filtered_count)),
@@ -820,14 +806,13 @@ def _build_comprehensive_qc_report(
     parameter_rows = [
         ("Params source", params_status, "params_*.json / fallback defaults"),
         ("Cell barcode filter", _tip(f"QC_barcode_filter = {barcode_filter}", "Cell filtering mode used during RNA preprocessing.", code=True), "Resolved params"),
-        ("Min genes per cell", _tip(f"QC_min_genes_per_cell = {qc_params.get('min_genes')}", "Minimum detected genes per cell; skipped for knee/knee2.", code=True), "Resolved params"),
         ("Min RNA UMIs per cell", _tip(f"QC_min_counts_per_cell = {qc_params.get('min_counts')}", "Minimum total RNA UMI count applied after barcode calling; zero disables it.", code=True), "Resolved params"),
-        ("Mito cutoff", _tip(f"QC_pct_mito = {qc_params.get('pct_mito')}", "Maximum mitochondrial percentage allowed.", code=True), "Resolved params"),
+        ("Post-concat mito cutoff", _tip(f"QC_pct_mito = {qc_params.get('pct_mito')}", "Maximum mitochondrial percentage allowed after RNA concatenation.", code=True), "Resolved params"),
         ("RNA UMI MAD", _tip(f"QC_MAD_total_counts = {params.get('QC_MAD_total_counts', 0)}", "Two-sided per-measurement-set log1p RNA UMI MAD filter; zero disables it.", code=True), "Resolved params"),
         ("Detected-gene MAD", _tip(f"QC_MAD_n_genes = {params.get('QC_MAD_n_genes', 0)}", "Two-sided per-measurement-set log1p detected-gene MAD filter; zero disables it.", code=True), "Resolved params"),
-        ("Mito MAD", _tip(f"QC_MAD_pct_mito = {params.get('QC_MAD_pct_mito', 0)}", "Upper-tail per-measurement-set mitochondrial-percentage MAD filter; zero disables it.", code=True), "Resolved params"),
         ("Min cells per gene", _tip(f"QC_min_cells_per_gene = {params.get('QC_min_cells_per_gene', 'N/A')}", "Minimum gene support before inference: a fraction in [0, 1); zero retains genes detected in at least one cell.", code=True), "Resolved params"),
         ("Scrublet", _tip(f"ENABLE_SCRUBLET = {params.get('ENABLE_SCRUBLET', False)}", "Whether Scrublet doublet removal was enabled.", code=True), "Resolved params"),
+        ("Scrublet profile", _tip(f"SCRUBLET_assay_type = {params.get('SCRUBLET_assay_type', 'droplet')}", "Resolves 0.08 for droplet or 0.025 for cc-perturb-seq unless overridden.", code=True), "Resolved params"),
         ("Hashing", _tip(f"ENABLE_DATA_HASHING = {params.get('ENABLE_DATA_HASHING', False)}", "Whether hashing demultiplexing was enabled.", code=True), "Resolved params"),
         ("Inference mode", _tip(f"INFERENCE_method = {params.get('INFERENCE_method', 'N/A')}", "Configured inference method for local/global analysis.", code=True), "Resolved params"),
     ]
@@ -1510,11 +1495,15 @@ def create_dashboard_df(guide_fq_tbl, mudata_path, gene_ann_path, filtered_ann_p
     distribution_images = sorted(glob.glob("figures/qc_distributions_scRNA_*.png"))
     flow_images = sorted(glob.glob("figures/rna_qc_filter_flow_*.png"))
     step_images = sorted(glob.glob("figures/rna_qc_filter_steps_*.png"))
-    rna_images = knee_images + flow_images + step_images + distribution_images
+    scrublet_images = sorted(glob.glob("figures/scrublet_scores_scRNA_*.png"))
+    post_concat_images = sorted(glob.glob("figures/post_concat_*.png"))
+    rna_images = knee_images + flow_images + step_images + scrublet_images + post_concat_images + distribution_images
     rna_descriptions = (
         ["Measurement-set-specific RNA barcode-rank knee and selected threshold."] * len(knee_images)
         + ["Exact cells → filter → cells flow in pipeline execution order."] * len(flow_images)
         + ["Before/after RNA quality distributions for every sequential filter."] * len(step_images)
+        + ["Per-measurement-set Scrublet score distribution and call threshold."] * len(scrublet_images)
+        + ["Post-concatenation mitochondrial or fractional gene-support QC."] * len(post_concat_images)
         + ["Measurement-set-specific RNA QC distributions and enabled MAD bounds."] * len(distribution_images)
     )
     if not rna_images:

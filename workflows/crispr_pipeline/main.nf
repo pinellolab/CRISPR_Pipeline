@@ -20,7 +20,6 @@ include { sequencing_saturation } from '../../modules/local/sequencing_saturatio
 
 // Import hashing-specific modules
 include { CreateMuData } from '../../modules/local/CreateMuData'
-include { doublets_scrub } from '../../modules/local/doublets_scrub'
 include { demultiplex } from '../../modules/local/demultiplex'
 include { filter_hashing } from '../../modules/local/filter_hashing'
 include { hashing_concat } from '../../modules/local/hashing_concat'
@@ -258,13 +257,9 @@ workflow CRISPR_PIPELINE {
             file("${workflow.projectDir}/dummy_hash.txt") // Dummy file for hashing parameter when not using hashing
         )
 
-        // Conditionally run scrublet based on ENABLE_SCRUBLET parameter (defaults to false)
-        if (params.ENABLE_SCRUBLET ?: false) {
-            MuData_Doublets = doublets_scrub(MergeMuData.mudata)
-            mudata_for_processing = MuData_Doublets.mudata_doublet
-        } else {
-            mudata_for_processing = MergeMuData.mudata
-        }
+        // Scrublet now runs independently for each RNA measurement set before
+        // concatenation, so the assembled MuData is already doublet-filtered.
+        mudata_for_processing = MergeMuData.mudata
 
         // Shared processing pipeline
         GuideAssignment = guide_assignment_pipeline(mudata_for_processing)

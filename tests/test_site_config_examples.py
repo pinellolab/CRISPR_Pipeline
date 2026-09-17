@@ -116,7 +116,12 @@ def test_the_parser_sees_the_defaults_it_is_asked_about():
     """Guard the guard: a parser that silently found nothing would pass anything."""
     defaults = _params(BASE_CONFIG)
     assert defaults["TAPSEQ_QC_MODE"] is False
-    assert defaults["QC_min_genes_per_cell"] == 500
+    assert defaults["QC_min_genes_per_cell"] == 0
+    assert defaults["QC_min_counts_per_cell"] == 500
+    assert defaults["QC_MAD_total_counts"] == 5
+    assert defaults["QC_MAD_n_genes"] == 5
+    assert defaults["ENABLE_SCRUBLET"] is True
+    assert defaults["SCRUBLET_assay_type"] == "droplet"
     assert defaults["QC_min_cells_per_gene"] == 0.05
     assert defaults["QC_barcode_filter"] == "knee"  # from the last params block
     assert defaults["GUIDE_ASSIGNMENT_capture_method"] == "direct-capture"

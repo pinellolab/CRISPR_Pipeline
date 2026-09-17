@@ -53,7 +53,7 @@ def preserve_source_guide_metadata(combined_guide_var, source_guide_var):
 
     return combined
 
-def concat_mudatas(input_files, output_file, min_cells_fraction=0.05):
+def concat_mudatas(input_files, output_file):
     """
     Concatenate multiple MuData files. If only one file is provided, it's copied to the output.
     """
@@ -70,7 +70,6 @@ def concat_mudatas(input_files, output_file, min_cells_fraction=0.05):
     if len(files) == 1:
         print(f"Only one file found. Copying {files[0]} to {output_file}")
         single_mdata = md.read(files[0])
-        single_mdata = filter_genes_by_cells(single_mdata, min_cells_fraction)  # Filter genes based on minimum cells
         print(f"Saving MuData with {single_mdata.n_obs} cells to {output_file}")
         single_mdata.write(output_file)
         return
@@ -88,10 +87,6 @@ def concat_mudatas(input_files, output_file, min_cells_fraction=0.05):
     )
 
 
-    print ('filtering genes')
-    combined_mdata = filter_genes_by_cells(combined_mdata, min_cells_fraction)  # Filter genes based on minimum cells
-
-
     print(f"Saving combined MuData with {combined_mdata.n_obs} cells to {output_file}")
     combined_mdata.write(output_file)
 
@@ -101,20 +96,9 @@ def main():
     parser = argparse.ArgumentParser(description="Concatenate MuData files")
     parser.add_argument("-i", "--input", dest="input", nargs="+", required=True, help="Input mudata files")
     parser.add_argument("-o", "--output", dest="output", required=True, help="Output file path")
-    parser.add_argument(
-        "-g",
-        "--gene_filter",
-        dest="gene_filter",
-        type=float,
-        default=0.05,
-        help=(
-            "Fraction of retained cells required to keep a gene. Must be in "
-            "[0, 1); zero keeps every gene detected in at least one cell."
-        ),
-    )
     args = parser.parse_args()
 
-    concat_mudatas(args.input, args.output, args.gene_filter)
+    concat_mudatas(args.input, args.output)
 
 if __name__ == "__main__":
     main()

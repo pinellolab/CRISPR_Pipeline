@@ -65,21 +65,21 @@ flowchart LR
     A[Mapped RNA per measurement set] --> B[Independent barcode-rank curve]
     B --> C{QC_barcode_filter}
     C -->|knee or knee2| D[Retain cells at RNA UMI knee]
-    C -->|none| E[Apply QC_min_genes_per_cell]
+    C -->|none| D2[Retain input barcodes]
     D --> F[QC_min_counts_per_cell]
-    E --> F
-    F --> G[QC_pct_mito]
-    G --> H[Optional RNA UMI, gene and mito MAD filters]
+    D2 --> F
+    F --> G[Two-sided RNA UMI and detected-gene MAD filters]
+    G --> H[Scrublet per measurement set]
     H --> I[Concatenate retained measurement sets]
-    I --> J[Absolute detected-cell gene floor]
+    I --> J[QC_pct_mito]
     J --> K[QC_min_cells_per_gene fractional support]
 ```
 
-The dashboard displays the resolved barcode caller, minimum RNA UMIs, minimum
-genes, mitochondrial cutoff, all three MAD multipliers, and fractional gene
-support. A MAD value of `0` means disabled. `QC_min_genes_per_cell` is active
-only when `QC_barcode_filter=none`. Cell thresholds are applied independently
-per measurement set; fractional gene support is applied after concatenation.
+The dashboard displays the resolved barcode caller, minimum RNA UMIs, two MAD
+multipliers, Scrublet profile/rate, mitochondrial cutoff, and fractional gene
+support. Cell calling, the RNA UMI floor, two-sided MAD rules, and Scrublet are
+applied independently per measurement set. Mitochondrial and fractional gene
+support filtering are applied after concatenation.
 
 ## Update lifecycle
 

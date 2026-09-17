@@ -54,8 +54,23 @@
                 },
                 "ENABLE_SCRUBLET": {
                     "type": "boolean",
-                    "default": false,
-                    "description": "Run Scrublet doublet detection before guide assignment in non-hashing workflows."
+                    "default": true,
+                    "description": "Run Scrublet independently on every RNA measurement set after UMI and MAD filtering."
+                },
+                "SCRUBLET_assay_type": {
+                    "type": "string",
+                    "default": "droplet",
+                    "enum": ["droplet", "cc-perturb-seq"],
+                    "description": "Assay profile used to resolve the automatic Scrublet expected-doublet rate.",
+                    "help_text": "droplet resolves to 0.08; cc-perturb-seq resolves to 0.025. SCRUBLET_expected_doublet_rate overrides either profile when supplied."
+                },
+                "SCRUBLET_expected_doublet_rate": {
+                    "type": ["number", "null"],
+                    "default": null,
+                    "exclusiveMinimum": 0,
+                    "exclusiveMaximum": 1,
+                    "description": "Optional explicit Scrublet expected-doublet rate.",
+                    "help_text": "Leave null to resolve the rate from SCRUBLET_assay_type."
                 },
                 "is_10x3v3": {
                     "type": "boolean",
@@ -204,17 +219,17 @@
             "properties": {
                 "QC_min_genes_per_cell": {
                     "type": "integer",
-                    "default": 800,
+                    "default": 0,
                     "minimum": 0,
-                    "description": "Minimum detected genes required to keep a cell when QC_barcode_filter is none.",
-                    "help_text": "Applied independently to each measurement set before concatenation. A gene is considered present in a cell when its count is greater than zero. This parameter is active only when QC_barcode_filter = 'none'; knee and knee2 use RNA UMI depth instead."
+                    "description": "Deprecated compatibility parameter; fixed detected-gene cell filtering is no longer applied.",
+                    "help_text": "Use QC_MAD_n_genes for two-sided robust filtering of log1p_n_genes_by_counts."
                 },
                 "QC_min_counts_per_cell": {
                     "type": "integer",
-                    "default": 0,
+                    "default": 500,
                     "minimum": 0,
                     "description": "Minimum total RNA UMI count required to keep a cell after barcode calling.",
-                    "help_text": "Applied independently to each measurement set after none, knee, or knee2 barcode selection. It remains active when QC_min_genes_per_cell is skipped. Set to 0 to disable it."
+                    "help_text": "Applied independently to each measurement set immediately after knee-based barcode calling. Set to 0 to disable it."
                 },
                 "QC_min_cells_per_gene": {
                     "type": "number",
@@ -222,30 +237,30 @@
                     "minimum": 0,
                     "exclusiveMaximum": 1,
                     "description": "Minimum cell support required to keep a gene.",
-                    "help_text": "Fraction of retained cells required to keep a gene, passed to preprocessing and MuData guide-assignment aggregation. It must be in [0, 1); zero keeps genes detected in at least one cell."
+                    "help_text": "Applied once to the concatenated RNA matrix, after mitochondrial cell filtering and before MuData construction. It must be in [0, 1); zero keeps genes detected in at least one cell."
                 },
                 "TAPSEQ_QC_MODE": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Use TAP-seq gene-retention QC.",
-                    "help_text": "When enabled, preprocessing removes only genes undetected in every retained cell rather than applying the standard 10-cell prefilter. Set QC_min_cells_per_gene to a small fraction (for example 0.000001) to retain all observed TAP-seq genes after MuData aggregation."
+                    "description": "Deprecated compatibility parameter; gene retention is controlled by QC_min_cells_per_gene.",
+                    "help_text": "No absolute 10-cell preprocessing floor remains. Use a small QC_min_cells_per_gene fraction when a targeted assay should retain every observed panel gene."
                 },
                 "QC_pct_mito": {
                     "type": "number",
                     "default": 15,
                     "minimum": 0,
                     "maximum": 100,
-                    "description": "Per-measurement-set maximum mitochondrial read percentage allowed per cell."
+                    "description": "Maximum mitochondrial read percentage applied after RNA measurement-set concatenation."
                 },
                 "QC_MAD_total_counts": {
                     "type": "number",
-                    "default": 0,
+                    "default": 5,
                     "minimum": 0,
                     "description": "Per-measurement-set two-sided MAD cutoff for log1p total RNA UMIs; zero disables it."
                 },
                 "QC_MAD_n_genes": {
                     "type": "number",
-                    "default": 0,
+                    "default": 5,
                     "minimum": 0,
                     "description": "Per-measurement-set two-sided MAD cutoff for log1p detected genes; zero disables it."
                 },
@@ -253,7 +268,7 @@
                     "type": "number",
                     "default": 0,
                     "minimum": 0,
-                    "description": "Per-measurement-set upper-tail MAD cutoff for mitochondrial percentage; zero disables it."
+                    "description": "Deprecated compatibility parameter; mitochondrial MAD filtering is no longer applied."
                 },
                 "QC_batch_col": {
                     "type": "string",
@@ -269,7 +284,7 @@
                         "knee2"
                     ],
                     "description": "Per-measurement-set RNA barcode filtering based on total cell RNA UMI depth.",
-                    "help_text": "Each measurement set is processed before concatenation and gets its own barcode-rank plot and thresholds. The script sorts barcodes by total RNA UMIs and estimates up to two knees. 'knee' uses the first/basic knee and is more permissive. 'knee2' searches the high-UMI segment before knee1 for a second, stricter knee. 'none' disables UMI-knee filtering and applies QC_min_genes_per_cell. If the requested knee cannot be determined, barcode filtering is skipped and, because the mode is not 'none', the min-gene filter is also skipped. Cells tied at the selected UMI threshold are retained."
+                    "help_text": "Each measurement set is processed before concatenation and gets its own barcode-rank plot and thresholds. 'knee' uses the first/basic knee; 'knee2' searches the high-UMI segment for a stricter second knee. The fixed RNA-UMI minimum and two-sided MAD rules follow cell calling. 'none' remains available for compatibility but does not activate a fixed detected-gene filter."
                 },
                 "ENABLE_CLONE_REMOVAL": {
                     "type": "boolean",

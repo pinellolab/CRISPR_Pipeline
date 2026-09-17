@@ -16,17 +16,17 @@ workflow preprocessing_pipeline {
     // it would be consumed as a second queue input and only the first RNA
     // measurement set would launch a QC task.
     parsed_covariate_value = parsed_covariate_file.first()
+    scrublet_expected_doublet_rate = params.SCRUBLET_expected_doublet_rate != null ? (params.SCRUBLET_expected_doublet_rate as Double) : (params.SCRUBLET_assay_type == 'cc-perturb-seq' ? 0.025 : 0.08)
     Preprocessed_AnnData = PreprocessAnnData(
         trans_out_dir,
         parsed_covariate_value,
-        params.QC_min_genes_per_cell,
         params.QC_min_counts_per_cell,
-        params.QC_pct_mito,
         params.REFERENCE_transcriptome,
         params.QC_barcode_filter,
         params.QC_MAD_total_counts,
         params.QC_MAD_n_genes,
-        params.QC_MAD_pct_mito
+        params.ENABLE_SCRUBLET,
+        scrublet_expected_doublet_rate
     )
 
     filtered_measurement_sets = Preprocessed_AnnData.filtered_measurement_set
@@ -36,8 +36,15 @@ workflow preprocessing_pipeline {
         .collect()
         .map { dirs -> dirs.sort { a, b -> a.getName() <=> b.getName() } }
 
-    Concatenated_QC = concat_preprocessed_rna(filtered_measurement_sets, params.TAPSEQ_QC_MODE)
-    Collected_QC = collect_measurement_set_qc(measurement_set_qc_dirs)
+    Concatenated_QC = concat_preprocessed_rna(
+        filtered_measurement_sets,
+        params.QC_pct_mito,
+        params.QC_min_cells_per_gene
+    )
+    Collected_QC = collect_measurement_set_qc(
+        measurement_set_qc_dirs,
+        Concatenated_QC.post_concat_qc
+    )
 
     if (file(params.REFERENCE_gtf_local_path).exists()) {
         GTF_Reference = skipGTFDownload(file(params.REFERENCE_gtf_local_path))

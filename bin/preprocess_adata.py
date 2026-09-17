@@ -165,8 +165,9 @@ def add_filter_bounds(ax, snapshot, show_legend=False):
     """Draw explicitly named fixed or MAD limits on a QC axis."""
     if not snapshot["applied"]:
         return
-    color = "#dc2626" if snapshot["bound_kind"] == "MAD" else "#059669"
-    linestyle = "--" if snapshot["bound_kind"] == "MAD" else ":"
+    colors = {"MAD": "#dc2626", "Scrublet": "#7c3aed", "fixed": "#059669"}
+    color = colors.get(snapshot["bound_kind"], "#059669")
+    linestyle = "--" if snapshot["bound_kind"] in {"MAD", "Scrublet"} else ":"
     for bound, label in (
         (snapshot["lower"], snapshot.get("lower_label")),
         (snapshot["upper"], snapshot.get("upper_label")),
@@ -219,7 +220,7 @@ def plot_qc_distributions(obs, limits, fixed_limits, mad_counts, batch, outpath)
     specs = [
         ("log1p_total_counts", "Log1p total RNA UMIs", limits["total_counts"]),
         ("log1p_n_genes_by_counts", "Log1p detected genes", limits["n_genes"]),
-        ("pct_counts_mt", "Mitochondrial counts (%)", limits["pct_mito"]),
+        ("pct_counts_mt", "Mitochondrial counts (%)", (np.nan, np.nan, -np.inf, np.inf)),
     ]
     fig, axes = plt.subplots(1, 3, figsize=(14, 4.2))
     for ax, (column, label, (_median, _mad, lower, upper)) in zip(axes, specs):
@@ -239,6 +240,23 @@ def plot_qc_distributions(obs, limits, fixed_limits, mad_counts, batch, outpath)
         if np.isfinite(lower) or np.isfinite(upper):
             ax.legend(frameon=False)
     fig.suptitle(f"{batch}: per-measurement-set RNA QC")
+    fig.tight_layout()
+    fig.savefig(outpath, dpi=180, facecolor="white")
+    plt.close(fig)
+
+
+def plot_scrublet_scores(scores, predicted, threshold, batch, outpath):
+    """Plot per-measurement-set Scrublet scores and the resolved call threshold."""
+    scores = np.asarray(scores, dtype=float)
+    predicted = np.asarray(predicted, dtype=bool)
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.hist(scores[~predicted], bins=60, color="#60a5fa", alpha=0.85, label="Singlet calls")
+    if predicted.any():
+        ax.hist(scores[predicted], bins=60, color="#f97316", alpha=0.8, label="Doublet calls")
+    if np.isfinite(threshold):
+        ax.axvline(threshold, color="#7c3aed", linestyle="--", linewidth=1.5, label=f"Threshold = {threshold:.3g}")
+    ax.set(xlabel="Scrublet doublet score", ylabel="Cells", title=f"{batch}: Scrublet doublet calls")
+    ax.legend(frameon=False)
     fig.tight_layout()
     fig.savefig(outpath, dpi=180, facecolor="white")
     plt.close(fig)
@@ -265,10 +283,10 @@ def prepare_matrix(adata, use_multimapping):
 
 
 def main(args):
-    if args.min_genes < 0 or args.min_counts < 0:
-        raise ValueError("Minimum genes and RNA UMI counts must be non-negative")
-    if not 0 <= args.pct_mito <= 100:
-        raise ValueError("Mitochondrial percentage cutoff must be in [0, 100]")
+    if args.min_counts < 0:
+        raise ValueError("Minimum RNA UMI counts must be non-negative")
+    if not 0 < args.scrublet_expected_doublet_rate < 1:
+        raise ValueError("Scrublet expected doublet rate must be in (0, 1)")
     mapping_dir = Path(args.mapping_dir)
     batch = batch_name(mapping_dir)
     label = safe_label(batch)
@@ -331,7 +349,6 @@ def main(args):
     limits = {
         "total_counts": mad_limits(adata.obs["log1p_total_counts"], args.mad_total_counts),
         "n_genes": mad_limits(adata.obs["log1p_n_genes_by_counts"], args.mad_n_genes),
-        "pct_mito": mad_limits(adata.obs["pct_counts_mt"], args.mad_pct_mito, upper_only=True),
     }
     flow_rows = []
     snapshots = []
@@ -399,22 +416,10 @@ def main(args):
 
     total_counts = adata.obs["total_counts"].to_numpy(dtype=float)
     n_genes = adata.obs["n_genes_by_counts"].to_numpy(dtype=float)
-    pct_mito = adata.obs["pct_counts_mt"].to_numpy(dtype=float)
     apply_filter(
         "total RNA UMIs", "QC_min_counts_per_cell",
         f"total_counts ≥ {args.min_counts:,}", total_counts, float(args.min_counts), np.inf,
         args.min_counts > 0, lower_label=f"Fixed minimum ({args.min_counts:,})",
-    )
-    apply_filter(
-        "detected genes", "QC_min_genes_per_cell",
-        (
-            f"n_genes_by_counts ≥ {args.min_genes:,}"
-            if args.barcode_filter == "none" else
-            f"skipped because QC_barcode_filter = {args.barcode_filter}"
-        ),
-        n_genes, float(args.min_genes), np.inf,
-        args.barcode_filter == "none" and args.min_genes > 0,
-        lower_label=f"Fixed minimum ({args.min_genes:,})",
     )
     non_mito_mad_specs = (
         ("log1p total RNA UMIs", "QC_MAD_total_counts", "total_counts", "log1p_total_counts", args.mad_total_counts, False),
@@ -433,51 +438,85 @@ def main(args):
             bound_kind="MAD", lower_label=f"Lower {n_mads:g} MAD", upper_label=f"Upper {n_mads:g} MAD",
         )
 
-    # Mitochondrial filtering is deliberately last: the fixed cutoff followed by
-    # the optional upper-tail MAD cutoff. This keeps its impact explicit in the
-    # sequential audit and avoids conflating it with RNA-complexity filtering.
-    apply_filter(
-        "mitochondrial percentage", "QC_pct_mito",
-        f"pct_counts_mt < {args.pct_mito:g}%", pct_mito, -np.inf,
-        np.nextafter(float(args.pct_mito), -np.inf),
-        args.pct_mito < 100, upper_label=f"Fixed maximum ({args.pct_mito:g}%)",
-    )
-    _median, mito_mad, lower, upper = limits["pct_mito"]
-    mito_mad_effective = args.mad_pct_mito > 0 and np.isfinite(mito_mad) and mito_mad > 0
-    mito_bound_text = (
-        f"≤ {upper:.3g} ({args.mad_pct_mito:g} MAD upper tail)"
-        if mito_mad_effective else
-        f"disabled (configured {args.mad_pct_mito:g}; observed MAD {mito_mad:.3g})"
-    )
-    apply_filter(
-        "mitochondrial percentage", "QC_MAD_pct_mito", mito_bound_text,
-        pct_mito, lower, upper, mito_mad_effective,
-        bound_kind="MAD", upper_label=f"Upper {args.mad_pct_mito:g} MAD",
-    )
-    keep = current_keep
+    pre_scrublet_keep = current_keep.copy()
+    scrublet_removed = 0
+    if args.enable_scrublet:
+        import scrublet as scr
 
-    # Preserve the historical summary meanings even though the visual audit now
-    # applies mitochondrial filters last. These masks are order-independent.
-    fixed_keep = np.ones(adata.n_obs, dtype=bool)
-    if args.min_counts > 0:
-        fixed_keep &= total_counts >= args.min_counts
-    if args.barcode_filter == "none" and args.min_genes > 0:
-        fixed_keep &= n_genes >= args.min_genes
-    if args.pct_mito < 100:
-        fixed_keep &= pct_mito < args.pct_mito
+        selected = np.flatnonzero(current_keep)
+        scrub = scr.Scrublet(
+            adata.X[selected],
+            expected_doublet_rate=args.scrublet_expected_doublet_rate,
+            random_state=42,
+        )
+        scores, predicted = scrub.scrub_doublets()
+        threshold = float(scrub.threshold_) if scrub.threshold_ is not None else np.nan
+        adata.obs["doublet_scores"] = np.nan
+        adata.obs.iloc[selected, adata.obs.columns.get_loc("doublet_scores")] = scores
+        adata.obs["predicted_doublets"] = False
+        predicted_column = adata.obs.columns.get_loc("predicted_doublets")
+        adata.obs.iloc[selected, predicted_column] = predicted
+        adata.obs["doublet_info"] = adata.obs["predicted_doublets"].astype(str)
+        current_keep[selected[predicted]] = False
+        scrublet_removed = int(predicted.sum())
+        before_count = int(pre_scrublet_keep.sum())
+        after_count = int(current_keep.sum())
+        flow_rows.append({
+            "measurement_set": batch,
+            "step_order": len(flow_rows) + 1,
+            "filter_name": "scrublet_doublet_score",
+            "filter_label": "Scrublet doublet removal",
+            "threshold": f"expected_doublet_rate = {args.scrublet_expected_doublet_rate:g}; call threshold = {threshold:.3g}",
+            "applied": True,
+            "cells_before": before_count,
+            "cells_after": after_count,
+            "cells_removed": scrublet_removed,
+            "removed_percent": 100 * scrublet_removed / before_count if before_count else 0,
+            "retained_percent_of_input": 100 * after_count / input_cells if input_cells else 0,
+        })
+        snapshots.append({
+            "filter_label": "Scrublet doublet removal",
+            "metric_label": "Scrublet doublet score",
+            "values_before": scores,
+            "values_after": scores[~predicted],
+            "lower": -np.inf,
+            "upper": threshold,
+            "bound_kind": "Scrublet",
+            "lower_label": None,
+            "upper_label": f"Scrublet threshold ({threshold:.3g})",
+            "applied": True,
+            "removed": scrublet_removed,
+            "cells_before": before_count,
+            "cells_after": after_count,
+        })
+        plot_scrublet_scores(
+            scores, predicted, threshold, batch,
+            args.qc_dir / f"scrublet_scores_scRNA_{label}.png",
+        )
+    else:
+        count = int(current_keep.sum())
+        flow_rows.append({
+            "measurement_set": batch,
+            "step_order": len(flow_rows) + 1,
+            "filter_name": "scrublet_doublet_score",
+            "filter_label": "Scrublet doublet removal",
+            "threshold": "disabled",
+            "applied": False,
+            "cells_before": count,
+            "cells_after": count,
+            "cells_removed": 0,
+            "removed_percent": 0,
+            "retained_percent_of_input": 100 * count / input_cells if input_cells else 0,
+        })
+    keep = current_keep
 
     fixed_plot_limits = {
         "log1p_total_counts": (
             np.log1p(args.min_counts) if args.min_counts > 0 else -np.inf,
             np.inf,
         ),
-        "log1p_n_genes_by_counts": (
-            np.log1p(args.min_genes)
-            if args.barcode_filter == "none" and args.min_genes > 0
-            else -np.inf,
-            np.inf,
-        ),
-        "pct_counts_mt": (-np.inf, args.pct_mito),
+        "log1p_n_genes_by_counts": (-np.inf, np.inf),
+        "pct_counts_mt": (-np.inf, np.inf),
     }
     plot_qc_distributions(
         adata.obs,
@@ -486,7 +525,7 @@ def main(args):
         {
             "log1p_total_counts": args.mad_total_counts,
             "log1p_n_genes_by_counts": args.mad_n_genes,
-            "pct_counts_mt": args.mad_pct_mito,
+            "pct_counts_mt": 0,
         },
         batch,
         args.qc_dir / f"qc_distributions_scRNA_{label}.png",
@@ -502,22 +541,21 @@ def main(args):
         "measurement_set": batch,
         "input_barcodes": input_cells,
         "post_knee_cells": post_knee_cells,
-        "post_fixed_threshold_cells": int(fixed_keep.sum()),
+        "post_min_counts_cells": int((total_counts >= args.min_counts).sum()) if args.min_counts > 0 else post_knee_cells,
+        "post_mad_cells": int(pre_scrublet_keep.sum()),
         "retained_cells": retained.n_obs,
         "retained_fraction": retained.n_obs / input_cells if input_cells else np.nan,
-        "removed_by_fixed_thresholds": int((~fixed_keep).sum()),
-        "removed_by_mad_after_fixed": int(fixed_keep.sum() - keep.sum()),
+        "removed_by_scrublet": scrublet_removed,
         "barcode_filter": args.barcode_filter,
         "knee_rank": selected_rank,
         "knee_umi_threshold": knee_threshold,
         "fixed_min_counts": args.min_counts,
-        "fixed_min_genes": args.min_genes if args.barcode_filter == "none" else np.nan,
-        "fixed_pct_mito_max": args.pct_mito,
         "mad_total_counts_n": args.mad_total_counts,
         "mad_n_genes_n": args.mad_n_genes,
-        "mad_pct_mito_n": args.mad_pct_mito,
+        "scrublet_enabled": args.enable_scrublet,
+        "scrublet_expected_doublet_rate": args.scrublet_expected_doublet_rate,
     }
-    for key, prefix in (("total_counts", "total_counts"), ("n_genes", "n_genes"), ("pct_mito", "pct_mito")):
+    for key, prefix in (("total_counts", "total_counts"), ("n_genes", "n_genes")):
         median, mad, lower, upper = limits[key]
         row.update({
             f"{prefix}_median": median,
@@ -534,18 +572,17 @@ if __name__ == "__main__":
     parser.add_argument("mapping_dir")
     parser.add_argument("covariates")
     parser.add_argument("--qc-dir", type=Path, required=True)
-    parser.add_argument("--min-genes", type=int, default=100)
-    parser.add_argument("--min-counts", type=int, default=0)
-    parser.add_argument("--pct-mito", type=float, default=20)
+    parser.add_argument("--min-counts", type=int, default=500)
     parser.add_argument("--reference", choices=["human", "mouse"], required=True)
     parser.add_argument("--barcode-filter", choices=["none", "knee", "knee2"], default="knee")
-    parser.add_argument("--mad-total-counts", type=float, default=0)
-    parser.add_argument("--mad-n-genes", type=float, default=0)
-    parser.add_argument("--mad-pct-mito", type=float, default=0)
+    parser.add_argument("--mad-total-counts", type=float, default=5)
+    parser.add_argument("--mad-n-genes", type=float, default=5)
+    parser.add_argument("--enable-scrublet", action="store_true")
+    parser.add_argument("--scrublet-expected-doublet-rate", type=float, default=0.08)
     parser.add_argument("--bc-replacement", action="store_true")
     parser.add_argument("--use-multimapping", action="store_true")
     parsed = parser.parse_args()
-    for name in ("mad_total_counts", "mad_n_genes", "mad_pct_mito"):
+    for name in ("mad_total_counts", "mad_n_genes"):
         if getattr(parsed, name) < 0:
             parser.error(f"--{name.replace('_', '-')} must be non-negative")
     main(parsed)

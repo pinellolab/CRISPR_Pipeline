@@ -60,9 +60,9 @@ The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62a
 | gene.obs | total_counts_ribo | integer | Always | Total RNA UMIs assigned to ribosomal genes. | Scanpy QC |
 | gene.obs | log1p_total_counts_ribo | float | Always | Natural log of one plus ribosomal RNA UMIs. | Scanpy QC |
 | gene.obs | pct_counts_ribo | float percent | Always | Percent of RNA counts from ribosomal genes. | Scanpy QC |
-| gene.obs | doublet_scores | float | When ENABLE_SCRUBLET=true | Scrublet doublet score before predicted doublets are removed. | doublets.py |
-| gene.obs | predicted_doublets | boolean | When ENABLE_SCRUBLET=true | Scrublet binary doublet prediction used for filtering. | doublets.py |
-| gene.obs | doublet_info | string | When ENABLE_SCRUBLET=true | String representation of the Scrublet prediction retained for reporting. | doublets.py |
+| gene.obs | doublet_scores | float | When ENABLE_SCRUBLET=true | Per-measurement-set Scrublet score retained on cells that pass doublet removal. | preprocess_adata.py |
+| gene.obs | predicted_doublets | boolean | When ENABLE_SCRUBLET=true | Per-measurement-set Scrublet call used before concatenation; retained cells are false because predicted doublets were removed. | preprocess_adata.py |
+| gene.obs | doublet_info | string | When ENABLE_SCRUBLET=true | String representation of the per-measurement-set Scrublet call retained for reporting. | preprocess_adata.py |
 | guide.obs | batch | categorical | Always | Input or mapping batch label for each guide-count row. | Guide mapping |
 | guide.obs | concat_batch | categorical | After concatenation | Measurement-set/source label added during concatenation. | concatenation |
 | guide.obs | batch_number | integer | Hashing workflows | One-based guide batch encoding added when hashing data are present. | create_mdata.py |

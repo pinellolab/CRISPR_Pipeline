@@ -119,13 +119,19 @@ This table is generated from `bin/qc_metrics_json.py`. The flat key combines the
 | measurement_set_rna_qc.measurement_set | Samplesheet measurement-set identifier. |  | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
 | measurement_set_rna_qc.input_barcodes | Raw mapped RNA barcodes entering this measurement-set QC task. | barcodes | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
 | measurement_set_rna_qc.post_knee_cells | Cells after this measurement set's knee selection. | cells | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
-| measurement_set_rna_qc.post_fixed_threshold_cells | Cells passing fixed RNA UMI, detected-gene, and mitochondrial thresholds. | cells | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
-| measurement_set_rna_qc.retained_cells | Cells retained after fixed and enabled MAD filters. | cells | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.post_min_counts_cells | Cells passing the fixed RNA UMI minimum after knee calling. | cells | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.post_mad_cells | Cells passing the sequential two-sided total-count and detected-gene MAD filters. | cells | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.retained_cells | Cells retained after per-measurement-set knee, UMI, MAD, and Scrublet filtering. | cells | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
 | measurement_set_rna_qc.retained_fraction | Retained cells divided by input barcodes. | fraction | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.removed_by_scrublet | Cells called as doublets and removed by Scrublet. | cells | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.barcode_filter | Configured knee-cell-calling method for this measurement set. |  | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.knee_rank | Selected barcode rank for knee cell calling. | rank | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
 | measurement_set_rna_qc.knee_umi_threshold | Measurement-set-specific RNA UMI threshold selected by the knee method. | UMIs | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.fixed_min_counts | Configured fixed RNA UMI minimum applied after cell calling. | UMIs | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
 | measurement_set_rna_qc.mad_total_counts_n | Configured two-sided MAD multiplier for log1p total RNA UMIs. | MADs | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
 | measurement_set_rna_qc.mad_n_genes_n | Configured two-sided MAD multiplier for log1p detected genes. | MADs | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
-| measurement_set_rna_qc.mad_pct_mito_n | Configured upper-tail MAD multiplier for mitochondrial percentage. | MADs | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.scrublet_enabled | Whether Scrublet doublet calling was enabled for this measurement set. |  | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
+| measurement_set_rna_qc.scrublet_expected_doublet_rate | Expected doublet rate supplied to Scrublet. | fraction | one row per measurement set | figures/measurement_set_qc_metrics.tsv |
 | dashboard_derived.raw_scRNA_barcodes_per_measurement_set | Unfiltered scRNA barcode counts from kb inspect JSON files. | barcodes | measurement-set or run-level | pipeline_qc_metrics.json and dashboard.html Filtering Summary tab |
 | dashboard_derived.raw_scRNA_barcodes_total | Sum of unfiltered scRNA barcode counts across measurement sets. | barcodes | measurement-set or run-level | pipeline_qc_metrics.json and dashboard.html Filtering Summary tab |
 | dashboard_derived.concatenated_scRNA_cells | Cells in concatenated unfiltered scRNA AnnData before dashboard-attributed QC steps. | cells | measurement-set or run-level | pipeline_qc_metrics.json and dashboard.html Filtering Summary tab |
