@@ -4,12 +4,9 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import hashlib
 import json
-import mimetypes
 import os
-import re
 import sys
 import time
 from pathlib import Path
@@ -39,7 +36,10 @@ def discovered_paths(outdir: Path, run_name: str) -> dict[str, Path]:
         "seqspec_table": first_file(outdir, ["pipeline_outputs/seqspeccheck/guide_position_table.csv"]),
         "seqspec_image": first_file(outdir, ["pipeline_outputs/seqspeccheck/**/*seqSpec*plots.png"]),
         "qc_metrics_json": first_file(outdir, ["pipeline_qc_metrics.json"]),
-        "artifact_dir": outdir / "pipeline_dashboard",
+        # Search the complete published output tree.  This lets the advanced
+        # execution dashboard expose QC plots as soon as their producing
+        # process publishes them, before the final dashboard is assembled.
+        "artifact_dir": outdir,
         "final_dashboard_html": outdir / "pipeline_dashboard" / "dashboard.html",
     }
 
@@ -64,41 +64,8 @@ def read_final_status(status_file: Path) -> tuple[str, bool]:
         return "failed", True
 
 
-def inline_dashboard_assets(dashboard_html: Path) -> str:
-    """Return the canonical white dashboard with local image assets embedded."""
-    source = dashboard_html.read_text(encoding="utf-8", errors="replace")
-    root = dashboard_html.parent.resolve()
-    cache: dict[Path, str] = {}
-
-    def replace(match: re.Match[str]) -> str:
-        attribute, quote, value = match.groups()
-        if value.startswith(("data:", "http:", "https:", "#", "javascript:")):
-            return match.group(0)
-        candidate = (root / value).resolve()
-        try:
-            candidate.relative_to(root)
-        except ValueError:
-            return match.group(0)
-        if not candidate.is_file():
-            return match.group(0)
-        if candidate not in cache:
-            media_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
-            encoded = base64.b64encode(candidate.read_bytes()).decode("ascii")
-            cache[candidate] = f"data:{media_type};base64,{encoded}"
-        return f"{attribute}={quote}{cache[candidate]}{quote}"
-
-    # Figures are loaded lazily from data-imgsrc; navigation icons use src.
-    # Embed both so W&B receives the complete dashboard as one HTML object.
-    return re.sub(r"\b(src|data-imgsrc)=([\"'])([^\"']+)\2", replace, source)
-
-
 def render_snapshot(args: argparse.Namespace, status: str, final: bool) -> int:
     paths = discovered_paths(args.outdir, args.run_name)
-    if final and paths["final_dashboard_html"].is_file():
-        document = inline_dashboard_assets(paths["final_dashboard_html"])
-        args.dashboard_html.parent.mkdir(parents=True, exist_ok=True)
-        args.dashboard_html.write_text(document, encoding="utf-8")
-        return args.dashboard_html.stat().st_size
     render_args = SimpleNamespace(
         trace=args.trace,
         run_id=args.source_run_id,
@@ -106,10 +73,12 @@ def render_snapshot(args: argparse.Namespace, status: str, final: bool) -> int:
         status=status,
         guide_report=paths["guide_report"],
         seqspec_table=paths["seqspec_table"],
-        seqspec_image=paths["seqspec_image"] if final else None,
+        seqspec_image=paths["seqspec_image"],
         qc_metrics_json=paths["qc_metrics_json"],
-        artifact_dir=paths["artifact_dir"] if final else None,
-        final_dashboard_html=paths["final_dashboard_html"] if final else None,
+        artifact_dir=paths["artifact_dir"],
+        # The final pipeline dashboard is a bounded result-table source for
+        # the advanced execution dashboard, never a replacement for it.
+        final_dashboard_html=paths["final_dashboard_html"],
         nextflow_log=args.nextflow_log,
         tail_lines=args.tail_lines,
         max_image_bytes=args.max_image_bytes,
@@ -128,7 +97,7 @@ def main() -> int:
     parser.add_argument("--source-run-id", required=True)
     parser.add_argument("--wandb-run-id", default="")
     parser.add_argument("--replace-run", default="false")
-    parser.add_argument("--publish-live-html", default="false")
+    parser.add_argument("--publish-live-html", default="true")
     parser.add_argument("--token-env", default="WB_IGVF")
     parser.add_argument("--outdir", type=Path, required=True)
     parser.add_argument("--trace", type=Path, required=True)
@@ -149,15 +118,7 @@ def main() -> int:
     os.environ["WANDB_API_KEY"] = token
     try:
         import wandb
-        replace_run = args.replace_run.lower() in {"1", "true", "yes"}
         publish_live_html = args.publish_live_html.lower() in {"1", "true", "yes"}
-        if replace_run and args.wandb_run_id and args.entity:
-            try:
-                wandb.Api(timeout=30).run(
-                    f"{args.entity}/{args.project}/{args.wandb_run_id}"
-                ).delete()
-            except wandb.errors.CommError:
-                pass
         init_options = {}
         if args.wandb_run_id:
             init_options.update(id=args.wandb_run_id, resume="allow")
@@ -191,14 +152,20 @@ def main() -> int:
                     )
                     if final or publish_live_html:
                         size = render_snapshot(args, status, final)
-                        full_dashboard = final and paths["final_dashboard_html"].is_file()
-                        within_budget = (
-                            size <= args.max_final_html_bytes
-                            if full_dashboard
-                            else sent_bytes + size <= args.max_total_bytes
-                        )
+                        within_budget = size <= args.max_final_html_bytes
                         if within_budget:
-                            run.log({"pipeline/main_execution": wandb.Html(str(args.dashboard_html), inject=False)}, step=step)
+                            # Summary media is a single mutable value. Updating
+                            # it replaces the visible dashboard instead of
+                            # creating a W&B history step and Step selector.
+                            run.summary.update({
+                                "pipeline/main_execution": wandb.Html(
+                                    str(args.dashboard_html), inject=False
+                                ),
+                                "pipeline_status": status,
+                                "dashboard_status": (
+                                    "FULL_QC_PUBLISHED" if final else "LIVE"
+                                ),
+                            })
                             sent_bytes += size
                             step += 1
                         else:
@@ -212,10 +179,12 @@ def main() -> int:
             if final:
                 break
             time.sleep(max(args.poll_seconds, 1))
-        run.summary["dashboard_status"] = "FULL_QC_PUBLISHED" if status == "completed" else "FAILED"
-        run.summary["dashboard_updates"] = step
-        run.summary["dashboard_uploaded_bytes"] = sent_bytes
-        run.summary["source_run_id"] = args.source_run_id
+        run.summary.update({
+            "dashboard_status": "FULL_QC_PUBLISHED" if status == "completed" else "FAILED",
+            "dashboard_updates": step,
+            "dashboard_uploaded_bytes": sent_bytes,
+            "source_run_id": args.source_run_id,
+        })
     except Exception as error:
         warn(f"monitor failed; pipeline continues: {error}")
     finally:

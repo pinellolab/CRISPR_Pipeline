@@ -387,6 +387,8 @@ def evaluation_artifact_content(root: Path | None) -> str:
         return ""
     evaluation = root / "evaluation_output"
     if not evaluation.is_dir():
+        evaluation = root / "pipeline_dashboard" / "evaluation_output"
+    if not evaluation.is_dir():
         return '<h3>Evaluation outputs</h3><div class="empty">Evaluation artifacts are not available yet.</div>'
     rows = []
     skip_notes = []

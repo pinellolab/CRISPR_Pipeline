@@ -50,12 +50,13 @@ def test_signature_changes_when_trace_changes(tmp_path):
     assert monitor.input_signature(paths, trace, status) != first
 
 
-def test_final_white_dashboard_embeds_lazy_images(tmp_path):
+def test_final_update_keeps_advanced_execution_dashboard(tmp_path):
     dashboard_dir = tmp_path / "pipeline_dashboard"
     figures = dashboard_dir / "figures"
     svg = dashboard_dir / "svg"
     figures.mkdir(parents=True)
     svg.mkdir()
+    # A minimal valid PNG is not required by the renderer; it embeds bytes.
     (figures / "qc.png").write_bytes(b"png-bytes")
     (svg / "plot.svg").write_text("<svg></svg>", encoding="utf-8")
     dashboard = dashboard_dir / "dashboard.html"
@@ -65,11 +66,28 @@ def test_final_white_dashboard_embeds_lazy_images(tmp_path):
         encoding="utf-8",
     )
 
-    result = monitor.inline_dashboard_assets(dashboard)
+    trace = tmp_path / "trace.tsv"
+    trace.write_text("task_id\tprocess\tstatus\n1\tinputCheck\tCOMPLETED\n", encoding="utf-8")
+    output = tmp_path / "telemetry" / "pipeline_execution.html"
+    args = type("Args", (), {
+        "outdir": tmp_path,
+        "run_name": "run-a",
+        "trace": trace,
+        "source_run_id": "source-a",
+        "dashboard_html": output,
+        "nextflow_log": tmp_path / "nextflow.log",
+        "tail_lines": 30,
+        "max_image_bytes": 1_000_000,
+    })()
 
-    assert 'src="data:image/svg+xml;base64,' in result
-    assert 'data-imgsrc="data:image/png;base64,' in result
-    assert "figures/qc.png" not in result
+    monitor.render_snapshot(args, "completed", True)
+    result = output.read_text(encoding="utf-8")
+
+    assert "Live dependency view" in result
+    assert "Pipeline execution" in result
+    assert "Pipeline family" in result
+    assert "data:image/png;base64," in result
+    assert result != dashboard.read_text(encoding="utf-8")
 
 
 def test_wrapper_preserves_nextflow_exit_when_telemetry_is_unavailable(tmp_path):
