@@ -13,9 +13,12 @@ from count_matrix_utils import normalize_sparse_index_dtypes
 
 def validate_feature_index(inputs):
     expected = None
+    template_var = None
     for path in inputs:
         current = ad.read_h5ad(path, backed="r")
         index = pd.Index(current.var_names.astype(str))
+        if template_var is None:
+            template_var = current.var.copy()
         current.file.close()
         if expected is None:
             expected = index
@@ -24,6 +27,7 @@ def validate_feature_index(inputs):
                 "QC-filtered measurement sets do not share the same ordered "
                 f"RNA feature index: {path} differs from {inputs[0]}"
             )
+    return template_var
 
 
 def recompute_gene_metrics(adata):
@@ -50,15 +54,19 @@ def main():
     inputs = sorted(map(Path, args.inputs), key=lambda path: path.name)
     if not inputs:
         parser.error("At least one filtered measurement-set AnnData is required")
-    validate_feature_index(inputs)
+    template_var = validate_feature_index(inputs)
     ad.experimental.concat_on_disk(
         inputs,
         join="outer",
-        merge="first",
+        # AnnData 0.11 cannot write pandas Series from merge="first" in
+        # concat_on_disk. Feature indices are validated above, so restore the
+        # first measurement set's feature metadata explicitly after concat.
+        merge=None,
         index_unique=None,
         out_file=Path(args.output),
     )
     combined = ad.read_h5ad(args.output)
+    combined.var = template_var.loc[combined.var_names].copy()
     if not combined.obs_names.is_unique:
         raise ValueError("Per-measurement-set QC produced duplicate qualified cell barcodes")
     if "batch" in combined.obs:
