@@ -89,6 +89,34 @@ METRIC_CATALOG = {
             *_stat_metrics("cells_per_guide", "of assigned cells per guide.", "cells_per_guide"),
         ],
     },
+    "guide_assignment_filter": {
+        "description": "Per-measurement-set cell filtering based on the number of binary guide assignments.",
+        "source_artifact": "additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv",
+        "row_level": "aggregate row plus one row per measurement set",
+        "metrics": [
+            {"name": "measurement_set", "description": "Measurement-set label, or all for the aggregate.", "unit": None},
+            {"name": "threshold", "description": "Configured maximum assigned-guide rule.", "unit": None},
+            {"name": "cells_before", "description": "Cells entering the assigned-guide filter.", "unit": "cells"},
+            {"name": "cells_after", "description": "Cells retained by the assigned-guide filter.", "unit": "cells"},
+            {"name": "cells_removed", "description": "Cells above the assigned-guide ceiling.", "unit": "cells"},
+            {"name": "removed_percent", "description": "Percent of entering cells removed.", "unit": "percent"},
+        ],
+    },
+    "hto_post_clone_filter": {
+        "description": "Per-measurement-set HTO support and singlet filtering after guide and clone QC.",
+        "source_artifact": "additional_qc/hto_filter/hto_filter_flow.tsv",
+        "row_level": "one row per filter step and measurement set",
+        "metrics": [
+            {"name": "measurement_set", "description": "Measurement set on which HTO support was recalculated.", "unit": None},
+            {"name": "step_order", "description": "Sequential post-clone HTO filter step.", "unit": None},
+            {"name": "filter_label", "description": "HTO support or singlet filter name.", "unit": None},
+            {"name": "threshold", "description": "Configured HTO retention rule.", "unit": None},
+            {"name": "cells_before", "description": "Cells entering this HTO filter step.", "unit": "cells"},
+            {"name": "cells_after", "description": "Cells retained after this HTO filter step.", "unit": "cells"},
+            {"name": "cells_removed", "description": "Cells removed at this HTO filter step.", "unit": "cells"},
+            {"name": "removed_percent", "description": "Percent of entering cells removed at this step.", "unit": "percent"},
+        ],
+    },
     "additional_qc_clones": {
         "description": "Optional guide-barcode clone detection/removal metrics using the Wang et al. hypergeometric method.",
         "source_artifact": "additional_qc/clones/clone_metrics.tsv",
@@ -313,6 +341,8 @@ def collect_additional_qc(additional_qc_dir):
     specs = {
         "gene": ("additional_qc_gene", "gene/gene_metrics.tsv"),
         "guide": ("additional_qc_guide", "guide/guide_metrics.tsv"),
+        "guide_assignment_filter": ("guide_assignment_filter", "guide_assignment_filter/guide_assignment_filter_flow.tsv"),
+        "hto_filter": ("hto_post_clone_filter", "hto_filter/hto_filter_flow.tsv"),
         "clones": ("additional_qc_clones", "clones/clone_metrics.tsv"),
         "sequencing_saturation": ("additional_qc_sequencing_saturation", "sequencing_saturation/sequencing_saturation_metrics.tsv"),
         "intended_target": ("additional_qc_intended_target", "intended_target/intended_target_metrics.tsv"),

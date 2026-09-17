@@ -17,6 +17,7 @@ include { inference_pipeline } from '../../subworkflows/local/inference_pipeline
 include { additional_qc_plots } from '../../modules/local/additional_qc_plots'
 include { remove_clonal_cells } from '../../modules/local/remove_clonal_cells'
 include { sequencing_saturation } from '../../modules/local/sequencing_saturation'
+include { filter_hto_post_clone } from '../../modules/local/filter_hto_post_clone'
 
 // Import hashing-specific modules
 include { CreateMuData } from '../../modules/local/CreateMuData'
@@ -183,19 +184,24 @@ workflow CRISPR_PIPELINE {
             params.Multiplicity_of_infection,
             params.GUIDE_ASSIGNMENT_capture_method,
             params.REFERENCE_restrict_genes_to_gtf,
-            Hashing_Concat.concatenated_hashing_demux
+            // Preserve all demultiplexed HTO classes through guide assignment
+            // and clone removal. HTO support/singlet filtering happens later
+            // on the surviving cell population.
+            Hashing_Concat.concatenated_hashing_unfiltered_demux
         )
 
         // Shared processing pipeline
         GuideAssignment = guide_assignment_pipeline(MergeMuData.mudata)
         if (params.ENABLE_CLONE_REMOVAL) {
             CloneRemoval = remove_clonal_cells(GuideAssignment.concat_mudata)
-            mudata_for_inference = CloneRemoval.filtered_mudata
+            mudata_before_hto = CloneRemoval.filtered_mudata
             clone_qc_dir = CloneRemoval.clone_qc
         } else {
-            mudata_for_inference = GuideAssignment.concat_mudata
+            mudata_before_hto = GuideAssignment.concat_mudata
             clone_qc_dir = file("${workflow.projectDir}/assets/clone_qc_empty")
         }
+        HTOFilter = filter_hto_post_clone(mudata_before_hto)
+        mudata_for_inference = HTOFilter.filtered_mudata
         Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
 
         evaluation_pipeline (
@@ -206,7 +212,9 @@ workflow CRISPR_PIPELINE {
         AdditionalQC = additional_qc_plots(
             Inference.inference_mudata,
             clone_qc_dir,
-            saturation_qc_dir
+            saturation_qc_dir,
+            GuideAssignment.guide_assignment_qc,
+            HTOFilter.hto_qc
         )
 
         if (params.ENABLE_BENCHMARK) {
@@ -233,8 +241,8 @@ workflow CRISPR_PIPELINE {
             mapping_guide_pipeline.out.ks_guide_out_dir_collected,
             Hashing_Filtered.adata_hashing,
             mapping_hashing_pipeline.out.ks_hashing_out_dir_collected,
-            Hashing_Concat.concatenated_hashing_demux,
-            Hashing_Concat.concatenated_hashing_unfiltered_demux,
+            HTOFilter.filtered_hashing,
+            HTOFilter.unfiltered_hashing,
             Inference.inference_mudata,
             AdditionalQC.additional_qc,
             Preprocessing.figures_dir,
@@ -281,7 +289,9 @@ workflow CRISPR_PIPELINE {
         AdditionalQC = additional_qc_plots(
             Inference.inference_mudata,
             clone_qc_dir,
-            saturation_qc_dir
+            saturation_qc_dir,
+            GuideAssignment.guide_assignment_qc,
+            file("${workflow.projectDir}/assets/hto_qc_empty")
         )
 
         if (params.ENABLE_BENCHMARK) {

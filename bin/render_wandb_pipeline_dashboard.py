@@ -437,7 +437,7 @@ def image_family(path: Path) -> str:
     value = str(path).lower()
     if "seqspec" in value:
         return "seqspec"
-    if any(term in value for term in ("guide_", "guides_", "sgrna", "cells_per_guide", "guides_per_cell")):
+    if any(term in value for term in ("guide_", "guides_", "sgrna", "cells_per_guide", "guides_per_cell", "hto_", "hashing_qc")):
         return "guide_assignment"
     if any(term in value for term in ("intended_target", "global_analysis", "evaluation", "volcano")):
         return "evaluation"
@@ -504,6 +504,43 @@ def measurement_set_filter_flow_content(root: Path | None) -> str:
         '<p>Rows follow the exact execution order; disabled or inapplicable filters remain visible.</p>'
         + data_table(rows, columns)
     )
+
+
+def assignment_filter_flow_content(root: Path | None) -> str:
+    """Show guide and post-clone HTO filters in pipeline execution order."""
+    if not root or not root.exists():
+        return ""
+    specifications = [
+        (
+            "**/guide_assignment_filter_flow.tsv",
+            "Guide-assignment cell filter",
+            "This filter runs after guide calls and before clone removal.",
+        ),
+        (
+            "**/hto_filter_flow.tsv",
+            "Post-clone HTO filters",
+            "HTO support and singlet retention are calculated after guide QC and optional clone removal.",
+        ),
+    ]
+    columns = [
+        ("measurement_set", "Measurement set"), ("step_order", "Order"),
+        ("filter_label", "Filter parameter"), ("threshold", "Resolved rule"),
+        ("applied", "Applied"), ("cells_before", "Cells before"),
+        ("cells_after", "Cells after"), ("cells_removed", "Removed"),
+        ("removed_percent", "Removed %"),
+        ("retained_percent_of_input", "Input retained %"),
+    ]
+    sections = []
+    for pattern, title, note in specifications:
+        candidates = sorted(root.glob(pattern))
+        if not candidates:
+            continue
+        rows = []
+        for candidate in candidates:
+            with candidate.open(newline="", encoding="utf-8", errors="replace") as handle:
+                rows.extend(csv.DictReader(handle, delimiter="\t"))
+        sections.append(f"<h3>{html.escape(title)}</h3><p>{html.escape(note)}</p>" + data_table(rows, columns))
+    return "".join(sections)
 
 
 def clean_html_cell(value: str) -> str:
@@ -706,6 +743,8 @@ def render(args: argparse.Namespace) -> str:
         extra = category_flow(qc_data, family) + qc_metrics_content(qc_data, family)
         if family == "preprocessing":
             extra += measurement_set_filter_flow_content(getattr(args, "artifact_dir", None))
+        if family == "guide_assignment":
+            extra += assignment_filter_flow_content(getattr(args, "artifact_dir", None))
         if family == "input" and guide:
             cards.extend([
                 metric_card("Guides", guide.get("row_count", "—"), "validated"),

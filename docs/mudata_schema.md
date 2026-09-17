@@ -68,11 +68,14 @@ The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62a
 | guide.obs | batch_number | integer | Hashing workflows | One-based guide batch encoding added when hashing data are present. | create_mdata.py |
 | guide.obs | num_expressed_guides | integer | Always | Number of guides with at least one raw guide UMI in the cell; this is not the number of assigned guides. | create_mdata.py |
 | guide.obs | total_guide_umis | integer | Always | Sum of raw guide UMIs in the cell; this is not derived from guide_assignment. | create_mdata.py |
+| MuData.obs and modality obs | assigned_guides_before_qc | integer | After guide assignment | Number of nonzero calls in guide.layers['guide_assignment'] before applying GUIDE_ASSIGNMENT_max_guides_per_cell. | filter_guide_assignment_qc.py |
 | hashing.obs | batch | categorical | Hashing only | Input batch label for each hashtag-count row. | Hash mapping |
 | hashing.obs | concat_batch | categorical | Hashing after concatenation | Measurement-set/source label added during concatenation. | hashing_concat.py |
 | hashing.obs | cluster_id | integer/string | Hashing after demultiplexing | Demultiplexing cluster assigned from the HTO report. | demultiplex_filter.py |
 | hashing.obs | hto_type | string/categorical | Hashing after demultiplexing | HTO identity or demultiplexing class associated with cluster_id. | demultiplex_filter.py |
 | hashing.obs | hto_type_split | string/categorical | Hashing after demultiplexing | Normalized HTO class; multi-HTO labels are collapsed to multiplets and negatives remain negative. | demultiplex_filter.py |
+| hashing.obs | hto_positive_cells_post_clone | integer | Hashing after clone filtering | Number of positive singlet cells supporting this cell's HTO within its measurement set, recalculated after guide and clone filtering. | filter_hto_post_clone.py |
+| hashing.obs | hto_called_post_clone | boolean | Hashing after clone filtering | True when the cell is a positive singlet for an HTO meeting HTO_min_positive_cells in its measurement set. | filter_hto_post_clone.py |
 
 ## Gene fields
 
@@ -184,6 +187,8 @@ The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62a
 | guide.uns | capture_method | one-element string array | Always | Guide capture design, for example crop-seq or direct-capture. | create_mdata.py |
 | guide.uns | moi | one-element string array | Always | Recorded or inferred multiplicity-of-infection class: high or low. | create_mdata.py |
 | MuData.uns | pairs_to_test | DataFrame | Inference preparation only | Requested guide-gene pairs with guide_id and gene_id; used by SCEPTRE and native PerTurbo local/cis inference. | prepare_inference.py |
+| MuData.uns | guide_assignment_cell_filter | dictionary | After guide-assignment QC | Threshold and aggregate before/after cell counts for the maximum-assigned-guide filter. | filter_guide_assignment_qc.py |
+| MuData.uns | hto_post_clone_filter | dictionary | Hashing after clone filtering | Post-clone HTO support threshold, singlet policy, and aggregate before/after cell counts. | filter_hto_post_clone.py |
 | MuData.uns | local_analysis_per_guide_results | DataFrame | Current final default inference | Merged local/cis guide-gene results and annotations. | merge_local_global_results.py |
 | MuData.uns | local_analysis_per_element_results | DataFrame | Current final default inference | Merged local/cis target-element-gene results aggregated across guides. | merge_local_global_results.py |
 | MuData.uns | global_analysis_per_guide_results | DataFrame | Current final default inference | Global/trans all-by-all PerTurbo guide-gene results and annotations. | merge_local_global_results.py |

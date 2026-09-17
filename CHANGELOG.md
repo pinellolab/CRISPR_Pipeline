@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### `Changed`
 
+- Added a configurable post-assignment ceiling on assigned gRNAs per cell
+  (`GUIDE_ASSIGNMENT_max_guides_per_cell`, default 15). For hashing runs, HTO
+  support is now recalculated per measurement set after optional clone removal
+  (`HTO_min_positive_cells`, default 20), followed by configurable singlet-only
+  retention (`HTO_keep_singlets_only`, default true). The HTML and live W&B
+  dashboards report before/after counts and plots for both filters.
 - **One control group for both inference methods.** The new `INFERENCE_control_group`
   parameter (default `auto`) names the cells a perturbation is compared against,
   in SCEPTRE's vocabulary, and the pipeline translates it for PerTurbo:

@@ -585,6 +585,132 @@
     "source_artifact": "additional_qc/guide/guide_metrics.tsv"
   },
   {
+    "flat_key": "guide_assignment_filter.measurement_set",
+    "section": "guide_assignment_filter",
+    "metric": "measurement_set",
+    "description": "Measurement-set label, or all for the aggregate.",
+    "unit": null,
+    "row_level": "aggregate row plus one row per measurement set",
+    "source_artifact": "additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv"
+  },
+  {
+    "flat_key": "guide_assignment_filter.threshold",
+    "section": "guide_assignment_filter",
+    "metric": "threshold",
+    "description": "Configured maximum assigned-guide rule.",
+    "unit": null,
+    "row_level": "aggregate row plus one row per measurement set",
+    "source_artifact": "additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv"
+  },
+  {
+    "flat_key": "guide_assignment_filter.cells_before",
+    "section": "guide_assignment_filter",
+    "metric": "cells_before",
+    "description": "Cells entering the assigned-guide filter.",
+    "unit": "cells",
+    "row_level": "aggregate row plus one row per measurement set",
+    "source_artifact": "additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv"
+  },
+  {
+    "flat_key": "guide_assignment_filter.cells_after",
+    "section": "guide_assignment_filter",
+    "metric": "cells_after",
+    "description": "Cells retained by the assigned-guide filter.",
+    "unit": "cells",
+    "row_level": "aggregate row plus one row per measurement set",
+    "source_artifact": "additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv"
+  },
+  {
+    "flat_key": "guide_assignment_filter.cells_removed",
+    "section": "guide_assignment_filter",
+    "metric": "cells_removed",
+    "description": "Cells above the assigned-guide ceiling.",
+    "unit": "cells",
+    "row_level": "aggregate row plus one row per measurement set",
+    "source_artifact": "additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv"
+  },
+  {
+    "flat_key": "guide_assignment_filter.removed_percent",
+    "section": "guide_assignment_filter",
+    "metric": "removed_percent",
+    "description": "Percent of entering cells removed.",
+    "unit": "percent",
+    "row_level": "aggregate row plus one row per measurement set",
+    "source_artifact": "additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv"
+  },
+  {
+    "flat_key": "hto_post_clone_filter.measurement_set",
+    "section": "hto_post_clone_filter",
+    "metric": "measurement_set",
+    "description": "Measurement set on which HTO support was recalculated.",
+    "unit": null,
+    "row_level": "one row per filter step and measurement set",
+    "source_artifact": "additional_qc/hto_filter/hto_filter_flow.tsv"
+  },
+  {
+    "flat_key": "hto_post_clone_filter.step_order",
+    "section": "hto_post_clone_filter",
+    "metric": "step_order",
+    "description": "Sequential post-clone HTO filter step.",
+    "unit": null,
+    "row_level": "one row per filter step and measurement set",
+    "source_artifact": "additional_qc/hto_filter/hto_filter_flow.tsv"
+  },
+  {
+    "flat_key": "hto_post_clone_filter.filter_label",
+    "section": "hto_post_clone_filter",
+    "metric": "filter_label",
+    "description": "HTO support or singlet filter name.",
+    "unit": null,
+    "row_level": "one row per filter step and measurement set",
+    "source_artifact": "additional_qc/hto_filter/hto_filter_flow.tsv"
+  },
+  {
+    "flat_key": "hto_post_clone_filter.threshold",
+    "section": "hto_post_clone_filter",
+    "metric": "threshold",
+    "description": "Configured HTO retention rule.",
+    "unit": null,
+    "row_level": "one row per filter step and measurement set",
+    "source_artifact": "additional_qc/hto_filter/hto_filter_flow.tsv"
+  },
+  {
+    "flat_key": "hto_post_clone_filter.cells_before",
+    "section": "hto_post_clone_filter",
+    "metric": "cells_before",
+    "description": "Cells entering this HTO filter step.",
+    "unit": "cells",
+    "row_level": "one row per filter step and measurement set",
+    "source_artifact": "additional_qc/hto_filter/hto_filter_flow.tsv"
+  },
+  {
+    "flat_key": "hto_post_clone_filter.cells_after",
+    "section": "hto_post_clone_filter",
+    "metric": "cells_after",
+    "description": "Cells retained after this HTO filter step.",
+    "unit": "cells",
+    "row_level": "one row per filter step and measurement set",
+    "source_artifact": "additional_qc/hto_filter/hto_filter_flow.tsv"
+  },
+  {
+    "flat_key": "hto_post_clone_filter.cells_removed",
+    "section": "hto_post_clone_filter",
+    "metric": "cells_removed",
+    "description": "Cells removed at this HTO filter step.",
+    "unit": "cells",
+    "row_level": "one row per filter step and measurement set",
+    "source_artifact": "additional_qc/hto_filter/hto_filter_flow.tsv"
+  },
+  {
+    "flat_key": "hto_post_clone_filter.removed_percent",
+    "section": "hto_post_clone_filter",
+    "metric": "removed_percent",
+    "description": "Percent of entering cells removed at this step.",
+    "unit": "percent",
+    "row_level": "one row per filter step and measurement set",
+    "source_artifact": "additional_qc/hto_filter/hto_filter_flow.tsv"
+  },
+  {
     "flat_key": "additional_qc_clones.action",
     "section": "additional_qc_clones",
     "metric": "action",

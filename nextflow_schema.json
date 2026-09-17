@@ -52,6 +52,19 @@
                     "description": "Enable the hashing branch of the workflow.",
                     "help_text": "When true, the workflow expects hash modality rows in the samplesheet, runs hashing mapping, filtering, demultiplexing, and uses the hashing dashboard path."
                 },
+                "HTO_min_positive_cells": {
+                    "type": "integer",
+                    "default": 20,
+                    "minimum": 1,
+                    "description": "Minimum positive singlet cells required to call an HTO within a measurement set.",
+                    "help_text": "Calculated after guide-assignment QC and optional clone removal, so HTO support reflects only cells eligible for inference. Cells assigned to an HTO below this support are removed."
+                },
+                "HTO_keep_singlets_only": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Retain only positive HTO singlets after post-clone HTO support filtering.",
+                    "help_text": "When enabled, HTO-negative and HTO-multiplet cells are removed after under-supported HTO calls are excluded."
+                },
                 "ENABLE_SCRUBLET": {
                     "type": "boolean",
                     "default": true,
@@ -382,6 +395,13 @@
                     "default": 5,
                     "minimum": 1,
                     "description": "Number of EM initializations passed to SCEPTRE guide assignment."
+                },
+                "GUIDE_ASSIGNMENT_max_guides_per_cell": {
+                    "type": "integer",
+                    "default": 15,
+                    "minimum": 0,
+                    "description": "Maximum number of assigned gRNAs allowed in a retained cell after guide assignment.",
+                    "help_text": "Cells with more assigned guides are removed before clone detection and inference. The count comes from guide.layers['guide_assignment'], not raw guide UMIs. Set 0 to disable."
                 }
             }
         },

@@ -62,8 +62,8 @@ flowchart TD
         HC["Concatenate hashing AnnData<br/>barcodes qualified by measurement set"]
         HI["Intersect qualified hashing keys<br/>with RNA-QC-surviving keys"]
         HS["Split hashing data by batch"]
-        HD["GMM-demux each batch<br/>retain filtered demultiplexed cells"]
-        HCAT["Concatenate demultiplexed hashing AnnData"]
+        HD["GMM-demux each batch<br/>annotate HTO identity/class"]
+        HCAT["Concatenate annotated hashing AnnData<br/>without early cell removal"]
 
         H1 --> HC
         H2 --> HC
@@ -99,7 +99,11 @@ flowchart TD
     GF["Global gene prevalence filter<br/>expression in more than<br/>QC_min_cells_per_gene x total cells"]
     DUAL{"DUAL_GUIDE?"}
     COLLAPSE["Collapse assigned guides<br/>to intended-target elements"]
-    FINAL["concat_mudata.h5mu<br/>input to inference"]
+    GUIDEMAX["Assigned-guide ceiling per cell<br/>default: ≤15"]
+    CLONE["Optional clone removal"]
+    HTOSUPPORT["Recalculate positive HTO support<br/>per measurement set; default ≥20"]
+    HTOSINGLET["Retain called HTO singlets only"]
+    FINAL["filtered MuData<br/>input to inference"]
 
     FIRST --> BSPLIT
     BSPLIT --> A1
@@ -109,8 +113,9 @@ flowchart TD
     A2 --> ACAT
     A3 --> ACAT
     ACAT --> GF --> DUAL
-    DUAL -- "false" --> FINAL
-    DUAL -- "true" --> COLLAPSE --> FINAL
+    DUAL -- "false" --> GUIDEMAX
+    DUAL -- "true" --> COLLAPSE --> GUIDEMAX
+    GUIDEMAX --> CLONE --> HTOSUPPORT --> HTOSINGLET --> FINAL
 ```
 
 ## Verified Nextflow channel lineage
@@ -135,7 +140,7 @@ flowchart TD
     PRE --> FH["filter_hashing"]
     HC --> FH
     FH --> DM["three files -> demultiplex x3"]
-    DM --> HCC["collect/sort -> hashing_concat"]
+    DM --> HCC["collect/sort annotations -> hashing_concat"]
 
     PRE --> CMD["CreateMuData"]
     GC --> CMD
@@ -144,8 +149,11 @@ flowchart TD
     M1 --> PA["prepare_assignment -> three batch MuData files"]
     PA --> CL["CLEANSER x3"]
     CL --> MC["collect/sort -> mudata_concat"]
-    MC --> M2["concat_mudata.h5mu: 69,123 cells"]
-    M2 --> INF["inference_pipeline"]
+    MC --> M2["concat_mudata.h5mu"]
+    M2 --> GQ["assigned-guide ceiling"]
+    GQ --> CQ["optional clone removal"]
+    CQ --> HQ["post-clone HTO support + singlets"]
+    HQ --> INF["inference_pipeline"]
 ```
 
 ### Evidence from the completed May 14, 2026 run
@@ -188,8 +196,9 @@ and task objects under `gs://igvf-pertub-seq-pipeline-data/work`.
   creation. SCEPTRE or CLEANSER assigns guides from the per-cell guide counts
   after the modalities have been intersected.
 - When hashing is enabled, hashing is first restricted to cells that survived
-  RNA QC. `CreateMuData` then performs the final barcode intersection across
-  the gene, guide, and demultiplexed hashing modalities.
+  RNA QC. Early demultiplexing annotates HTO identities but does not make the
+  final cell-retention decision. `CreateMuData` intersects gene, guide, and
+  annotated hashing modalities.
 - When hashing is disabled, the final intersection uses only gene and guide
   barcodes. Scrublet has already run per RNA measurement set.
 - `mudata.h5mu` is one combined multimodal object containing all three batches.
@@ -203,3 +212,11 @@ and task objects under `gs://igvf-pertub-seq-pipeline-data/work`.
 - Clone calling/removal remains downstream of guide-assignment aggregation and
   therefore necessarily occurs after mitochondrial filtering. It is still
   controlled by `ENABLE_CLONE_REMOVAL` and `CLONE_REMOVAL_action`.
+- Cells with more than `GUIDE_ASSIGNMENT_max_guides_per_cell` binary guide
+  assignments are removed before clone calling. The default is 15; zero disables it.
+- After optional clone removal, HTO positive-cell support is recalculated within
+  each measurement set. An HTO must have at least `HTO_min_positive_cells`
+  surviving positive singlets (default 20) to be called. When
+  `HTO_keep_singlets_only=true`, only called HTO singlets enter inference.
+- The HTML and live W&B dashboards show per-measurement-set before/after counts,
+  thresholds, assigned-guide distributions, HTO support, and the sequential flow.

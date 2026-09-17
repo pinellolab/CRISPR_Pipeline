@@ -69,6 +69,20 @@ This table is generated from `bin/qc_metrics_json.py`. The flat key combines the
 | additional_qc_guide.cells_per_guide_max | Maximum observed value. of assigned cells per guide. | cells_per_guide | overall row where batch == all, plus per-batch rows when batch metadata exists | additional_qc/guide/guide_metrics.tsv |
 | additional_qc_guide.cells_per_guide_q25 | Twenty-fifth percentile. of assigned cells per guide. | cells_per_guide | overall row where batch == all, plus per-batch rows when batch metadata exists | additional_qc/guide/guide_metrics.tsv |
 | additional_qc_guide.cells_per_guide_q75 | Seventy-fifth percentile. of assigned cells per guide. | cells_per_guide | overall row where batch == all, plus per-batch rows when batch metadata exists | additional_qc/guide/guide_metrics.tsv |
+| guide_assignment_filter.measurement_set | Measurement-set label, or all for the aggregate. |  | aggregate row plus one row per measurement set | additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv |
+| guide_assignment_filter.threshold | Configured maximum assigned-guide rule. |  | aggregate row plus one row per measurement set | additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv |
+| guide_assignment_filter.cells_before | Cells entering the assigned-guide filter. | cells | aggregate row plus one row per measurement set | additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv |
+| guide_assignment_filter.cells_after | Cells retained by the assigned-guide filter. | cells | aggregate row plus one row per measurement set | additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv |
+| guide_assignment_filter.cells_removed | Cells above the assigned-guide ceiling. | cells | aggregate row plus one row per measurement set | additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv |
+| guide_assignment_filter.removed_percent | Percent of entering cells removed. | percent | aggregate row plus one row per measurement set | additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv |
+| hto_post_clone_filter.measurement_set | Measurement set on which HTO support was recalculated. |  | one row per filter step and measurement set | additional_qc/hto_filter/hto_filter_flow.tsv |
+| hto_post_clone_filter.step_order | Sequential post-clone HTO filter step. |  | one row per filter step and measurement set | additional_qc/hto_filter/hto_filter_flow.tsv |
+| hto_post_clone_filter.filter_label | HTO support or singlet filter name. |  | one row per filter step and measurement set | additional_qc/hto_filter/hto_filter_flow.tsv |
+| hto_post_clone_filter.threshold | Configured HTO retention rule. |  | one row per filter step and measurement set | additional_qc/hto_filter/hto_filter_flow.tsv |
+| hto_post_clone_filter.cells_before | Cells entering this HTO filter step. | cells | one row per filter step and measurement set | additional_qc/hto_filter/hto_filter_flow.tsv |
+| hto_post_clone_filter.cells_after | Cells retained after this HTO filter step. | cells | one row per filter step and measurement set | additional_qc/hto_filter/hto_filter_flow.tsv |
+| hto_post_clone_filter.cells_removed | Cells removed at this HTO filter step. | cells | one row per filter step and measurement set | additional_qc/hto_filter/hto_filter_flow.tsv |
+| hto_post_clone_filter.removed_percent | Percent of entering cells removed at this step. | percent | one row per filter step and measurement set | additional_qc/hto_filter/hto_filter_flow.tsv |
 | additional_qc_clones.action | Requested clone filtering action. |  | run-level | additional_qc/clones/clone_metrics.tsv |
 | additional_qc_clones.input_cells | Cells entering clone detection. | cells | run-level | additional_qc/clones/clone_metrics.tsv |
 | additional_qc_clones.retained_cells | Cells retained for inference. | cells | run-level | additional_qc/clones/clone_metrics.tsv |

@@ -2,6 +2,7 @@ include { prepare_assignment } from '../../../modules/local/prepare_assignment'
 include { guide_assignment_cleanser } from '../../../modules/local/guide_assignment_cleanser'
 include { guide_assignment_sceptre } from '../../../modules/local/guide_assignment_sceptre'
 include { mudata_concat } from '../../../modules/local/mudata_concat'
+include { filter_guide_assignment_qc } from '../../../modules/local/filter_guide_assignment_qc'
 
 workflow guide_assignment_pipeline {
 
@@ -36,6 +37,9 @@ workflow guide_assignment_pipeline {
         error("Invalid GUIDE_ASSIGNMENT_method: ${params.GUIDE_ASSIGNMENT_method}")
     }
 
+    GuideAssignmentQC = filter_guide_assignment_qc(Mudata_concat.concat_mudata)
+
     emit:
-    concat_mudata = Mudata_concat.concat_mudata
+    concat_mudata = GuideAssignmentQC.filtered_mudata
+    guide_assignment_qc = GuideAssignmentQC.guide_assignment_qc
 }

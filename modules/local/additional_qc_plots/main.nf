@@ -5,6 +5,8 @@ process additional_qc_plots {
         path mudata
         path clone_qc_input
         path saturation_qc_input
+        path guide_assignment_qc_input
+        path hto_qc_input
 
     output:
         path "additional_qc", emit: additional_qc
@@ -23,6 +25,14 @@ process additional_qc_plots {
         if find ${saturation_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
             mkdir -p additional_qc/sequencing_saturation
             cp -R ${saturation_qc_input}/. additional_qc/sequencing_saturation/
+        fi
+        if find ${guide_assignment_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
+            mkdir -p additional_qc/guide_assignment_filter
+            cp -R ${guide_assignment_qc_input}/. additional_qc/guide_assignment_filter/
+        fi
+        if find ${hto_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
+            mkdir -p additional_qc/hto_filter
+            cp -R ${hto_qc_input}/. additional_qc/hto_filter/
         fi
 
         mapping_gene.py \\

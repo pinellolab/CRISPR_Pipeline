@@ -1028,6 +1028,42 @@ def collect_additional_qc_blocks(additional_qc_dir):
             )
         )
 
+    guide_filter_dir = os.path.join(additional_qc_dir, "guide_assignment_filter")
+    guide_filter_flow = _safe_read_tsv(os.path.join(guide_filter_dir, "guide_assignment_filter_flow.tsv"))
+    guide_filter_images = sorted(glob.glob(os.path.join(guide_filter_dir, "guide_assignment_filter_steps_*.png")))
+    if not guide_filter_flow.empty or guide_filter_images:
+        summary = guide_filter_flow.loc[guide_filter_flow.get("measurement_set", pd.Series(dtype=str)) == "all"]
+        highlight = ""
+        if not summary.empty:
+            row = summary.iloc[0]
+            highlight = f"Cells: {human_format(row['cells_before'])} → {human_format(row['cells_after'])}; removed: {human_format(row['cells_removed'])}"
+        blocks.append(new_block(
+            "Guide", "Assigned-guide cell filter", "Maximum assigned gRNAs per cell",
+            highlight, bool(highlight), table=guide_filter_flow,
+            table_description="Per-measurement-set cells before and after the assigned-guide ceiling",
+            image=guide_filter_images,
+            image_description=["Assigned-guide distribution and filtering flow for one measurement set."] * len(guide_filter_images),
+        ))
+
+    hto_filter_dir = os.path.join(additional_qc_dir, "hto_filter")
+    hto_filter_flow = _safe_read_tsv(os.path.join(hto_filter_dir, "hto_filter_flow.tsv"))
+    hto_filter_images = sorted(glob.glob(os.path.join(hto_filter_dir, "hto_filter_steps_*.png")))
+    if not hto_filter_flow.empty or hto_filter_images:
+        highlight = ""
+        required = {"measurement_set", "step_order", "cells_before", "cells_after"}
+        if required.issubset(hto_filter_flow.columns):
+            ordered = hto_filter_flow.sort_values("step_order")
+            before = int(ordered.groupby("measurement_set").head(1)["cells_before"].sum())
+            after = int(ordered.groupby("measurement_set").tail(1)["cells_after"].sum())
+            highlight = f"Cells: {human_format(before)} → {human_format(after)}"
+        blocks.append(new_block(
+            "Hashing", "Post-clone HTO filtering", "HTO support and singlet retention",
+            highlight, bool(highlight), table=hto_filter_flow,
+            table_description="Per-measurement-set HTO support and singlet filters after clone removal",
+            image=hto_filter_images,
+            image_description=["Post-clone HTO support, singlet counts, and sequential filtering flow."] * len(hto_filter_images),
+        ))
+
     # Intended target QC
     intended_dir = os.path.join(additional_qc_dir, "intended_target")
     intended_metrics = _safe_read_tsv(os.path.join(intended_dir, "intended_target_metrics.tsv"))

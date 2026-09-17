@@ -136,6 +136,8 @@ Demo mode is strictly for pre-runs. The pipeline prints warnings at startup and 
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
 | `ENABLE_DATA_HASHING` | `false` | `true`, `false` | Enables the hashing workflow: hash seqspec checks, hash mapping, hashtag filtering, demultiplexing, hash-aware MuData creation, and hash dashboard sections. |
+| `HTO_min_positive_cells` | `20` | Integer `>= 1` | Calls an HTO within a measurement set only when at least this many positive singlet cells remain **after guide-assignment and optional clone filtering**. |
+| `HTO_keep_singlets_only` | `true` | `true`, `false` | When hashing is enabled, retains only cells assigned to a called single HTO after post-clone support is recalculated. |
 | `ENABLE_SCRUBLET` | `true` | `true`, `false` | Runs Scrublet independently after UMI/MAD filtering in every RNA measurement set. |
 | `SCRUBLET_assay_type` | `droplet` | `droplet`, `cc-perturb-seq` | Resolves the automatic expected-doublet rate: `0.08` for droplet data and `0.025` for CC-Perturb-seq. |
 | `SCRUBLET_expected_doublet_rate` | `null` | `null` or fraction in `(0,1)` | Optional explicit expected-doublet rate overriding the assay profile. |
@@ -196,6 +198,7 @@ The complete machine-readable QC output catalog is available as
 | `GUIDE_ASSIGNMENT_cleanser_probability_threshold` | `1` | `0` to `1` | Probability threshold used by Cleanser guide assignment. |
 | `GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold` | `0.8` | `0` to `1` | Posterior probability threshold for SCEPTRE mixture-based guide assignment. |
 | `GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep` | `5` | Integer `>= 1` | Number of EM initializations used by SCEPTRE guide assignment. |
+| `GUIDE_ASSIGNMENT_max_guides_per_cell` | `15` | Integer `>= 0` | Removes cells with more than this many nonzero assignments in `guide.layers['guide_assignment']`; `0` disables the filter. This runs before optional clone removal. |
 
 ##### Inference options
 
