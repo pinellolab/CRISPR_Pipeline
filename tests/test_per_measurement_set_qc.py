@@ -99,11 +99,12 @@ def test_one_measurement_set_is_filtered_and_audited(tmp_path, monkeypatch):
         "QC_barcode_filter = none",
         "QC_min_counts_per_cell",
         "QC_min_genes_per_cell",
-        "QC_pct_mito",
         "QC_MAD_total_counts",
         "QC_MAD_n_genes",
+        "QC_pct_mito",
         "QC_MAD_pct_mito",
     ]
+    assert flow.iloc[-2:]["filter_label"].tolist() == ["QC_pct_mito", "QC_MAD_pct_mito"]
     gene_step = flow.loc[flow["filter_label"] == "QC_min_genes_per_cell"].iloc[0]
     assert gene_step["cells_before"] == 4
     assert gene_step["cells_after"] == 3

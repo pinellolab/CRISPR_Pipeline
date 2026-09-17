@@ -116,7 +116,7 @@ def plot_barcode_rank(
 
 def plot_filter_steps(snapshots, batch, outpath):
     """Plot each cell filter immediately before and after it is applied."""
-    fig, axes = plt.subplots(len(snapshots), 2, figsize=(12, 3.15 * len(snapshots)), squeeze=False)
+    fig, axes = plt.subplots(len(snapshots), 3, figsize=(17, 3.15 * len(snapshots)), squeeze=False)
     for row_index, snapshot in enumerate(snapshots):
         before = np.asarray(snapshot["values_before"], dtype=float)
         after = np.asarray(snapshot["values_after"], dtype=float)
@@ -132,13 +132,22 @@ def plot_filter_steps(snapshots, batch, outpath):
         ):
             ax = axes[row_index, column]
             ax.hist(values, bins=bins, color=color, edgecolor="white")
-            for bound in (snapshot["lower"], snapshot["upper"]):
-                if snapshot["applied"] and np.isfinite(bound):
-                    ax.axvline(bound, color="#dc2626", linestyle="--", linewidth=1.4)
+            add_filter_bounds(ax, snapshot)
             count_key = "cells_before" if state == "Before" else "cells_after"
             ax.set_title(f"{state}: {snapshot[count_key]:,} cells")
             ax.set_xlabel(snapshot["metric_label"])
             ax.set_ylabel("Cells")
+        box_ax = axes[row_index, 2]
+        box_values = [before if before.size else np.array([np.nan]), after if after.size else np.array([np.nan])]
+        boxes = box_ax.boxplot(
+            box_values, vert=False, labels=["Before", "After"], showfliers=False,
+            patch_artist=True, medianprops={"color": "#111827", "linewidth": 1.5},
+        )
+        for patch, color in zip(boxes["boxes"], ("#93c5fd", "#6ee7b7")):
+            patch.set_facecolor(color)
+        add_filter_bounds(box_ax, snapshot, show_legend=True)
+        box_ax.set_title("Before/after distribution")
+        box_ax.set_xlabel(snapshot["metric_label"])
         status = "applied" if snapshot["applied"] else "disabled/skipped"
         axes[row_index, 0].text(
             0.01, 0.96,
@@ -150,6 +159,22 @@ def plot_filter_steps(snapshots, batch, outpath):
     fig.tight_layout()
     fig.savefig(outpath, dpi=150, facecolor="white")
     plt.close(fig)
+
+
+def add_filter_bounds(ax, snapshot, show_legend=False):
+    """Draw explicitly named fixed or MAD limits on a QC axis."""
+    if not snapshot["applied"]:
+        return
+    color = "#dc2626" if snapshot["bound_kind"] == "MAD" else "#059669"
+    linestyle = "--" if snapshot["bound_kind"] == "MAD" else ":"
+    for bound, label in (
+        (snapshot["lower"], snapshot.get("lower_label")),
+        (snapshot["upper"], snapshot.get("upper_label")),
+    ):
+        if np.isfinite(bound):
+            ax.axvline(bound, color=color, linestyle=linestyle, linewidth=1.5, label=label)
+    if show_legend and (snapshot.get("lower_label") or snapshot.get("upper_label")):
+        ax.legend(frameon=False, fontsize=8, loc="best")
 
 
 def plot_filter_flow(flow, batch, outpath):
@@ -190,7 +215,7 @@ def plot_filter_flow(flow, batch, outpath):
     plt.close(fig)
 
 
-def plot_qc_distributions(obs, limits, fixed_limits, batch, outpath):
+def plot_qc_distributions(obs, limits, fixed_limits, mad_counts, batch, outpath):
     specs = [
         ("log1p_total_counts", "Log1p total RNA UMIs", limits["total_counts"]),
         ("log1p_n_genes_by_counts", "Log1p detected genes", limits["n_genes"]),
@@ -202,13 +227,13 @@ def plot_qc_distributions(obs, limits, fixed_limits, batch, outpath):
         ax.hist(values, bins=60, color="#60a5fa", edgecolor="white")
         fixed_lower, fixed_upper = fixed_limits[column]
         if np.isfinite(fixed_lower):
-            ax.axvline(fixed_lower, color="#059669", linestyle=":", label="Fixed bound")
+            ax.axvline(fixed_lower, color="#059669", linestyle=":", label="Fixed minimum")
         if np.isfinite(fixed_upper):
-            ax.axvline(fixed_upper, color="#059669", linestyle=":", label="Fixed bound")
+            ax.axvline(fixed_upper, color="#059669", linestyle=":", label="Fixed maximum")
         if np.isfinite(lower):
-            ax.axvline(lower, color="#dc2626", linestyle="--", label="MAD bound")
+            ax.axvline(lower, color="#dc2626", linestyle="--", label=f"Lower {mad_counts[column]:g} MAD")
         if np.isfinite(upper):
-            ax.axvline(upper, color="#dc2626", linestyle="--", label="MAD bound")
+            ax.axvline(upper, color="#dc2626", linestyle="--", label=f"Upper {mad_counts[column]:g} MAD")
         ax.set_xlabel(label)
         ax.set_ylabel("Cells")
         if np.isfinite(lower) or np.isfinite(upper):
@@ -330,7 +355,10 @@ def main(args):
         "retained_percent_of_input": 100 * post_knee_cells / input_cells if input_cells else 0,
     })
 
-    def apply_filter(filter_name, filter_label, threshold, values, lower, upper, enabled):
+    def apply_filter(
+        filter_name, filter_label, threshold, values, lower, upper, enabled,
+        bound_kind="fixed", lower_label=None, upper_label=None,
+    ):
         nonlocal current_keep
         before_keep = current_keep.copy()
         candidate = np.ones(adata.n_obs, dtype=bool)
@@ -360,6 +388,9 @@ def main(args):
             "values_after": values[current_keep],
             "lower": lower,
             "upper": upper,
+            "bound_kind": bound_kind,
+            "lower_label": lower_label,
+            "upper_label": upper_label,
             "applied": bool(enabled),
             "removed": before_count - after_count,
             "cells_before": before_count,
@@ -372,7 +403,7 @@ def main(args):
     apply_filter(
         "total RNA UMIs", "QC_min_counts_per_cell",
         f"total_counts ≥ {args.min_counts:,}", total_counts, float(args.min_counts), np.inf,
-        args.min_counts > 0,
+        args.min_counts > 0, lower_label=f"Fixed minimum ({args.min_counts:,})",
     )
     apply_filter(
         "detected genes", "QC_min_genes_per_cell",
@@ -383,21 +414,13 @@ def main(args):
         ),
         n_genes, float(args.min_genes), np.inf,
         args.barcode_filter == "none" and args.min_genes > 0,
+        lower_label=f"Fixed minimum ({args.min_genes:,})",
     )
-    apply_filter(
-        "mitochondrial percentage", "QC_pct_mito",
-        f"pct_counts_mt < {args.pct_mito:g}%", pct_mito, -np.inf,
-        np.nextafter(float(args.pct_mito), -np.inf),
-        args.pct_mito < 100,
-    )
-    fixed_keep = current_keep.copy()
-
-    mad_specs = (
+    non_mito_mad_specs = (
         ("log1p total RNA UMIs", "QC_MAD_total_counts", "total_counts", "log1p_total_counts", args.mad_total_counts, False),
         ("log1p detected genes", "QC_MAD_n_genes", "n_genes", "log1p_n_genes_by_counts", args.mad_n_genes, False),
-        ("mitochondrial percentage", "QC_MAD_pct_mito", "pct_mito", "pct_counts_mt", args.mad_pct_mito, True),
     )
-    for metric_name, parameter, key, column, n_mads, upper_only in mad_specs:
+    for metric_name, parameter, key, column, n_mads, upper_only in non_mito_mad_specs:
         _median, metric_mad, lower, upper = limits[key]
         effective = n_mads > 0 and np.isfinite(metric_mad) and metric_mad > 0
         bound_text = (
@@ -407,8 +430,41 @@ def main(args):
         apply_filter(
             metric_name, parameter, bound_text,
             adata.obs[column].to_numpy(dtype=float), lower, upper, effective,
+            bound_kind="MAD", lower_label=f"Lower {n_mads:g} MAD", upper_label=f"Upper {n_mads:g} MAD",
         )
+
+    # Mitochondrial filtering is deliberately last: the fixed cutoff followed by
+    # the optional upper-tail MAD cutoff. This keeps its impact explicit in the
+    # sequential audit and avoids conflating it with RNA-complexity filtering.
+    apply_filter(
+        "mitochondrial percentage", "QC_pct_mito",
+        f"pct_counts_mt < {args.pct_mito:g}%", pct_mito, -np.inf,
+        np.nextafter(float(args.pct_mito), -np.inf),
+        args.pct_mito < 100, upper_label=f"Fixed maximum ({args.pct_mito:g}%)",
+    )
+    _median, mito_mad, lower, upper = limits["pct_mito"]
+    mito_mad_effective = args.mad_pct_mito > 0 and np.isfinite(mito_mad) and mito_mad > 0
+    mito_bound_text = (
+        f"≤ {upper:.3g} ({args.mad_pct_mito:g} MAD upper tail)"
+        if mito_mad_effective else
+        f"disabled (configured {args.mad_pct_mito:g}; observed MAD {mito_mad:.3g})"
+    )
+    apply_filter(
+        "mitochondrial percentage", "QC_MAD_pct_mito", mito_bound_text,
+        pct_mito, lower, upper, mito_mad_effective,
+        bound_kind="MAD", upper_label=f"Upper {args.mad_pct_mito:g} MAD",
+    )
     keep = current_keep
+
+    # Preserve the historical summary meanings even though the visual audit now
+    # applies mitochondrial filters last. These masks are order-independent.
+    fixed_keep = np.ones(adata.n_obs, dtype=bool)
+    if args.min_counts > 0:
+        fixed_keep &= total_counts >= args.min_counts
+    if args.barcode_filter == "none" and args.min_genes > 0:
+        fixed_keep &= n_genes >= args.min_genes
+    if args.pct_mito < 100:
+        fixed_keep &= pct_mito < args.pct_mito
 
     fixed_plot_limits = {
         "log1p_total_counts": (
@@ -427,6 +483,11 @@ def main(args):
         adata.obs,
         limits,
         fixed_plot_limits,
+        {
+            "log1p_total_counts": args.mad_total_counts,
+            "log1p_n_genes_by_counts": args.mad_n_genes,
+            "pct_counts_mt": args.mad_pct_mito,
+        },
         batch,
         args.qc_dir / f"qc_distributions_scRNA_{label}.png",
     )

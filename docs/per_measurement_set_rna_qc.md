@@ -12,8 +12,9 @@ For each measurement set the pipeline:
 2. qualifies cell barcodes with the same measurement-set key used by the guide
    and hashing modalities;
 3. computes and plots its own barcode-rank curve and `knee`/`knee2` points;
-4. applies the selected knee, fixed RNA UMI/minimum-gene/mitochondrial filters,
-   and any enabled MAD filters;
+4. applies the selected knee, fixed RNA UMI and minimum-gene filters, RNA UMI
+   and detected-gene MAD filters, and finally the fixed and MAD mitochondrial
+   filters;
 5. writes one filtered AnnData, two QC plots, and one audit-table row; and
 6. concatenates only the retained measurement-set matrices.
 
@@ -60,8 +61,9 @@ directory also contains:
 - `qc_distributions_scRNA_<measurement_set>.png`;
 - `rna_qc_filter_flow_<measurement_set>.png`, showing cells → resolved filter
   parameter → retained cells in exact execution order;
-- `rna_qc_filter_steps_<measurement_set>.png`, showing the relevant RNA metric
-  immediately before and after every fixed or MAD filter;
+- `rna_qc_filter_steps_<measurement_set>.png`, showing before/after histograms
+  and boxplots for every fixed or MAD filter. Two-sided filters explicitly label
+  their lower and upper MAD boundaries; the mitochondrial MAD is upper-tail only;
 - `measurement_set_qc_filter_flow.tsv`, the machine-readable sequential counts,
   thresholds, enabled/skipped state, removal percentage, and retained percentage; and
 - `measurement_set_qc_metrics.tsv`, with input, post-knee, post-fixed-threshold,
@@ -70,7 +72,8 @@ directory also contains:
 
 The dashboard RNA-QC block renders these plots and the combined table.
 The displayed order is barcode calling (`none`, `knee`, or `knee2`), minimum
-RNA UMIs, minimum detected genes (only for `none`), fixed mitochondrial cutoff,
-RNA-UMI MAD, detected-gene MAD, and mitochondrial MAD. Disabled or inapplicable
+RNA UMIs, minimum detected genes (only for `none`), RNA-UMI MAD,
+detected-gene MAD, fixed mitochondrial cutoff, and mitochondrial MAD.
+Thus all mitochondrial filtering occurs last. Disabled or inapplicable
 steps remain visible with zero removal. The global gene-support filter remains
 separate because it runs after measurement-set concatenation.
