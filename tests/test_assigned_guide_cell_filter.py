@@ -485,3 +485,53 @@ def test_prepare_inference_subsets_genes_and_guides_but_not_cells(tmp_path, monk
 def test_prepare_inference_no_longer_mentions_a_cell_filter():
     source = (BIN_DIR / "prepare_inference.py").read_text()
     assert "targeted_cells" not in source
+
+
+def test_mudata_concat_derives_the_inference_covariates_once():
+    """The covariates are written where the cell set is decided, not later.
+
+    Totals are pinned before the gene filter (so they cover every gene) and the
+    conditioned columns for both methods are written after it, so the cis
+    subset, SCEPTRE's chunking and both inference steps all inherit one set.
+    """
+    from inference_covariates import CANONICAL_COVARIATES
+
+    prepared = mc.apply_cell_and_gene_filters(
+        _cis_subset_mudata(), min_cells_fraction=0.0
+    )
+
+    # Every conditioned count is on SCEPTRE's frame with its log on PerTurbo's.
+    for covariate in CANONICAL_COVARIATES:
+        if covariate.kind != "count":
+            continue
+        assert covariate.name in prepared.obs.columns
+        assert covariate.perturbo_name in prepared["gene"].obs.columns
+        np.testing.assert_allclose(
+            np.asarray(prepared["gene"].obs[covariate.perturbo_name], dtype=float),
+            np.log(np.asarray(prepared.obs[covariate.name], dtype=float)),
+        )
+    # Depth over both genes and the whole guide matrix, as in the fixture.
+    assert list(prepared.obs["total_gene_umis"]) == [8.0, 7.0, 15.0, 15.0]
+    assert list(prepared.obs["num_expressed_genes"]) == [2.0, 1.0, 2.0, 2.0]
+    assert list(prepared.obs["total_guide_umis"]) == [7.0, 11.0, 23.0, 5.0]
+
+
+def test_prepare_inference_reuses_the_upstream_covariates(tmp_path, monkeypatch):
+    """Given a MuData that already carries the columns, nothing is re-derived."""
+    import prepare_inference
+
+    upstream = mc.apply_cell_and_gene_filters(_cis_subset_mudata(), min_cells_fraction=0.0)
+    mudata_path = tmp_path / "concat_mudata.h5mu"
+    upstream.write(mudata_path)
+    pairs_path = tmp_path / "pairs_to_test.csv"
+    pd.DataFrame({"guide_id": ["g1"], "gene_name": ["GENE1"]}).to_csv(pairs_path, index=False)
+
+    monkeypatch.chdir(tmp_path)
+    prepare_inference.main(str(pairs_path), str(mudata_path), subset_for_cis=True)
+    prepared = mudata.read_h5mu(tmp_path / "mudata_inference_input.h5mu")
+
+    for column in ("total_guide_umis", "total_gene_umis", "num_expressed_genes"):
+        np.testing.assert_allclose(
+            np.asarray(prepared.obs[column], dtype=float),
+            np.asarray(upstream.obs[column], dtype=float),
+        )

@@ -207,6 +207,17 @@ def collapse_guides(
 
     mdata_collapsed = md.MuData(mdata_dict)
     mdata_collapsed.uns = mdata.uns.copy()
+    # A fresh MuData regenerates its top-level obs from the modalities, which
+    # would drop the shared inference covariates mudata_concat.py wrote there
+    # (SCEPTRE reads them as colData). Carry the explicit columns over for the
+    # retained cells.
+    pulled = {c for m in mdata.mod.values() for c in m.obs.columns}
+    pulled |= {f"{name}:{c}" for name, m in mdata.mod.items() for c in m.obs.columns}
+    explicit = [c for c in mdata.obs.columns if c not in pulled]
+    for column in explicit:
+        mdata_collapsed.obs[column] = mdata.obs.loc[
+            mdata_collapsed.obs_names, column
+        ].to_numpy()
     collapsed_guide_adata.uns = guide_adata.uns.copy()
 
     mdata_collapsed.write(mdata_output_fp)

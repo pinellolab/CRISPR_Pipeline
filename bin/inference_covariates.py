@@ -7,6 +7,13 @@ columns from the analysed modality's ``obs``; SCEPTRE reads the MuData's
 top-level ``obs``, which its R reader exposes as ``colData`` and feeds to
 ``sceptre::import_data`` as ``extra_covariates``.
 
+The columns are written once, in ``bin/mudata_concat.py``, right after the
+pipeline's single cell filter and before its gene filter, so every downstream
+step (cis subsetting, SCEPTRE chunking, both inference methods) inherits one
+set of values. ``ensure_inference_covariates`` is the entry point; it is
+idempotent, and ``bin/prepare_inference.py`` and the PerTurbo adapter call it
+again only as a fallback for a user-supplied MuData that skipped that step.
+
 The set is the per-cell guide UMI depth, the per-cell library size, the number of
 genes detected, and the sequencing batch. All three counts enter on the log
 scale.
@@ -62,13 +69,31 @@ coerces every ``colData`` column with ``as.factor`` before building a model
 matrix, so a continuous column becomes a factor with one level per distinct
 value -- a dense ``n x k`` matrix handed to ``Matrix::rankMatrix``.
 
-Two scales, by necessity
-------------------------
-SCEPTRE log-transforms inside its formula; PerTurbo applies no transform of its
-own. So each count is written twice: under its natural name for SCEPTRE, and as
-a precomputed ``log_`` column for PerTurbo. ``validate_positive`` enforces the
+Two scales, for clarity
+-----------------------
+SCEPTRE log-transforms inside its formula. PerTurbo standardises every
+``--continuous-covariates`` column itself: a column that looks count-like
+(non-negative, >= 98% whole numbers) gets ``log1p`` then a z-score, anything
+else a z-score alone. Handing it the raw counts would therefore also work, but
+which branch fires would depend on a heuristic over the values, and
+``log1p`` differs from SCEPTRE's ``log`` at small guide-UMI depths. Writing the
+``log`` explicitly makes the scale the same on both sides by construction;
+PerTurbo then only centres and scales it, which leaves the fit unchanged. So
+each count is written twice: under its natural name for SCEPTRE, and as a
+precomputed ``log_`` column for PerTurbo. ``validate_positive`` enforces the
 assumption that makes a plain ``log`` safe -- no cell surviving filtering may
 have zero depth -- and fails loudly rather than emitting ``-inf``.
+
+What the count columns mean
+---------------------------
+``total_gene_umis`` is the per-cell UMI total over every gene in the count
+matrix and ``num_expressed_genes`` the number of genes with at least one UMI;
+both come from scanpy's ``calculate_qc_metrics`` (``total_counts`` and
+``n_genes_by_counts``) in ``bin/create_mdata.py``, computed before any gene
+restriction. On a targeted panel the matrix *is* the panel, so both are panel
+quantities there. ``total_guide_umis`` is the per-cell UMI total over the raw
+guide matrix, distinct from ``num_expressed_guides`` (guides with any UMI) and
+from the number of *assigned* guides.
 
 ``total_gene_umis`` is also PerTurbo's size-factor key (``--library-size-key``),
 so PerTurbo receives it both as an offset and as a covariate. That is deliberate:
@@ -173,12 +198,13 @@ def ensure_guide_umi_totals(mdata) -> str | None:
 
 
 def ensure_gene_depth_totals(mdata) -> list[str]:
-    """Pin the full-matrix cell depth onto the gene modality, before any subset.
+    """Pin the cell depth onto the gene modality, before any gene subset.
 
-    ``bin/create_mdata.py`` already writes both columns over every gene, so this
-    normally finds them. The fallback has to run before the cis subset narrows
-    the genes -- summing a subset would measure depth over the retained genes
-    only -- and before chunking, which is the case these columns exist for.
+    ``bin/create_mdata.py`` already writes both columns over every gene in the
+    count matrix, so this normally finds them. The fallback sums the matrix it
+    is given, so it has to run before the gene filter, the cis subset and the
+    SCEPTRE chunking narrow the genes -- summing afterwards would measure depth
+    over the retained genes only.
     """
     if "gene" not in mdata.mod:
         return []
@@ -273,6 +299,19 @@ def materialize_shared_covariates(mdata, columns=CANONICAL_COVARIATES) -> list[s
         written.append(name)
     print(f"Shared covariates written to the MuData's top-level obs: {written or 'none'}")
     return written
+
+
+def ensure_inference_covariates(mdata) -> list[str]:
+    """Derive and write every conditioned covariate, once, on the object given.
+
+    The totals are pinned first (they must see the whole matrices), then the
+    ``log_`` columns for PerTurbo and the plain columns for SCEPTRE. Calling it
+    again on an object that already carries the columns rewrites the same
+    values, so the fallbacks downstream are safe.
+    """
+    ensure_guide_umi_totals(mdata)
+    ensure_gene_depth_totals(mdata)
+    return materialize_shared_covariates(mdata)
 
 
 def sceptre_formula_terms(available: list[str]) -> list[str]:
