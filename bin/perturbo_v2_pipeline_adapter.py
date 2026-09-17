@@ -165,7 +165,22 @@ def _build_guide_identity_mapping(mdata: md.MuData) -> dict[str, str]:
     return dict(zip(perturbo_names.astype(str), guide_ids.tolist()))
 
 
-def _covariate_has_control_variance(input_path: Path, map_key: str, names_key: str) -> bool:
+def _covariate_has_baseline_variance(
+    input_path: Path, map_key: str, names_key: str, *, pool: str
+) -> bool:
+    """Does the guide-UMI covariate vary among the cells the baseline is fit on?
+
+    Which cells those are is the CRT pool's business, so the check has to follow
+    it. Under ``control-anchored`` PerTurbo fits its stage-one baseline on the
+    pure control cells, and a covariate constant across them is unidentifiable
+    there. Under ``all-cells`` -- the shipped high-MOI default -- the baseline is
+    fit on every cell, so the control cells say nothing about identifiability:
+    measuring variance over the controls alone would drop the covariate from a
+    screen that merely has few or no non-targeting guides, and PerTurbo would
+    then be conditioning on less than SCEPTRE, which is the asymmetry this
+    covariate list exists to remove. ``auto`` leaves the choice to PerTurbo, so
+    it is treated as the restrictive case.
+    """
     with _open_mudata(input_path, backed="r") as mdata:
         if GUIDE_UMI_COVARIATE not in mdata[GENE_MODALITY].obs.columns:
             return False
@@ -173,6 +188,11 @@ def _covariate_has_control_variance(input_path: Path, map_key: str, names_key: s
             mdata[GENE_MODALITY].obs[GUIDE_UMI_COVARIATE],
             errors="coerce",
         ).to_numpy(dtype=float)
+        if pool == "all-cells":
+            finite = values[np.isfinite(values)]
+            if finite.size < 2:
+                return False
+            return bool(np.nanstd(finite) > 1e-8)
         guide = mdata[GUIDE_MODALITY]
         mapping = guide.varm[map_key]
         names = [str(x) for x in guide.uns[names_key]]
@@ -583,15 +603,19 @@ def _run_perturbo(
         if c.perturbo_name is not None and c.perturbo_name in obs_columns
     ]
     continuous, batch = perturbo_covariate_arguments(present)
-    # Live now that the guide-UMI term is a conditioned covariate: PerTurbo fits its
-    # baseline on the control cells, and a covariate constant across them is
-    # unidentifiable there.
-    if GUIDE_UMI_COVARIATE in continuous and not _covariate_has_control_variance(
-        input_path, map_key, names_key
+    # Live now that the guide-UMI term is a conditioned covariate: a covariate
+    # constant across the cells PerTurbo fits its baseline on is unidentifiable
+    # there. Which cells those are depends on the resolved CRT pool.
+    if GUIDE_UMI_COVARIATE in continuous and not _covariate_has_baseline_variance(
+        input_path, map_key, names_key, pool=args.resolved_crt_pool
     ):
+        scope = (
+            "every cell" if args.resolved_crt_pool == "all-cells" else "the control cells"
+        )
         print(
-            f"Dropping {GUIDE_UMI_COVARIATE}: it has zero variance in the control cells "
-            "PerTurbo fits its baseline on."
+            f"Dropping {GUIDE_UMI_COVARIATE}: it has zero variance across {scope}, "
+            f"which PerTurbo fits its baseline on under the "
+            f"{args.resolved_crt_pool!r} pool."
         )
         continuous = [c for c in continuous if c != GUIDE_UMI_COVARIATE]
     if continuous:
