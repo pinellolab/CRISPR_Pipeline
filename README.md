@@ -940,10 +940,9 @@ python bin/render_wandb_pipeline_dashboard.py \
   --output /path/to/pipeline_execution.html
 ```
 
-The HTML contains no credentials, FASTQs, command scripts, or unbounded task
+The live HTML contains no credentials, FASTQs, command scripts, or unbounded task
 logs. Small QC images are embedded so the page remains portable; duplicate
-images and images larger than 3 MB are omitted. The total HTML is hard-capped at
-20 MB. Failed and aborted trace rows include a short, sanitized tail from
+images and images larger than 3 MB are omitted. Failed and aborted trace rows include a short, sanitized tail from
 `.command.err` and `.command.out`, plus a bounded Nextflow log tail when supplied.
 Tokens and common secret assignments are redacted before HTML escaping.
 
@@ -965,10 +964,13 @@ python bin/wandb_qc_smoke.py \
 
 The renderer is deliberately independent of the scientific processes. A live
 sidecar calls it whenever the trace changes and updates only the
-`pipeline/main_execution` W&B media key. Live updates omit images to preserve
-the upload budget; the final update embeds the available plots. The sidecar
-reserves two thirds of the 20 MB budget for the final page and falls back to a
-metrics-only final page if the image-rich page does not fit.
+`pipeline/main_execution` W&B media key. The interim execution view uses the
+pipeline's white visual theme. Once `pipeline_dashboard/dashboard.html` exists,
+the final update replaces the interim page with that canonical dashboard and
+embeds every local `src` and lazy `data-imgsrc` image as a data URI. Thus the
+W&B panel has the same tabs, tables, QC plots, and inference plots as the output
+dashboard without broken relative links. `WANDB_MAX_FINAL_HTML_BYTES` controls
+the separate final-dashboard limit and defaults to 50 MB.
 
 Launch it with the wrapper after the dataset-specific provenance `prepare` and
 `check` steps have succeeded:
@@ -978,6 +980,8 @@ source ~/.bashrc
 export WANDB_OUTDIR=/absolute/path/to/results
 export WANDB_ENTITY=your-wandb-entity
 export WANDB_RUN_NAME=dataset_$(date -u +%Y%m%dT%H%M%SZ)
+# Recommended: keep one stable W&B run per dataset across Nextflow resumes.
+export WANDB_RUN_ID=dataset_current
 # Optional when W&B is installed outside the active Nextflow environment:
 export WANDB_PYTHON=/absolute/path/to/wandb/environment/bin/python
 

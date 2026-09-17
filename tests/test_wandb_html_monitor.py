@@ -50,6 +50,28 @@ def test_signature_changes_when_trace_changes(tmp_path):
     assert monitor.input_signature(paths, trace, status) != first
 
 
+def test_final_white_dashboard_embeds_lazy_images(tmp_path):
+    dashboard_dir = tmp_path / "pipeline_dashboard"
+    figures = dashboard_dir / "figures"
+    svg = dashboard_dir / "svg"
+    figures.mkdir(parents=True)
+    svg.mkdir()
+    (figures / "qc.png").write_bytes(b"png-bytes")
+    (svg / "plot.svg").write_text("<svg></svg>", encoding="utf-8")
+    dashboard = dashboard_dir / "dashboard.html"
+    dashboard.write_text(
+        '<html><body><img src="svg/plot.svg">'
+        '<button data-imgsrc="figures/qc.png">QC</button></body></html>',
+        encoding="utf-8",
+    )
+
+    result = monitor.inline_dashboard_assets(dashboard)
+
+    assert 'src="data:image/svg+xml;base64,' in result
+    assert 'data-imgsrc="data:image/png;base64,' in result
+    assert "figures/qc.png" not in result
+
+
 def test_wrapper_preserves_nextflow_exit_when_telemetry_is_unavailable(tmp_path):
     fake_nextflow = tmp_path / "nextflow"
     fake_nextflow.write_text("#!/usr/bin/env bash\nexit 7\n", encoding="utf-8")

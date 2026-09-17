@@ -35,10 +35,12 @@ done
   --entity "${WANDB_ENTITY:-}" \
   --token-env "${WANDB_TOKEN_ENV:-WB_IGVF}" \
   --run-name "$RUN_NAME" --source-run-id "$RUN_ID" \
+  --wandb-run-id "${WANDB_RUN_ID:-}" \
   --outdir "$OUTDIR" --trace "$TRACE_FILE" --nextflow-log "$NEXTFLOW_LOG" \
   --status-file "$STATUS_FILE" --dashboard-html "$DASHBOARD_HTML" \
   --poll-seconds "${WANDB_POLL_SECONDS:-30}" \
-  --max-total-bytes "${WANDB_MAX_BYTES:-20000000}" &
+  --max-total-bytes "${WANDB_MAX_BYTES:-20000000}" \
+  --max-final-html-bytes "${WANDB_MAX_FINAL_HTML_BYTES:-50000000}" &
 MONITOR_PID=$!
 
 write_status() {

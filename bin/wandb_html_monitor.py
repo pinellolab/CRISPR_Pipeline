@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
+import mimetypes
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -61,8 +64,41 @@ def read_final_status(status_file: Path) -> tuple[str, bool]:
         return "failed", True
 
 
+def inline_dashboard_assets(dashboard_html: Path) -> str:
+    """Return the canonical white dashboard with local image assets embedded."""
+    source = dashboard_html.read_text(encoding="utf-8", errors="replace")
+    root = dashboard_html.parent.resolve()
+    cache: dict[Path, str] = {}
+
+    def replace(match: re.Match[str]) -> str:
+        attribute, quote, value = match.groups()
+        if value.startswith(("data:", "http:", "https:", "#", "javascript:")):
+            return match.group(0)
+        candidate = (root / value).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            return match.group(0)
+        if not candidate.is_file():
+            return match.group(0)
+        if candidate not in cache:
+            media_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
+            encoded = base64.b64encode(candidate.read_bytes()).decode("ascii")
+            cache[candidate] = f"data:{media_type};base64,{encoded}"
+        return f"{attribute}={quote}{cache[candidate]}{quote}"
+
+    # Figures are loaded lazily from data-imgsrc; navigation icons use src.
+    # Embed both so W&B receives the complete dashboard as one HTML object.
+    return re.sub(r"\b(src|data-imgsrc)=([\"'])([^\"']+)\2", replace, source)
+
+
 def render_snapshot(args: argparse.Namespace, status: str, final: bool) -> int:
     paths = discovered_paths(args.outdir, args.run_name)
+    if final and paths["final_dashboard_html"].is_file():
+        document = inline_dashboard_assets(paths["final_dashboard_html"])
+        args.dashboard_html.parent.mkdir(parents=True, exist_ok=True)
+        args.dashboard_html.write_text(document, encoding="utf-8")
+        return args.dashboard_html.stat().st_size
     render_args = SimpleNamespace(
         trace=args.trace,
         run_id=args.source_run_id,
@@ -90,6 +126,7 @@ def main() -> int:
     parser.add_argument("--entity", default="")
     parser.add_argument("--run-name", required=True)
     parser.add_argument("--source-run-id", required=True)
+    parser.add_argument("--wandb-run-id", default="")
     parser.add_argument("--token-env", default="WB_IGVF")
     parser.add_argument("--outdir", type=Path, required=True)
     parser.add_argument("--trace", type=Path, required=True)
@@ -98,6 +135,7 @@ def main() -> int:
     parser.add_argument("--dashboard-html", type=Path, required=True)
     parser.add_argument("--poll-seconds", type=float, default=30)
     parser.add_argument("--max-total-bytes", type=int, default=20_000_000)
+    parser.add_argument("--max-final-html-bytes", type=int, default=50_000_000)
     parser.add_argument("--max-image-bytes", type=int, default=10_000_000)
     parser.add_argument("--tail-lines", type=int, default=30)
     args = parser.parse_args()
@@ -109,6 +147,9 @@ def main() -> int:
     os.environ["WANDB_API_KEY"] = token
     try:
         import wandb
+        init_options = {}
+        if args.wandb_run_id:
+            init_options.update(id=args.wandb_run_id, resume="allow")
         run = wandb.init(
             project=args.project,
             entity=args.entity or None,
@@ -117,6 +158,7 @@ def main() -> int:
             tags=["crispr-pipeline", "html-dashboard", "live"],
             config={"telemetry_layout": "single-html", "source_run_id": args.source_run_id},
             settings=wandb.Settings(init_timeout=20),
+            **init_options,
         )
     except Exception as error:
         warn(f"initialization failed; pipeline continues: {error}")
@@ -133,16 +175,21 @@ def main() -> int:
             if signature != previous or final:
                 try:
                     size = render_snapshot(args, status, final)
-                    upload_limit = args.max_total_bytes if final else args.max_total_bytes // 3
-                    if sent_bytes + size > upload_limit and final:
-                        # Preserve the final state and metrics even if all final images do not fit.
-                        size = render_snapshot(args, status, False)
-                    if sent_bytes + size <= args.max_total_bytes:
+                    full_dashboard = final and paths["final_dashboard_html"].is_file()
+                    within_budget = (
+                        size <= args.max_final_html_bytes
+                        if full_dashboard
+                        else sent_bytes + size <= args.max_total_bytes
+                    )
+                    if within_budget:
                         run.log({"pipeline/main_execution": wandb.Html(str(args.dashboard_html), inject=False)}, step=step)
                         sent_bytes += size
                         step += 1
                     else:
-                        warn(f"upload budget reached ({sent_bytes} bytes sent); skipping {size}-byte snapshot")
+                        warn(
+                            f"upload limit reached ({sent_bytes} bytes sent); "
+                            f"skipping {size}-byte snapshot"
+                        )
                     previous = signature
                 except Exception as error:
                     warn(f"render/upload failed; pipeline continues: {error}")
