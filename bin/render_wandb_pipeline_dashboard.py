@@ -122,6 +122,7 @@ TASK_HANDLER_RE = re.compile(
     r"status:\s*(?P<status>[A-Z]+);\s*exit:\s*(?P<exit>.*?);\s*"
     r"error:\s*.*?;\s*workDir:\s*(?P<workdir>[^\]]+)\]"
 )
+SUBMITTED_PROCESS_RE = re.compile(r"(?m)Submitted process > (?P<name>.+)$")
 
 
 def merge_live_tasks(rows: list[dict[str, str]], nextflow_log: Path | None) -> list[dict[str, str]]:
@@ -138,10 +139,32 @@ def merge_live_tasks(rows: list[dict[str, str]], nextflow_log: Path | None) -> l
         item["peak_rss"] = "—"
         latest[item["task_id"]] = item
     recorded = {row.get("task_id", "") for row in rows}
+    recorded_names = {row.get("name", "") for row in rows}
     live = [
         item for task_id, item in latest.items()
-        if task_id not in recorded and item["status"] in {"NEW", "SUBMITTED", "RUNNING"}
+        if task_id not in recorded
+        and item["name"] not in recorded_names
+        and item["status"] in {"NEW", "SUBMITTED", "RUNNING"}
     ]
+    live_names = {item["name"] for item in live}
+    submitted = {}
+    for match in SUBMITTED_PROCESS_RE.finditer(text):
+        name = match.group("name").strip()
+        submitted[name] = {
+            "task_id": f"submitted:{name}",
+            "name": name,
+            "process": name,
+            "status": "SUBMITTED",
+            "exit": "-",
+            "workdir": "",
+            "duration": "in progress",
+            "realtime": "in progress",
+            "peak_rss": "—",
+        }
+    live.extend(
+        item for name, item in submitted.items()
+        if name not in recorded_names and name not in live_names
+    )
     return rows + live
 
 

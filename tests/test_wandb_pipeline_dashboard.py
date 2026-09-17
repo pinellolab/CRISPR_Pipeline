@@ -86,6 +86,18 @@ def test_live_tasks_are_added_from_nextflow_log_without_false_failure_panel(tmp_
     assert dashboard.failure_content(merged, log, 30) == ""
 
 
+def test_newly_submitted_task_is_visible_before_taskhandler_update(tmp_path):
+    log = tmp_path / "nextflow.log"
+    log.write_text(
+        "Submitted process > NFCORE_CRISPR:CRISPR_PIPELINE:mapping_rna_pipeline:mappingscRNA (4)\n",
+        encoding="utf-8",
+    )
+    merged = dashboard.merge_live_tasks([], log)
+    assert len(merged) == 1
+    assert merged[0]["status"] == "SUBMITTED"
+    assert dashboard.family_for(merged[0]["process"]) == "mapping"
+
+
 def test_qc_catalog_and_sanitized_failure_evidence_are_embedded(tmp_path):
     workdir = tmp_path / "work"
     workdir.mkdir()
