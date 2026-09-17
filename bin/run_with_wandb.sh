@@ -36,7 +36,7 @@ done
   --token-env "${WANDB_TOKEN_ENV:-WB_IGVF}" \
   --run-name "$RUN_NAME" --source-run-id "$RUN_ID" \
   --wandb-run-id "${WANDB_RUN_ID:-}" \
-  --replace-run "${WANDB_REPLACE_RUN:-false}" \
+  --replace-run "${WANDB_REPLACE_RUN:-true}" \
   --publish-live-html "${WANDB_PUBLISH_LIVE_HTML:-true}" \
   --outdir "$OUTDIR" --trace "$TRACE_FILE" --nextflow-log "$NEXTFLOW_LOG" \
   --status-file "$STATUS_FILE" --dashboard-html "$DASHBOARD_HTML" \

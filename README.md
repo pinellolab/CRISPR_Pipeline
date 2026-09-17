@@ -964,9 +964,11 @@ python bin/wandb_qc_smoke.py \
 
 The advanced execution dashboard is the single W&B interface throughout the
 run. After a task reaches a terminal state, the sidecar rebuilds that interface
-from the trace and all QC artifacts published so far. It overwrites the
-`pipeline/main_execution` W&B summary-media value, so the project has one
-current dashboard instead of a Step selector containing stale copies. The
+from the trace and all QC artifacts published so far. Because W&B only creates
+a visible HTML panel from run history, the sidecar publishes one history point
+in a fresh dashboard run and deletes the preceding dashboard run only after the
+replacement succeeds. The project therefore has one visible current dashboard
+instead of a Step selector containing stale copies. The
 interface retains its dependency graph, process-family panels, searchable task
 tables, bounded failure evidence, QC metrics, and image galleries while it is
 running and after it finishes.
@@ -986,11 +988,11 @@ source ~/.bashrc
 export WANDB_OUTDIR=/absolute/path/to/results
 export WANDB_ENTITY=your-wandb-entity
 export WANDB_RUN_NAME=dataset_$(date -u +%Y%m%dT%H%M%SZ)
-# Recommended: keep one stable W&B run per dataset across Nextflow resumes.
+# Recommended: keep one stable dashboard-series ID per dataset.
 export WANDB_RUN_ID=dataset_current
-# Reuse this ID. The summary-media value is replaced in place on every update.
-# Do not delete the run: W&B does not permit reuse of a deleted run ID.
-export WANDB_REPLACE_RUN=false
+# Each successful refresh receives a unique run ID and removes the preceding
+# series member, leaving exactly one visible HTML panel.
+export WANDB_REPLACE_RUN=true
 # Optional when W&B is installed outside the active Nextflow environment:
 export WANDB_PYTHON=/absolute/path/to/wandb/environment/bin/python
 

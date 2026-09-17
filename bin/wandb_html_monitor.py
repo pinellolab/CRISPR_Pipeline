@@ -96,7 +96,7 @@ def main() -> int:
     parser.add_argument("--run-name", required=True)
     parser.add_argument("--source-run-id", required=True)
     parser.add_argument("--wandb-run-id", default="")
-    parser.add_argument("--replace-run", default="false")
+    parser.add_argument("--replace-run", default="true")
     parser.add_argument("--publish-live-html", default="true")
     parser.add_argument("--token-env", default="WB_IGVF")
     parser.add_argument("--outdir", type=Path, required=True)
@@ -119,19 +119,11 @@ def main() -> int:
     try:
         import wandb
         publish_live_html = args.publish_live_html.lower() in {"1", "true", "yes"}
-        init_options = {}
-        if args.wandb_run_id:
-            init_options.update(id=args.wandb_run_id, resume="allow")
-        run = wandb.init(
-            project=args.project,
-            entity=args.entity or None,
-            name=args.run_name,
-            job_type="pipeline-execution-dashboard",
-            tags=["crispr-pipeline", "html-dashboard", "live"],
-            config={"telemetry_layout": "single-html", "source_run_id": args.source_run_id},
-            settings=wandb.Settings(init_timeout=20),
-            **init_options,
-        )
+        replace_run = args.replace_run.lower() in {"1", "true", "yes"}
+        if replace_run and not (args.wandb_run_id and args.entity):
+            warn("visible-run replacement requires --wandb-run-id and --entity; using one run")
+            replace_run = False
+        api = wandb.Api(timeout=30) if replace_run else None
     except Exception as error:
         warn(f"initialization failed; pipeline continues: {error}")
         return 0
@@ -139,33 +131,83 @@ def main() -> int:
     sent_bytes = 0
     step = 0
     previous = ""
+    run = None
+    old_run_ids: list[str] = []
+    if replace_run and api is not None:
+        try:
+            for candidate in api.runs(f"{args.entity}/{args.project}"):
+                series = candidate.config.get("dashboard_series_id", "")
+                if candidate.id == args.wandb_run_id or series == args.wandb_run_id:
+                    old_run_ids.append(candidate.id)
+        except Exception as error:
+            warn(f"cannot inventory prior dashboard runs: {error}")
+
+    def open_run(run_id: str, resume: str):
+        return wandb.init(
+            project=args.project,
+            entity=args.entity or None,
+            id=run_id or None,
+            resume=resume if run_id else None,
+            name=args.run_name,
+            job_type="pipeline-execution-dashboard",
+            tags=["crispr-pipeline", "html-dashboard", "live"],
+            config={
+                "telemetry_layout": "single-visible-html",
+                "source_run_id": args.source_run_id,
+                "dashboard_series_id": args.wandb_run_id,
+            },
+            settings=wandb.Settings(init_timeout=20),
+        )
+
     try:
+        if not replace_run:
+            run = open_run(args.wandb_run_id, "allow")
         while True:
             status, final = read_final_status(args.status_file)
             paths = discovered_paths(args.outdir, args.run_name)
             signature = input_signature(paths, args.trace, args.status_file)
             if signature != previous or final:
                 try:
-                    run.summary["pipeline_status"] = status
-                    run.summary["dashboard_status"] = (
-                        "BUILDING_FULL_QC" if not final else "FINALIZING"
-                    )
                     if final or publish_live_html:
                         size = render_snapshot(args, status, final)
                         within_budget = size <= args.max_final_html_bytes
                         if within_budget:
-                            # Summary media is a single mutable value. Updating
-                            # it replaces the visible dashboard instead of
-                            # creating a W&B history step and Step selector.
-                            run.summary.update({
+                            if replace_run:
+                                # W&B only materializes a visible HTML panel
+                                # from history. Each refresh therefore gets a
+                                # fresh one-point run; preceding members of the
+                                # dashboard series are removed after success.
+                                suffix = f"{time.time_ns():x}"[-14:]
+                                visible_id = f"{args.wandb_run_id[:70]}-{suffix}"
+                                run = open_run(visible_id, "never")
+                            assert run is not None
+                            run.log({
                                 "pipeline/main_execution": wandb.Html(
                                     str(args.dashboard_html), inject=False
-                                ),
+                                )
+                            }, step=0)
+                            run.summary.update({
                                 "pipeline_status": status,
                                 "dashboard_status": (
                                     "FULL_QC_PUBLISHED" if final else "LIVE"
                                 ),
+                                "dashboard_updates": step + 1,
+                                "dashboard_uploaded_bytes": sent_bytes + size,
+                                "source_run_id": args.source_run_id,
                             })
+                            if replace_run:
+                                run.finish()
+                                run = None
+                                for old_id in old_run_ids:
+                                    if old_id == visible_id:
+                                        continue
+                                    try:
+                                        api.run(
+                                            f"{args.entity}/{args.project}/{old_id}"
+                                        ).delete()
+                                    except Exception as error:
+                                        warn(f"cannot remove prior dashboard {old_id}: {error}")
+                                old_run_ids = [visible_id]
                             sent_bytes += size
                             step += 1
                         else:
@@ -179,17 +221,19 @@ def main() -> int:
             if final:
                 break
             time.sleep(max(args.poll_seconds, 1))
-        run.summary.update({
-            "dashboard_status": "FULL_QC_PUBLISHED" if status == "completed" else "FAILED",
-            "dashboard_updates": step,
-            "dashboard_uploaded_bytes": sent_bytes,
-            "source_run_id": args.source_run_id,
-        })
+        if run is not None:
+            run.summary.update({
+                "dashboard_status": "FULL_QC_PUBLISHED" if status == "completed" else "FAILED",
+                "dashboard_updates": step,
+                "dashboard_uploaded_bytes": sent_bytes,
+                "source_run_id": args.source_run_id,
+            })
     except Exception as error:
         warn(f"monitor failed; pipeline continues: {error}")
     finally:
         try:
-            run.finish()
+            if run is not None:
+                run.finish()
         except Exception as error:
             warn(f"finish failed; pipeline continues: {error}")
     return 0
