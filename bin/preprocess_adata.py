@@ -186,13 +186,18 @@ def plot_filter_steps(snapshots, batch, outpath, knee_context):
         low, high = np.nanpercentile(finite, [0.5, 99.5]) if finite.size > 1 else (finite[0] - 0.5, finite[0] + 0.5)
         if not np.isfinite(low) or not np.isfinite(high) or low == high:
             low, high = float(np.nanmin(finite)) - 0.5, float(np.nanmax(finite)) + 0.5
+        span = max(high - low, 1e-6)
+        display_xlim = (low - 0.08 * span, high + 0.08 * span)
         bins = np.linspace(low, high, 51)
         for column, (values, color, state) in enumerate(
             ((before, "#60a5fa", "Before"), (after, "#34d399", "After"))
         ):
             ax = axes[row_index, column]
             ax.hist(values, bins=bins, color=color, edgecolor="white")
-            add_filter_bounds(ax, snapshot)
+            # Keep the first panel free for its filter/removal annotation; the
+            # identical cutoff legend is shown on the after-filter panel.
+            add_filter_bounds(ax, snapshot, display_xlim=display_xlim, show_legend=(column == 1))
+            ax.set_xlim(display_xlim)
             count_key = "cells_before" if state == "Before" else "cells_after"
             ax.set_title(f"{state}: {snapshot[count_key]:,} cells")
             ax.set_xlabel(snapshot["metric_label"])
@@ -205,7 +210,8 @@ def plot_filter_steps(snapshots, batch, outpath, knee_context):
         )
         for patch, color in zip(boxes["boxes"], ("#93c5fd", "#6ee7b7")):
             patch.set_facecolor(color)
-        add_filter_bounds(box_ax, snapshot, show_legend=True)
+        add_filter_bounds(box_ax, snapshot, display_xlim=display_xlim, show_legend=True)
+        box_ax.set_xlim(display_xlim)
         box_ax.set_title("Before/after distribution")
         box_ax.set_xlabel(snapshot["metric_label"])
         status = "applied" if snapshot["applied"] else "disabled/skipped"
@@ -221,8 +227,8 @@ def plot_filter_steps(snapshots, batch, outpath, knee_context):
     plt.close(fig)
 
 
-def add_filter_bounds(ax, snapshot, show_legend=False):
-    """Draw explicitly named fixed or MAD limits on a QC axis."""
+def add_filter_bounds(ax, snapshot, show_legend=False, display_xlim=None):
+    """Draw filter limits without allowing distant bounds to flatten the data."""
     if not snapshot["applied"]:
         return
     colors = {"MAD": "#dc2626", "Scrublet": "#7c3aed", "fixed": "#059669"}
@@ -233,7 +239,15 @@ def add_filter_bounds(ax, snapshot, show_legend=False):
         (snapshot["upper"], snapshot.get("upper_label")),
     ):
         if np.isfinite(bound):
-            ax.axvline(bound, color=color, linestyle=linestyle, linewidth=1.5, label=label)
+            resolved_label = f"{label} = {bound:.3g}" if label else f"Threshold = {bound:.3g}"
+            outside_view = display_xlim is not None and not (display_xlim[0] <= bound <= display_xlim[1])
+            if outside_view:
+                resolved_label += " (outside view)"
+                # An empty artist preserves the exact cutoff in the legend without
+                # stretching the axis until the observed histogram disappears.
+                ax.plot([], [], color=color, linestyle=linestyle, linewidth=1.5, label=resolved_label)
+            else:
+                ax.axvline(bound, color=color, linestyle=linestyle, linewidth=1.5, label=resolved_label)
     if show_legend and (snapshot.get("lower_label") or snapshot.get("upper_label")):
         ax.legend(frameon=False, fontsize=8, loc="best")
 
