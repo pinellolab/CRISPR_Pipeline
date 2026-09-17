@@ -127,6 +127,8 @@ def main() -> int:
     parser.add_argument("--run-name", required=True)
     parser.add_argument("--source-run-id", required=True)
     parser.add_argument("--wandb-run-id", default="")
+    parser.add_argument("--replace-run", default="false")
+    parser.add_argument("--publish-live-html", default="false")
     parser.add_argument("--token-env", default="WB_IGVF")
     parser.add_argument("--outdir", type=Path, required=True)
     parser.add_argument("--trace", type=Path, required=True)
@@ -147,6 +149,15 @@ def main() -> int:
     os.environ["WANDB_API_KEY"] = token
     try:
         import wandb
+        replace_run = args.replace_run.lower() in {"1", "true", "yes"}
+        publish_live_html = args.publish_live_html.lower() in {"1", "true", "yes"}
+        if replace_run and args.wandb_run_id and args.entity:
+            try:
+                wandb.Api(timeout=30).run(
+                    f"{args.entity}/{args.project}/{args.wandb_run_id}"
+                ).delete()
+            except wandb.errors.CommError:
+                pass
         init_options = {}
         if args.wandb_run_id:
             init_options.update(id=args.wandb_run_id, resume="allow")
@@ -174,29 +185,34 @@ def main() -> int:
             signature = input_signature(paths, args.trace, args.status_file)
             if signature != previous or final:
                 try:
-                    size = render_snapshot(args, status, final)
-                    full_dashboard = final and paths["final_dashboard_html"].is_file()
-                    within_budget = (
-                        size <= args.max_final_html_bytes
-                        if full_dashboard
-                        else sent_bytes + size <= args.max_total_bytes
+                    run.summary["pipeline_status"] = status
+                    run.summary["dashboard_status"] = (
+                        "BUILDING_FULL_QC" if not final else "FINALIZING"
                     )
-                    if within_budget:
-                        run.log({"pipeline/main_execution": wandb.Html(str(args.dashboard_html), inject=False)}, step=step)
-                        sent_bytes += size
-                        step += 1
-                    else:
-                        warn(
-                            f"upload limit reached ({sent_bytes} bytes sent); "
-                            f"skipping {size}-byte snapshot"
+                    if final or publish_live_html:
+                        size = render_snapshot(args, status, final)
+                        full_dashboard = final and paths["final_dashboard_html"].is_file()
+                        within_budget = (
+                            size <= args.max_final_html_bytes
+                            if full_dashboard
+                            else sent_bytes + size <= args.max_total_bytes
                         )
+                        if within_budget:
+                            run.log({"pipeline/main_execution": wandb.Html(str(args.dashboard_html), inject=False)}, step=step)
+                            sent_bytes += size
+                            step += 1
+                        else:
+                            warn(
+                                f"upload limit reached ({sent_bytes} bytes sent); "
+                                f"skipping {size}-byte snapshot"
+                            )
                     previous = signature
                 except Exception as error:
                     warn(f"render/upload failed; pipeline continues: {error}")
             if final:
                 break
             time.sleep(max(args.poll_seconds, 1))
-        run.summary["dashboard_status"] = "PUBLISHED"
+        run.summary["dashboard_status"] = "FULL_QC_PUBLISHED" if status == "completed" else "FAILED"
         run.summary["dashboard_updates"] = step
         run.summary["dashboard_uploaded_bytes"] = sent_bytes
         run.summary["source_run_id"] = args.source_run_id

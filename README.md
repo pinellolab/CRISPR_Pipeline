@@ -962,15 +962,17 @@ python bin/wandb_qc_smoke.py \
   --dashboard-html /path/to/pipeline_execution.html
 ```
 
-The renderer is deliberately independent of the scientific processes. A live
-sidecar calls it whenever the trace changes and updates only the
-`pipeline/main_execution` W&B media key. The interim execution view uses the
-pipeline's white visual theme. Once `pipeline_dashboard/dashboard.html` exists,
-the final update replaces the interim page with that canonical dashboard and
+The renderer is deliberately independent of the scientific processes. By
+default, the sidecar reports live status through the W&B run summary without
+creating HTML history steps. Once `pipeline_dashboard/dashboard.html` exists,
+it publishes that canonical dashboard once to the `pipeline/main_execution`
+media key and
 embeds every local `src` and lazy `data-imgsrc` image as a data URI. Thus the
 W&B panel has the same tabs, tables, QC plots, and inference plots as the output
 dashboard without broken relative links. `WANDB_MAX_FINAL_HTML_BYTES` controls
-the separate final-dashboard limit and defaults to 50 MB.
+the separate final-dashboard limit and defaults to 50 MB. Set
+`WANDB_PUBLISH_LIVE_HTML=true` only when retaining intermediate HTML history is
+intentional.
 
 Launch it with the wrapper after the dataset-specific provenance `prepare` and
 `check` steps have succeeded:
@@ -982,6 +984,8 @@ export WANDB_ENTITY=your-wandb-entity
 export WANDB_RUN_NAME=dataset_$(date -u +%Y%m%dT%H%M%SZ)
 # Recommended: keep one stable W&B run per dataset across Nextflow resumes.
 export WANDB_RUN_ID=dataset_current
+# Replace the prior dataset run so W&B contains one run and one HTML version.
+export WANDB_REPLACE_RUN=true
 # Optional when W&B is installed outside the active Nextflow environment:
 export WANDB_PYTHON=/absolute/path/to/wandb/environment/bin/python
 
