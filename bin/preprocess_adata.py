@@ -140,7 +140,7 @@ def plot_filter_steps(snapshots, batch, outpath):
         box_ax = axes[row_index, 2]
         box_values = [before if before.size else np.array([np.nan]), after if after.size else np.array([np.nan])]
         boxes = box_ax.boxplot(
-            box_values, vert=False, labels=["Before", "After"], showfliers=False,
+            box_values, vert=False, tick_labels=["Before", "After"], showfliers=False,
             patch_artist=True, medianprops={"color": "#111827", "linewidth": 1.5},
         )
         for patch, color in zip(boxes["boxes"], ("#93c5fd", "#6ee7b7")):
