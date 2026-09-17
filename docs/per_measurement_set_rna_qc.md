@@ -61,10 +61,12 @@ directory also contains:
 
 - `knee_plot_scRNA_<measurement_set>.png`;
 - `qc_distributions_scRNA_<measurement_set>.png`;
-- `rna_qc_filter_flow_<measurement_set>.png`, showing cells → resolved filter
-  parameter → retained cells in exact execution order;
-- `rna_qc_filter_steps_<measurement_set>.png`, showing before/after histograms
-  and boxplots for every fixed or MAD filter. Two-sided filters explicitly label
+- `rna_qc_filter_flow_<measurement_set>.png`, with one separate
+  cells-before → filter → cells-after row per step in exact execution order;
+- `rna_qc_filter_steps_<measurement_set>.png`, whose first row shows the full
+  barcode-rank curve, only the knee actually applied, the retained curve, and
+  explicit before/after cell counts. Later rows show before/after histograms
+  and boxplots for each UMI, MAD, or Scrublet filter. Two-sided filters label
   their lower and upper MAD boundaries;
 - `scrublet_scores_scRNA_<measurement_set>.png` when Scrublet is enabled;
 - `post_concat_mito_before_after.png`, `post_concat_gene_support.png`, and

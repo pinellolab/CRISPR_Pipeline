@@ -88,11 +88,9 @@ def plot_barcode_rank(
 ):
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(knee_df["rank"], knee_df["sum_log"], linewidth=1.2, color="#2563eb")
-    for point, color, label in ((point_1, "#dc2626", "Knee 1"), (point_2, "#f59e0b", "Knee 2")):
-        if point is not None:
-            ax.axvline(int(round(point[0])), color=color, linestyle="--", label=label)
     if selected_rank is not None:
-        ax.axvline(selected_rank, color="#111827", linestyle=":", label="Selected")
+        ax.axvline(selected_rank, color="#dc2626", linestyle="--", label="Applied knee")
+        ax.axvspan(1, selected_rank, color="#22c55e", alpha=0.10, label="Retained barcodes")
     if barcode_filter == "none":
         note = f"QC_barcode_filter = none\nNo knee filter applied\n{len(knee_df):,} barcodes retained"
     elif selected_rank is None:
@@ -106,18 +104,80 @@ def plot_barcode_rank(
         0.98, 0.97, note, transform=ax.transAxes, ha="right", va="top", fontsize=9,
         bbox={"boxstyle": "round,pad=0.45", "facecolor": "white", "edgecolor": "#cbd5e1", "alpha": 0.95},
     )
-    ax.set(xlabel="Barcode rank", ylabel="Log1p RNA UMI counts", title=f"{batch}: barcode-rank knee")
-    if point_1 is not None or point_2 is not None or selected_rank is not None:
+    ax.set(xlabel="Barcode rank", ylabel="Log1p RNA UMI counts", title=f"{batch}: applied barcode-rank knee")
+    if selected_rank is not None:
         ax.legend(frameon=False)
     fig.tight_layout()
     fig.savefig(outpath, dpi=180, facecolor="white")
     plt.close(fig)
 
 
-def plot_filter_steps(snapshots, batch, outpath):
-    """Plot each cell filter immediately before and after it is applied."""
-    fig, axes = plt.subplots(len(snapshots), 3, figsize=(17, 3.15 * len(snapshots)), squeeze=False)
+def plot_filter_steps(snapshots, batch, outpath, knee_context):
+    """Plot the applied knee first, then every downstream cell filter."""
+    row_count = len(snapshots) + 1
+    fig, axes = plt.subplots(row_count, 3, figsize=(17, 3.15 * row_count), squeeze=False)
+
+    knee_df = knee_context["knee_df"]
+    selected_rank = knee_context["selected_rank"]
+    selected_threshold = knee_context["selected_threshold"]
+    cells_before = knee_context["cells_before"]
+    cells_after = knee_context["cells_after"]
+    applied = selected_rank is not None
+    tie_note = "\n(includes UMI-threshold ties)" if applied and cells_after != selected_rank else ""
+
+    full_ax = axes[0, 0]
+    full_ax.plot(knee_df["rank"], knee_df["sum_log"], color="#2563eb", linewidth=1.2)
+    if applied:
+        full_ax.axvline(selected_rank, color="#dc2626", linestyle="--", label="Applied knee")
+        full_ax.axvspan(1, cells_after, color="#22c55e", alpha=0.10, label="Retained")
+        full_ax.legend(frameon=False, fontsize=8)
+    full_ax.set(
+        title=f"Before knee: {cells_before:,} barcodes",
+        xlabel="Barcode rank",
+        ylabel="Log1p RNA UMIs",
+    )
+
+    retained_ax = axes[0, 1]
+    retained_end = cells_after if applied else len(knee_df)
+    retained_curve = knee_df.iloc[:retained_end]
+    retained_ax.plot(retained_curve["rank"], retained_curve["sum_log"], color="#16a34a", linewidth=1.2)
+    if applied:
+        retained_ax.axvline(selected_rank, color="#dc2626", linestyle="--", label="Applied knee")
+        retained_ax.legend(frameon=False, fontsize=8)
+    retained_ax.set(
+        title=f"After knee: {cells_after:,} cells retained{tie_note}",
+        xlabel="Retained barcode rank",
+        ylabel="Log1p RNA UMIs",
+    )
+
+    summary_ax = axes[0, 2]
+    summary_ax.axis("off")
+    status = "APPLIED" if applied else "DISABLED / SKIPPED"
+    threshold = (
+        f"rank ≤ {selected_rank:,}\nRNA UMIs ≥ {selected_threshold:,.0f}"
+        if applied else "No applied knee"
+    )
+    summary_ax.text(
+        0.5, 0.78, f"{cells_before:,} barcodes before", ha="center", va="center",
+        fontsize=12, fontweight="bold",
+        bbox={"boxstyle": "round,pad=0.45", "facecolor": "#dbeafe", "edgecolor": "#2563eb"},
+    )
+    summary_ax.annotate("", xy=(0.5, 0.56), xytext=(0.5, 0.69), arrowprops={"arrowstyle": "->", "color": "#64748b"})
+    summary_ax.text(
+        0.5, 0.47, f"QC_barcode_filter = {knee_context['barcode_filter']}\n{threshold}\n{status}",
+        ha="center", va="center", fontsize=9.5,
+        bbox={"boxstyle": "round,pad=0.45", "facecolor": "#f8fafc", "edgecolor": "#94a3b8"},
+    )
+    summary_ax.annotate("", xy=(0.5, 0.24), xytext=(0.5, 0.34), arrowprops={"arrowstyle": "->", "color": "#64748b"})
+    summary_ax.text(
+        0.5, 0.14,
+        f"{cells_after:,} cells after{tie_note}\n{cells_before - cells_after:,} removed",
+        ha="center", va="center", fontsize=11, fontweight="bold",
+        bbox={"boxstyle": "round,pad=0.45", "facecolor": "#dcfce7", "edgecolor": "#16a34a"},
+    )
+
     for row_index, snapshot in enumerate(snapshots):
+        row_index += 1
         before = np.asarray(snapshot["values_before"], dtype=float)
         after = np.asarray(snapshot["values_after"], dtype=float)
         before = before[np.isfinite(before)]
@@ -179,36 +239,36 @@ def add_filter_bounds(ax, snapshot, show_legend=False):
 
 
 def plot_filter_flow(flow, batch, outpath):
-    """Render cells → filter → cells in the exact execution order."""
-    node_count = 1 + 2 * len(flow)
-    fig, ax = plt.subplots(figsize=(11, max(10, node_count * 0.82)))
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, node_count + 1)
-    ax.axis("off")
-    y = node_count
-    initial = int(flow.iloc[0]["cells_before"]) if len(flow) else 0
-    ax.text(0.5, y, f"{initial:,} input barcodes", ha="center", va="center", fontsize=12, fontweight="bold",
-            bbox={"boxstyle": "round,pad=0.5", "facecolor": "#dbeafe", "edgecolor": "#2563eb"})
-    for _, step in flow.iterrows():
-        ax.annotate("", xy=(0.5, y - 0.72), xytext=(0.5, y - 0.28), arrowprops={"arrowstyle": "->", "color": "#64748b"})
-        y -= 1
+    """Render one explicit before → filter → after row per QC step."""
+    fig, axes = plt.subplots(len(flow), 1, figsize=(16, max(4, 2.25 * len(flow))), squeeze=False)
+    for row_index, (_, step) in enumerate(flow.iterrows()):
+        ax = axes[row_index, 0]
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.axis("off")
         status = "APPLIED" if bool(step["applied"]) else "DISABLED / SKIPPED"
+        before = int(step["cells_before"])
+        after = int(step["cells_after"])
+        removed = int(step["cells_removed"])
+        after_color = "#dcfce7" if removed == 0 else "#fef3c7"
         ax.text(
-            0.5, y,
-            f"{step['filter_label']}\n{step['threshold']}\n{status}",
+            0.12, 0.5, f"{before:,}\ncells before", ha="center", va="center",
+            fontsize=11, fontweight="bold",
+            bbox={"boxstyle": "round,pad=0.5", "facecolor": "#dbeafe", "edgecolor": "#2563eb"},
+        )
+        ax.annotate("", xy=(0.31, 0.5), xytext=(0.21, 0.5), arrowprops={"arrowstyle": "->", "color": "#64748b"})
+        ax.text(
+            0.5, 0.5,
+            f"Step {int(step['step_order'])}: {step['filter_label']}\n{step['threshold']}\n{status}",
             ha="center", va="center", fontsize=9.5,
             bbox={"boxstyle": "round,pad=0.45", "facecolor": "#f8fafc", "edgecolor": "#94a3b8"},
         )
-        ax.annotate("", xy=(0.5, y - 0.72), xytext=(0.5, y - 0.28), arrowprops={"arrowstyle": "->", "color": "#64748b"})
-        y -= 1
-        removed = int(step["cells_removed"])
-        after = int(step["cells_after"])
-        color = "#dcfce7" if removed == 0 else "#fef3c7"
+        ax.annotate("", xy=(0.79, 0.5), xytext=(0.69, 0.5), arrowprops={"arrowstyle": "->", "color": "#64748b"})
         ax.text(
-            0.5, y,
-            f"{after:,} cells retained  |  {removed:,} removed ({float(step['removed_percent']):.2f}%)",
-            ha="center", va="center", fontsize=10, fontweight="bold",
-            bbox={"boxstyle": "round,pad=0.45", "facecolor": color, "edgecolor": "#16a34a"},
+            0.88, 0.5,
+            f"{after:,}\ncells after\n{removed:,} removed ({float(step['removed_percent']):.2f}%)",
+            ha="center", va="center", fontsize=10.5, fontweight="bold",
+            bbox={"boxstyle": "round,pad=0.5", "facecolor": after_color, "edgecolor": "#16a34a"},
         )
     fig.suptitle(f"{batch}: RNA QC filtering flow (pipeline order)", fontsize=15)
     fig.tight_layout()
@@ -580,7 +640,19 @@ def main(args):
     flow = pd.DataFrame(flow_rows)
     flow.to_csv(args.qc_dir / f"rna_qc_filter_flow_{label}.tsv", sep="\t", index=False)
     plot_filter_flow(flow, batch, args.qc_dir / f"rna_qc_filter_flow_{label}.png")
-    plot_filter_steps(snapshots, batch, args.qc_dir / f"rna_qc_filter_steps_{label}.png")
+    plot_filter_steps(
+        snapshots,
+        batch,
+        args.qc_dir / f"rna_qc_filter_steps_{label}.png",
+        {
+            "knee_df": knee_df,
+            "selected_rank": selected_rank,
+            "selected_threshold": knee_threshold,
+            "cells_before": input_cells,
+            "cells_after": post_knee_cells,
+            "barcode_filter": args.barcode_filter,
+        },
+    )
     retained = adata[keep].copy()
     retained.write_h5ad(f"{label}_filtered.h5ad")
 
