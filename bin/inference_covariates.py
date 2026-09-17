@@ -3,61 +3,140 @@
 
 They have to be agreed in one place and written where both methods look, or the
 comparison between them is not a comparison of methods. PerTurbo reads named
-columns from the analysed modality's ``obs``; SCEPTRE reads the MuData's top-level
-``obs``, which its R reader exposes as ``colData`` and feeds to
-``sceptre::import_data`` as ``extra_covariates``. Until this ran, that top-level
-frame was empty on the pipeline's own inputs, so SCEPTRE conditioned on nothing
-beyond its two automatic depth terms while PerTurbo conditioned on depth, guide
-counts and batch.
+columns from the analysed modality's ``obs``; SCEPTRE reads the MuData's
+top-level ``obs``, which its R reader exposes as ``colData`` and feeds to
+``sceptre::import_data`` as ``extra_covariates``.
 
-The set is deliberately small and follows the runs this method was validated on:
-the production Gasperini analysis conditioned on the mitochondrial fraction and
-the sequencing batch, and the production Replogle analyses on the batch, both with
-the library size as an offset. Applying the same set everywhere matters more than
-the exact membership, so both are here and a screen missing one simply skips it.
+The set is the per-cell guide UMI depth, the per-cell library size, the number of
+genes detected, and the sequencing batch. All three counts enter on the log
+scale.
 
-The library size is absent on purpose: PerTurbo takes it as an offset and SCEPTRE
-adds ``log(response_n_umis)`` itself, so listing it again would be collinear with
-both. The guide-UMI term the adapter used to pass unilaterally is gone, because
-the analyses this method is trusted on did not condition on it and SCEPTRE
-excludes gRNA covariates from its own formula by design.
+``percent_mito`` is deliberately absent from this first version.
 
-Adding a covariate means adding one line here, and both methods pick it up.
+Why the formula is written out rather than auto-constructed
+-----------------------------------------------------------
+``bin/inference_sceptre.R`` builds SCEPTRE's formula explicitly instead of
+calling ``sceptre:::auto_construct_formula_object``. That builder is a
+convenience heuristic with two behaviours that do not suit this pipeline:
 
-One derived column is defined here without being in that list:
-``log1p_total_guide_umis_centered`` (see ``derive_guide_umi_covariate``). It is
-not a member of ``CANONICAL_COVARIATES``, so neither method conditions on it --
-that is the decision recorded in the paragraph above and it is unchanged. What
-is defined here is the *derivation*, in one function, because the column is
-still written into the analysed object and read back by the PerTurbo adapter's
-zero-variance guard, and two copies of the formula centred over two cell
-populations is exactly the kind of difference this module exists to remove.
-The centring mean is taken over the cells in the object it is given, which is
-now the same population for both methods (``QC_require_assigned_guide`` in
-``bin/mudata_concat.py``).
+* It drops any covariate whose name does not match ``n_umis|n_nonzero`` once the
+  column takes fifteen or more distinct values (``MAX_N_LEVELS_ALLOWED``). The
+  check has no type test, so it catches continuous covariates as well as
+  high-cardinality factors. This is what silently discarded ``percent_mito`` on
+  every run, while PerTurbo conditioned on it -- the two methods were never
+  fitting the same model.
+* It derives the response depth from whatever response matrix SCEPTRE was handed,
+  and ``bin/chunk_mudata_sceptre.py`` hands it one gene chunk at a time. On a
+  chunked run ``response_n_umis`` is a per-chunk partial sum -- the same cell
+  carries a different depth in each chunk -- and ``response_n_nonzero``
+  saturates at the chunk size rather than the transcriptome.
 
-SCEPTRE drops any factor with fifteen or more levels
-(``MAX_N_LEVELS_ALLOWED`` in its formula builder), so on a screen with many
-sequencing batches it will silently decline the batch term that PerTurbo uses.
-That is a property of SCEPTRE, not something to hide by withholding the column.
+SCEPTRE itself has no trouble with continuous covariates: an explicit formula is
+passed straight to ``model.matrix``, and a continuous term enters as one numeric
+column. The design matrix is still rank-checked --
+``convert_covariate_df_to_design_matrix`` raises on a redundant formula -- so
+writing the formula out costs no safety.
+
+Writing it out also means these columns can carry their natural names. The
+``n_umis`` suffix is only needed to satisfy the auto builder.
+
+One constraint does survive: ``sceptre::import_data`` rejects the names
+``response_n_nonzero``, ``response_n_umis``, ``response_p_mito``,
+``grna_n_nonzero`` and ``grna_n_umis`` outright, whatever formula is used. The
+full-matrix quantities below therefore travel under their own names and replace
+SCEPTRE's per-chunk versions in the formula.
+
+SCEPTRE's own gRNA covariates are excluded for a separate reason: at inference
+time the gRNA matrix is the binary ``guide_assignment`` layer, so its
+``grna_n_umis`` is the number of assigned guides per cell, exactly equal to
+``grna_n_nonzero``, and constant at 1 under low MOI. The real depth comes from
+``total_guide_umis`` instead.
+
+The guide assignment step needs nothing from here. It runs first
+(``guide_assignment_pipeline`` precedes ``inference_pipeline``), it is not
+chunked, and no assignment layer exists yet, so SCEPTRE's own
+``log(grna_n_umis)`` over raw counts is the genuine depth and
+``sceptre::assign_grnas`` already conditions on it. Do not write these columns
+into the top-level ``obs`` ahead of that step: ``bin/assign_grnas_sceptre.R``
+coerces every ``colData`` column with ``as.factor`` before building a model
+matrix, so a continuous column becomes a factor with one level per distinct
+value -- a dense ``n x k`` matrix handed to ``Matrix::rankMatrix``.
+
+Two scales, by necessity
+------------------------
+SCEPTRE log-transforms inside its formula; PerTurbo applies no transform of its
+own. So each count is written twice: under its natural name for SCEPTRE, and as
+a precomputed ``log_`` column for PerTurbo. ``validate_positive`` enforces the
+assumption that makes a plain ``log`` safe -- no cell surviving filtering may
+have zero depth -- and fails loudly rather than emitting ``-inf``.
+
+``total_gene_umis`` is also PerTurbo's size-factor key (``--library-size-key``),
+so PerTurbo receives it both as an offset and as a covariate. That is deliberate:
+the offset alone forces a coefficient of one on the log library size, and the
+covariate lets the model fit a slope instead.
 """
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import numpy as np
 
 GUIDE_UMI_COLUMN = "total_guide_umis"
-GUIDE_UMI_COVARIATE = "log1p_total_guide_umis_centered"
+GENE_UMI_COLUMN = "total_gene_umis"
+DETECTED_GENES_COLUMN = "num_expressed_genes"
+BATCH_COLUMN = "batch"
 ASSIGNMENT_LAYER = "guide_assignment"
 
-# (column, kind, aliases). "continuous" columns go to PerTurbo's --continuous-covariates;
-# a "categorical" column goes to --batch-covariate. The aliases are the names the same
-# quantity carries in other preprocessing conventions; the first one present is copied
-# under the canonical name, so both methods see one column whatever the input called it.
-CANONICAL_COVARIATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("percent_mito", "continuous", ("percent_mito", "pct_counts_mt", "percent.mito", "pct_mito", "mito_frac")),
-    ("batch", "categorical", ("batch",)),
+# Names SCEPTRE reserves for the covariates it computes itself. import_data()
+# errors if an extra covariate uses one, whatever formula is later supplied.
+SCEPTRE_RESERVED_NAMES = frozenset(
+    {
+        "response_n_nonzero",
+        "response_n_umis",
+        "response_p_mito",
+        "grna_n_nonzero",
+        "grna_n_umis",
+    }
 )
+
+
+def perturbo_log_name(column: str) -> str:
+    return f"log_{column}"
+
+
+class Covariate(NamedTuple):
+    """One conditioned quantity, and how each method reads it.
+
+    ``name`` is the column written to the MuData's top-level ``obs``, which is
+    what SCEPTRE sees and what its formula refers to. ``perturbo_name`` is the
+    column on the gene modality's ``obs`` that goes on PerTurbo's command line:
+    for a count that is the precomputed log, because PerTurbo does not transform.
+    """
+
+    name: str
+    kind: str  # "count" -> log() for SCEPTRE, log_ column for PerTurbo
+    #          # "categorical" -> PerTurbo's --batch-covariate
+    aliases: tuple[str, ...]  # input spellings; the first present is used
+
+    @property
+    def perturbo_name(self) -> str:
+        return perturbo_log_name(self.name) if self.kind == "count" else self.name
+
+    @property
+    def sceptre_term(self) -> str:
+        """How this covariate is written in SCEPTRE's formula."""
+        return f"log({self.name})" if self.kind == "count" else self.name
+
+
+CANONICAL_COVARIATES: tuple[Covariate, ...] = (
+    Covariate(GUIDE_UMI_COLUMN, "count", (GUIDE_UMI_COLUMN,)),
+    Covariate(GENE_UMI_COLUMN, "count", (GENE_UMI_COLUMN, "total_counts")),
+    Covariate(DETECTED_GENES_COLUMN, "count", (DETECTED_GENES_COLUMN, "n_genes")),
+    Covariate(BATCH_COLUMN, "categorical", (BATCH_COLUMN,)),
+)
+
+assert not {c.name for c in CANONICAL_COVARIATES} & SCEPTRE_RESERVED_NAMES
 
 
 def _first_source(mdata, aliases):
@@ -69,89 +148,149 @@ def _first_source(mdata, aliases):
     return None, None
 
 
-def _guide_umi_totals(mdata):
-    """Per-cell guide UMI totals, from the column the pipeline already computes.
+def ensure_guide_umi_totals(mdata) -> str | None:
+    """Pin ``total_guide_umis`` onto the guide modality while the matrix is whole.
 
-    ``bin/create_mdata.py`` writes ``guide.obs['total_guide_umis']`` from the full
-    guide matrix, so it does not move when a later step subsets the guides. Only
-    when it is absent are the totals summed here, preferring the assignment layer
-    over raw ``guide.X`` -- the same order the PerTurbo adapter used.
+    Call this before any step narrows the guides. The totals are per-cell depth
+    over *all* guides, so summing a subset matrix would report a smaller depth --
+    and zero for a cell whose only guides were subset away.
+
+    ``bin/create_mdata.py`` normally writes it already. The fallback sums raw
+    ``guide.X``, never the ``guide_assignment`` layer: that layer is binary, so
+    summing it would give the number of assigned guides rather than UMI depth.
+    Nothing in the pipeline binarises ``guide.X`` in place.
     """
-    guide = mdata["guide"]
-    if GUIDE_UMI_COLUMN in guide.obs.columns:
-        return np.asarray(guide.obs[GUIDE_UMI_COLUMN], dtype=float), GUIDE_UMI_COLUMN
-    matrix = guide.layers[ASSIGNMENT_LAYER] if ASSIGNMENT_LAYER in guide.layers else guide.X
-    source = (
-        f"guide.layers['{ASSIGNMENT_LAYER}']" if ASSIGNMENT_LAYER in guide.layers else "guide.X"
-    )
-    totals = np.asarray(matrix.sum(axis=1)).ravel().astype(float)
-    guide.obs[GUIDE_UMI_COLUMN] = totals
-    return totals, source
-
-
-def derive_guide_umi_covariate(mdata) -> str | None:
-    """Write ``log1p_total_guide_umis_centered`` onto the gene modality's ``obs``.
-
-    One definition of the derivation, centred over the cells of the object it is
-    handed. Neither method conditions on it -- it is not in
-    ``CANONICAL_COVARIATES`` -- but it is written into the analysed object and the
-    PerTurbo adapter reads it back for its zero-variance-in-controls guard, so it
-    must not be computed twice over two different cell populations.
-
-    Returns the column name, or ``None`` when there is no guide modality to
-    derive it from.
-    """
-    if "guide" not in mdata.mod or "gene" not in mdata.mod:
+    if "guide" not in mdata.mod:
         return None
-    totals, source = _guide_umi_totals(mdata)
-    centered = np.log1p(totals)
-    centered = centered - float(np.nanmean(centered))
-    mdata["gene"].obs[GUIDE_UMI_COVARIATE] = centered
-    print(
-        f"Derived {GUIDE_UMI_COVARIATE} from {source} over "
-        f"{mdata['gene'].n_obs} cells (not a conditioned covariate)."
-    )
-    return GUIDE_UMI_COVARIATE
+    guide = mdata["guide"]
+    if GUIDE_UMI_COLUMN not in guide.obs.columns:
+        guide.obs[GUIDE_UMI_COLUMN] = np.asarray(guide.X.sum(axis=1)).ravel().astype(float)
+        print(
+            f"Computed {GUIDE_UMI_COLUMN} from guide.X over the full guide matrix "
+            f"({guide.n_vars} guides)."
+        )
+    return GUIDE_UMI_COLUMN
+
+
+def ensure_gene_depth_totals(mdata) -> list[str]:
+    """Pin the full-matrix cell depth onto the gene modality, before any subset.
+
+    ``bin/create_mdata.py`` already writes both columns over every gene, so this
+    normally finds them. The fallback has to run before the cis subset narrows
+    the genes -- summing a subset would measure depth over the retained genes
+    only -- and before chunking, which is the case these columns exist for.
+    """
+    if "gene" not in mdata.mod:
+        return []
+    gene = mdata["gene"]
+    for column, compute in (
+        (GENE_UMI_COLUMN, lambda: np.asarray(gene.X.sum(axis=1)).ravel()),
+        (DETECTED_GENES_COLUMN, lambda: np.asarray((gene.X > 0).sum(axis=1)).ravel()),
+    ):
+        if column not in gene.obs.columns:
+            gene.obs[column] = compute().astype(float)
+            print(f"Computed {column} over the full gene matrix ({gene.n_vars} genes).")
+    return [GENE_UMI_COLUMN, DETECTED_GENES_COLUMN]
+
+
+def validate_positive(values, column: str) -> np.ndarray:
+    """Every count must be strictly positive, so that ``log`` is defined.
+
+    No cell that survives filtering can have zero library size, zero detected
+    genes or zero guide UMIs -- ``QC_require_assigned_guide`` in
+    ``bin/mudata_concat.py`` alone rules out the last. Rather than paper over a
+    violation with ``log1p`` and fit a term that is quietly wrong, fail here and
+    say which cells are at fault: it means the filtering upstream did not do what
+    this assumes.
+    """
+    array = np.asarray(values, dtype=float)
+    bad = ~(array > 0)
+    if bad.any():
+        raise ValueError(
+            f"Covariate {column!r} must be strictly positive to be log-transformed, "
+            f"but {int(bad.sum())} of {array.size} cells are zero, negative or NaN "
+            f"(first offending cell index {int(np.flatnonzero(bad)[0])}). "
+            "Cells surviving filtering are assumed to have nonzero depth; check the "
+            "upstream QC rather than relaxing this."
+        )
+    return array
+
+
+def derive_perturbo_log_covariates(mdata) -> list[str]:
+    """Write the ``log_`` columns PerTurbo conditions on onto the gene modality.
+
+    PerTurbo applies no transform of its own, so the logs are taken here, over
+    the cells of the object it is handed. SCEPTRE gets the untransformed columns
+    and writes ``log()`` into its formula instead.
+    """
+    if "gene" not in mdata.mod:
+        return []
+    written: list[str] = []
+    for covariate in CANONICAL_COVARIATES:
+        if covariate.kind != "count":
+            continue
+        _source, values = _first_source(mdata, covariate.aliases)
+        if values is None:
+            continue
+        array = validate_positive(values.to_numpy(), covariate.name)
+        mdata["gene"].obs[covariate.perturbo_name] = np.log(array)
+        written.append(covariate.perturbo_name)
+    print(f"PerTurbo log covariates written to gene.obs: {written or 'none'}")
+    return written
 
 
 def materialize_shared_covariates(mdata, columns=CANONICAL_COVARIATES) -> list[str]:
     """Copy the agreed covariates into the MuData's top-level ``obs``.
 
-    Returns the columns actually written. A column absent from every modality, or
-    constant across cells, is skipped: a constant covariate is unidentifiable and
-    makes SCEPTRE's regression singular.
+    Returns the SCEPTRE-facing columns actually written. A column absent from
+    every modality, or constant across cells, is skipped: a constant covariate is
+    unidentifiable and makes the design matrix singular.
 
-    The derived guide-UMI column is computed here too, on this object's cells, so
-    that the analysed MuData carries one set of values rather than the adapter's
-    own. It is deliberately not written to the top-level ``obs`` and not returned:
-    it is not in ``CANONICAL_COVARIATES``, so neither method conditions on it, and
-    putting it in SCEPTRE's ``extra_covariates`` would silently add a gRNA
-    covariate SCEPTRE excludes by design.
+    The PerTurbo-scale ``log_`` columns are derived here too, on this object's
+    cells, so the analysed MuData carries one set of values rather than the
+    adapter's own. They are deliberately not written to the top-level ``obs``:
+    handing SCEPTRE both scales of one quantity would be exactly collinear.
     """
-    derive_guide_umi_covariate(mdata)
+    derive_perturbo_log_covariates(mdata)
     written: list[str] = []
-    for column, _kind, aliases in columns:
-        source, values = _first_source(mdata, aliases)
+    for covariate in columns:
+        source, values = _first_source(mdata, covariate.aliases)
         if values is None:
             continue
         if values.nunique(dropna=False) < 2:
-            print(f"Skipping covariate {column!r}: constant across cells.")
+            print(f"Skipping covariate {covariate.name!r}: constant across cells.")
             continue
-        mdata.obs[column] = values.to_numpy()
-        # PerTurbo reads the analysed modality's obs by name, so the canonical name
-        # has to exist there too when the input used an alias.
-        if "gene" in mdata.mod and column not in mdata["gene"].obs.columns:
-            mdata["gene"].obs[column] = values.reindex(mdata["gene"].obs_names).to_numpy()
-        if source != column:
-            print(f"Covariate {column!r} taken from column {source!r}.")
-        written.append(column)
+        if covariate.kind == "count":
+            validate_positive(values.to_numpy(), covariate.name)
+        name = covariate.name
+        # Reindex rather than assign positionally: the source may be the guide
+        # modality while the destination frame is ordered by the MuData's obs_names.
+        mdata.obs[name] = values.reindex(mdata.obs_names).to_numpy()
+        if "gene" in mdata.mod and name not in mdata["gene"].obs.columns:
+            mdata["gene"].obs[name] = values.reindex(mdata["gene"].obs_names).to_numpy()
+        if source != name:
+            print(f"Covariate {name!r} taken from column {source!r}.")
+        written.append(name)
     print(f"Shared covariates written to the MuData's top-level obs: {written or 'none'}")
     return written
 
 
-def perturbo_covariate_arguments(available: list[str]) -> tuple[list[str], str | None]:
-    """The same covariates, split the way PerTurbo's command line takes them."""
-    kinds = {name: kind for name, kind, _aliases in CANONICAL_COVARIATES}
-    continuous = [c for c in available if kinds.get(c) == "continuous"]
-    categorical = [c for c in available if kinds.get(c) == "categorical"]
+def sceptre_formula_terms(available: list[str]) -> list[str]:
+    """The formula terms SCEPTRE should fit, for the covariates actually present.
+
+    ``bin/inference_sceptre.R`` builds the same list on its own side; this exists
+    so the Python tests can assert the two agree.
+    """
+    return [c.sceptre_term for c in CANONICAL_COVARIATES if c.name in set(available)]
+
+
+def perturbo_covariate_arguments(available) -> tuple[list[str], str | None]:
+    """The same covariates, split the way PerTurbo's command line takes them.
+
+    The names returned are the PerTurbo-side columns: the precomputed logs for
+    the counts, the plain column for the batch.
+    """
+    available = list(available)
+    continuous = [c.perturbo_name for c in available if c.kind == "count"]
+    categorical = [c.perturbo_name for c in available if c.kind == "categorical"]
     return continuous, (categorical[0] if categorical else None)

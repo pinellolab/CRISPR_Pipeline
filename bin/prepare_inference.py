@@ -3,7 +3,11 @@
 import argparse
 import pandas as pd
 import mudata as mu
-from inference_covariates import materialize_shared_covariates
+from inference_covariates import (
+    ensure_gene_depth_totals,
+    ensure_guide_umi_totals,
+    materialize_shared_covariates,
+)
 
 from analysis_output_formatting import make_h5mu_safe_dataframe
 from intended_target_key_utils import (
@@ -40,6 +44,13 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
 
     print(f"Reading mudata file from {mudata_path}...")
     mudata = mu.read_h5mu(mudata_path)
+    # Pin the per-cell guide UMI depth now, while the guide matrix is still whole.
+    # The cis subset below drops guides, and this is a conditioned covariate for
+    # both methods, so it must not be re-derived from a narrowed matrix.
+    ensure_guide_umi_totals(mudata)
+    # Likewise the cell depth, before the cis subset drops genes. SCEPTRE would
+    # otherwise fall back on its own per-chunk response_n_umis/response_n_nonzero.
+    ensure_gene_depth_totals(mudata)
 
     if "gene" not in mudata.mod or "guide" not in mudata.mod:
         raise KeyError("Mudata file is missing 'gene' or 'guide' modality.")

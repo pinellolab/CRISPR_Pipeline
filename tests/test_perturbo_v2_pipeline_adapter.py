@@ -87,7 +87,14 @@ def test_prepare_mudata_adds_v2_metadata_and_control_guide_names(tmp_path):
     assert adapter.GUIDE_MAP_KEY in guide.varm
     assert adapter.GUIDE_NAMES_KEY in guide.uns
     assert "total_gene_umis" in gene.obs
-    assert "log1p_total_guide_umis_centered" in gene.obs
+    # PerTurbo conditions on precomputed logs, since it applies no transform of
+    # its own; SCEPTRE gets the plain counts and logs them in its formula.
+    for column in (
+        "log_total_guide_umis",
+        "log_total_gene_umis",
+        "log_num_expressed_genes",
+    ):
+        assert column in gene.obs
     assert any(str(name).startswith("non-targeting|") for name in guide.uns[adapter.GUIDE_NAMES_KEY])
     assert guide_name_map["non-targeting|nt1"] == "nt1"
 

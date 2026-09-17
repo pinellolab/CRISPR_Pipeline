@@ -38,10 +38,15 @@ from intended_target_key_utils import (
 from mudata_uns_io import write_uns_patch
 from inference_covariates import (
     CANONICAL_COVARIATES,
-    GUIDE_UMI_COVARIATE,
-    derive_guide_umi_covariate,
+    GUIDE_UMI_COLUMN,
+    derive_perturbo_log_covariates,
+    ensure_gene_depth_totals,
+    ensure_guide_umi_totals,
     perturbo_covariate_arguments,
+    perturbo_log_name,
 )
+
+GUIDE_UMI_COVARIATE = perturbo_log_name(GUIDE_UMI_COLUMN)
 from result_table_io import write_result_table
 
 
@@ -110,18 +115,23 @@ def _get_assignment_matrix(mdata: md.MuData):
 
 
 def _ensure_covariates(mdata: md.MuData) -> None:
-    """Take the derived guide-UMI covariate from upstream, or derive it once here.
+    """Take the PerTurbo log covariates from upstream, or derive them once here.
 
-    The derivation lives in ``bin/inference_covariates.py``; the shared
-    preparation step already ran it over the analysed cells, so when the column
-    is present it is used as it stands. Recomputing it here is only for the input
-    paths that skip that step, and it now centres over the same cell population
-    either way, because the cells are decided once in ``bin/mudata_concat.py``.
+    The derivations live in ``bin/inference_covariates.py``; the shared
+    preparation step already ran them over the analysed cells, so when the
+    columns are present they are used as they stand. Recomputing here is only for
+    input paths that skip that step -- and the underlying totals are pinned first
+    so that a depth is never measured over an already-subset matrix.
     """
-    if GUIDE_UMI_COVARIATE in mdata[GENE_MODALITY].obs.columns:
-        print(f"Using the upstream {GUIDE_UMI_COVARIATE} column.")
+    expected = [
+        c.perturbo_name for c in CANONICAL_COVARIATES if c.kind == "count"
+    ]
+    if all(name in mdata[GENE_MODALITY].obs.columns for name in expected):
+        print(f"Using the upstream PerTurbo log covariates: {expected}.")
         return
-    derive_guide_umi_covariate(mdata)
+    ensure_guide_umi_totals(mdata)
+    ensure_gene_depth_totals(mdata)
+    derive_perturbo_log_covariates(mdata)
 
 
 def _ensure_library_size(mdata: md.MuData) -> None:
@@ -529,11 +539,21 @@ def _run_perturbo(
     # calls is a difference in method rather than in model specification. The
     # preparation step writes them into the MuData's top-level obs for SCEPTRE and
     # leaves them on the modalities for PerTurbo.
+    # Detect on the PerTurbo-side column: for the count terms that is the
+    # precomputed `log_` column, not the raw count SCEPTRE reads. `_ensure_covariates`
+    # has already guaranteed those exist, including on inputs that skipped the shared
+    # preparation step.
     with _open_mudata(input_path, backed="r") as mdata:
-        present = [c for c, _kind, _aliases in CANONICAL_COVARIATES if c in mdata[GENE_MODALITY].obs.columns]
+        obs_columns = set(mdata[GENE_MODALITY].obs.columns)
+    present = [
+        c
+        for c in CANONICAL_COVARIATES
+        if c.perturbo_name is not None and c.perturbo_name in obs_columns
+    ]
     continuous, batch = perturbo_covariate_arguments(present)
-    # Only bites if the guide-UMI term is ever added to CANONICAL_COVARIATES; it is
-    # not one today, so neither method conditions on it.
+    # Live now that the guide-UMI term is a conditioned covariate: PerTurbo fits its
+    # baseline on the control cells, and a covariate constant across them is
+    # unidentifiable there.
     if GUIDE_UMI_COVARIATE in continuous and not _covariate_has_control_variance(
         input_path, map_key, names_key
     ):
