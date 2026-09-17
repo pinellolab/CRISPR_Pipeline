@@ -89,9 +89,14 @@ What the count columns mean
 ``total_gene_umis`` is the per-cell UMI total over every gene in the count
 matrix and ``num_expressed_genes`` the number of genes with at least one UMI;
 both come from scanpy's ``calculate_qc_metrics`` (``total_counts`` and
-``n_genes_by_counts``) in ``bin/create_mdata.py``, computed before any gene
-restriction. On a targeted panel the matrix *is* the panel, so both are panel
-quantities there. ``total_guide_umis`` is the per-cell UMI total over the raw
+``n_genes_by_counts``), run in ``bin/preprocess_adata.py`` and renamed in
+``bin/create_mdata.py``. They are measured before the optional GTF restriction
+(``--restrict-genes-to-gtf``, applied later in ``bin/create_mdata.py``), so on a
+targeted panel they include off-panel reads and exceed the panel-only sums --
+on the TAP-seq chr8 panel by a median of 10 UMIs and 3 genes. Both methods
+receive the same numbers, so this does not put them on different models; it
+does mean the depth is the cell's sequencing depth rather than its depth on the
+panel. ``total_guide_umis`` is the per-cell UMI total over the raw
 guide matrix, distinct from ``num_expressed_guides`` (guides with any UMI) and
 from the number of *assigned* guides.
 

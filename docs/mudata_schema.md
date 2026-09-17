@@ -45,8 +45,7 @@ The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62a
 | gene.obs | batch | categorical | Always | Input or mapping batch label for each cell. | RNA mapping |
 | gene.obs | concat_batch | categorical | After concatenation | Measurement-set/source label added during concatenation. | concatenation |
 | gene.obs | batch_number | integer | Always | One-based numeric encoding of batch used as an inference/QC covariate. | preprocess_adata.py |
-| gene.obs | n_counts | integer | Always | Number of detected genes; renamed from n_genes_by_counts during MuData creation. | Scanpy QC/create_mdata.py |
-| gene.obs | num_expressed_genes | integer | Version/input dependent | Number of genes with a nonzero count in the cell; legacy/input alias retained when supplied. | RNA preprocessing/create_mdata.py |
+| gene.obs | num_expressed_genes | integer | Always | Number of genes with at least one UMI in the cell; renamed from Scanpy's n_genes_by_counts during MuData creation, over every gene in the count matrix before any GTF restriction. Conditioned on by both inference methods. | Scanpy QC/create_mdata.py |
 | gene.obs | total_gene_umis | integer | Always | Total RNA UMI count for the cell; renamed from total_counts. | Scanpy QC/create_mdata.py |
 | gene.obs | log1p_n_genes_by_counts | float | Always | Natural log of one plus the number of detected genes. | Scanpy QC |
 | gene.obs | log1p_total_counts | float | Always | Natural log of one plus total RNA counts. | Scanpy QC |
