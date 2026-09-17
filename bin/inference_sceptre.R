@@ -73,8 +73,13 @@ make_model_matrix_data <- function(covariates_df) {
       covariates_df,
       function(column) {
         if (is.factor(column)) {
-          # Keep missing values explicit for model-matrix construction.
-          return(stats::relevel(addNA(column), ref = levels(addNA(column))[1]))
+          # Keep missing values explicit for model-matrix construction -- but
+          # only when there are any. addNA() with the default ifany = FALSE
+          # adds an empty NA level to every factor, whose dummy column is all
+          # zeros, so the rank check below failed for any complete factor and
+          # the collinearity filter silently dropped it (batch, on TAP-seq).
+          with_na <- droplevels(addNA(column, ifany = TRUE))
+          return(stats::relevel(with_na, ref = levels(with_na)[1]))
         }
         if (all(is.na(column))) {
           return(rep(0, length(column)))
@@ -108,6 +113,10 @@ retain_non_collinear_covariates <- function(covariates_df) {
   }
 
   if (length(dropped) > 0) {
+    # message() as well as warning(): warnings from a top-level call are
+    # deferred to the end of the script, so the log would not show which
+    # covariates went missing until the run was over.
+    message(sprintf("Dropping collinear covariates: %s", paste(dropped, collapse = ", ")))
     warning(sprintf("Dropping collinear covariates: %s", paste(dropped, collapse = ", ")))
   }
   covariates_df[, kept, drop = FALSE]
