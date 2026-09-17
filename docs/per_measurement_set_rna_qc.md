@@ -57,9 +57,20 @@ before the final dashboard process runs. The final dashboard `figures/`
 directory also contains:
 
 - `knee_plot_scRNA_<measurement_set>.png`;
-- `qc_distributions_scRNA_<measurement_set>.png`; and
+- `qc_distributions_scRNA_<measurement_set>.png`;
+- `rna_qc_filter_flow_<measurement_set>.png`, showing cells → resolved filter
+  parameter → retained cells in exact execution order;
+- `rna_qc_filter_steps_<measurement_set>.png`, showing the relevant RNA metric
+  immediately before and after every fixed or MAD filter;
+- `measurement_set_qc_filter_flow.tsv`, the machine-readable sequential counts,
+  thresholds, enabled/skipped state, removal percentage, and retained percentage; and
 - `measurement_set_qc_metrics.tsv`, with input, post-knee, post-fixed-threshold,
   retained-cell, threshold, median, MAD, and bound values for every measurement
   set.
 
 The dashboard RNA-QC block renders these plots and the combined table.
+The displayed order is barcode calling (`none`, `knee`, or `knee2`), minimum
+RNA UMIs, minimum detected genes (only for `none`), fixed mitochondrial cutoff,
+RNA-UMI MAD, detected-gene MAD, and mitochondrial MAD. Disabled or inapplicable
+steps remain visible with zero removal. The global gene-support filter remains
+separate because it runs after measurement-set concatenation.

@@ -1508,9 +1508,13 @@ def create_dashboard_df(guide_fq_tbl, mudata_path, gene_ann_path, filtered_ann_p
     ### Create image/table block for per-measurement-set scRNA preprocessing
     knee_images = sorted(glob.glob("figures/knee_plot_scRNA_*.png"))
     distribution_images = sorted(glob.glob("figures/qc_distributions_scRNA_*.png"))
-    rna_images = knee_images + distribution_images
+    flow_images = sorted(glob.glob("figures/rna_qc_filter_flow_*.png"))
+    step_images = sorted(glob.glob("figures/rna_qc_filter_steps_*.png"))
+    rna_images = knee_images + flow_images + step_images + distribution_images
     rna_descriptions = (
         ["Measurement-set-specific RNA barcode-rank knee and selected threshold."] * len(knee_images)
+        + ["Exact cells → filter → cells flow in pipeline execution order."] * len(flow_images)
+        + ["Before/after RNA quality distributions for every sequential filter."] * len(step_images)
         + ["Measurement-set-specific RNA QC distributions and enabled MAD bounds."] * len(distribution_images)
     )
     if not rna_images:

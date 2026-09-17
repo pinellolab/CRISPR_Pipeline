@@ -14,6 +14,7 @@ def test_special_qc_processes_are_routed_to_expected_categories():
     assert dashboard.family_for("workflow:skipGTFDownload") == "input"
     assert dashboard.family_for("workflow:sequencing_saturation") == "evaluation"
     assert dashboard.family_for("workflow:remove_clonal_cells") == "evaluation"
+    assert dashboard.image_family(Path("measurement_set_qc/rna_qc_filter_flow_B1.png")) == "preprocessing"
 
 
 def test_render_builds_clickable_family_dashboard(tmp_path):

@@ -82,7 +82,10 @@ def mad_limits(values, n_mads, upper_only=False):
     return median, mad, lower, median + n_mads * mad
 
 
-def plot_barcode_rank(knee_df, point_1, point_2, selected_rank, batch, outpath):
+def plot_barcode_rank(
+    knee_df, point_1, point_2, selected_rank, batch, outpath,
+    barcode_filter="knee", selected_threshold=np.nan,
+):
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(knee_df["rank"], knee_df["sum_log"], linewidth=1.2, color="#2563eb")
     for point, color, label in ((point_1, "#dc2626", "Knee 1"), (point_2, "#f59e0b", "Knee 2")):
@@ -90,11 +93,100 @@ def plot_barcode_rank(knee_df, point_1, point_2, selected_rank, batch, outpath):
             ax.axvline(int(round(point[0])), color=color, linestyle="--", label=label)
     if selected_rank is not None:
         ax.axvline(selected_rank, color="#111827", linestyle=":", label="Selected")
+    if barcode_filter == "none":
+        note = f"QC_barcode_filter = none\nNo knee filter applied\n{len(knee_df):,} barcodes retained"
+    elif selected_rank is None:
+        note = f"QC_barcode_filter = {barcode_filter}\nNo valid knee found; filter skipped"
+    else:
+        note = (
+            f"QC_barcode_filter = {barcode_filter}\n"
+            f"selected rank = {selected_rank:,}\nRNA UMI threshold ≥ {selected_threshold:,.0f}"
+        )
+    ax.text(
+        0.98, 0.97, note, transform=ax.transAxes, ha="right", va="top", fontsize=9,
+        bbox={"boxstyle": "round,pad=0.45", "facecolor": "white", "edgecolor": "#cbd5e1", "alpha": 0.95},
+    )
     ax.set(xlabel="Barcode rank", ylabel="Log1p RNA UMI counts", title=f"{batch}: barcode-rank knee")
     if point_1 is not None or point_2 is not None or selected_rank is not None:
         ax.legend(frameon=False)
     fig.tight_layout()
     fig.savefig(outpath, dpi=180, facecolor="white")
+    plt.close(fig)
+
+
+def plot_filter_steps(snapshots, batch, outpath):
+    """Plot each cell filter immediately before and after it is applied."""
+    fig, axes = plt.subplots(len(snapshots), 2, figsize=(12, 3.15 * len(snapshots)), squeeze=False)
+    for row_index, snapshot in enumerate(snapshots):
+        before = np.asarray(snapshot["values_before"], dtype=float)
+        after = np.asarray(snapshot["values_after"], dtype=float)
+        before = before[np.isfinite(before)]
+        after = after[np.isfinite(after)]
+        finite = before if before.size else np.array([0.0])
+        low, high = np.nanpercentile(finite, [0.5, 99.5]) if finite.size > 1 else (finite[0] - 0.5, finite[0] + 0.5)
+        if not np.isfinite(low) or not np.isfinite(high) or low == high:
+            low, high = float(np.nanmin(finite)) - 0.5, float(np.nanmax(finite)) + 0.5
+        bins = np.linspace(low, high, 51)
+        for column, (values, color, state) in enumerate(
+            ((before, "#60a5fa", "Before"), (after, "#34d399", "After"))
+        ):
+            ax = axes[row_index, column]
+            ax.hist(values, bins=bins, color=color, edgecolor="white")
+            for bound in (snapshot["lower"], snapshot["upper"]):
+                if snapshot["applied"] and np.isfinite(bound):
+                    ax.axvline(bound, color="#dc2626", linestyle="--", linewidth=1.4)
+            count_key = "cells_before" if state == "Before" else "cells_after"
+            ax.set_title(f"{state}: {snapshot[count_key]:,} cells")
+            ax.set_xlabel(snapshot["metric_label"])
+            ax.set_ylabel("Cells")
+        status = "applied" if snapshot["applied"] else "disabled/skipped"
+        axes[row_index, 0].text(
+            0.01, 0.96,
+            f"{snapshot['filter_label']} ({status})\nRemoved: {snapshot['removed']:,}",
+            transform=axes[row_index, 0].transAxes, ha="left", va="top", fontsize=8.5,
+            bbox={"boxstyle": "round,pad=0.35", "facecolor": "white", "edgecolor": "#cbd5e1", "alpha": 0.92},
+        )
+    fig.suptitle(f"{batch}: sequential RNA cell-filter impact", fontsize=15, y=0.999)
+    fig.tight_layout()
+    fig.savefig(outpath, dpi=150, facecolor="white")
+    plt.close(fig)
+
+
+def plot_filter_flow(flow, batch, outpath):
+    """Render cells → filter → cells in the exact execution order."""
+    node_count = 1 + 2 * len(flow)
+    fig, ax = plt.subplots(figsize=(11, max(10, node_count * 0.82)))
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, node_count + 1)
+    ax.axis("off")
+    y = node_count
+    initial = int(flow.iloc[0]["cells_before"]) if len(flow) else 0
+    ax.text(0.5, y, f"{initial:,} input barcodes", ha="center", va="center", fontsize=12, fontweight="bold",
+            bbox={"boxstyle": "round,pad=0.5", "facecolor": "#dbeafe", "edgecolor": "#2563eb"})
+    for _, step in flow.iterrows():
+        ax.annotate("", xy=(0.5, y - 0.72), xytext=(0.5, y - 0.28), arrowprops={"arrowstyle": "->", "color": "#64748b"})
+        y -= 1
+        status = "APPLIED" if bool(step["applied"]) else "DISABLED / SKIPPED"
+        ax.text(
+            0.5, y,
+            f"{step['filter_label']}\n{step['threshold']}\n{status}",
+            ha="center", va="center", fontsize=9.5,
+            bbox={"boxstyle": "round,pad=0.45", "facecolor": "#f8fafc", "edgecolor": "#94a3b8"},
+        )
+        ax.annotate("", xy=(0.5, y - 0.72), xytext=(0.5, y - 0.28), arrowprops={"arrowstyle": "->", "color": "#64748b"})
+        y -= 1
+        removed = int(step["cells_removed"])
+        after = int(step["cells_after"])
+        color = "#dcfce7" if removed == 0 else "#fef3c7"
+        ax.text(
+            0.5, y,
+            f"{after:,} cells retained  |  {removed:,} removed ({float(step['removed_percent']):.2f}%)",
+            ha="center", va="center", fontsize=10, fontweight="bold",
+            bbox={"boxstyle": "round,pad=0.45", "facecolor": color, "edgecolor": "#16a34a"},
+        )
+    fig.suptitle(f"{batch}: RNA QC filtering flow (pipeline order)", fontsize=15)
+    fig.tight_layout()
+    fig.savefig(outpath, dpi=150, facecolor="white", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -191,7 +283,11 @@ def main(args):
             selected_rank = max(1, min(len(knee_df), int(round(selected[0]))))
             knee_threshold = float(knee_df.loc[selected_rank - 1, "sum"])
             keep_knee = cell_counts >= knee_threshold
-    plot_barcode_rank(knee_df, point_1, point_2, selected_rank, batch, args.qc_dir / f"knee_plot_scRNA_{label}.png")
+    plot_barcode_rank(
+        knee_df, point_1, point_2, selected_rank, batch,
+        args.qc_dir / f"knee_plot_scRNA_{label}.png",
+        barcode_filter=args.barcode_filter, selected_threshold=knee_threshold,
+    )
 
     input_cells = adata.n_obs
     adata = adata[keep_knee].copy()
@@ -204,7 +300,7 @@ def main(args):
         qc_vars=["mt", "ribo"],
         inplace=True,
         log1p=True,
-        percent_top=(50, 100, 200, 500),
+        percent_top=tuple(value for value in (50, 100, 200, 500) if value <= adata.n_vars) or None,
     )
 
     limits = {
@@ -212,17 +308,107 @@ def main(args):
         "n_genes": mad_limits(adata.obs["log1p_n_genes_by_counts"], args.mad_n_genes),
         "pct_mito": mad_limits(adata.obs["pct_counts_mt"], args.mad_pct_mito, upper_only=True),
     }
-    fixed_keep = np.ones(adata.n_obs, dtype=bool)
-    fixed_keep &= adata.obs["total_counts"].to_numpy() >= args.min_counts
-    if args.barcode_filter == "none":
-        fixed_keep &= adata.obs["n_genes_by_counts"].to_numpy() >= args.min_genes
-    fixed_keep &= adata.obs["pct_counts_mt"].to_numpy() < args.pct_mito
-    mad_keep = np.ones(adata.n_obs, dtype=bool)
-    for key, column in (("total_counts", "log1p_total_counts"), ("n_genes", "log1p_n_genes_by_counts"), ("pct_mito", "pct_counts_mt")):
-        _median, _mad, lower, upper = limits[key]
-        values = adata.obs[column].to_numpy(dtype=float)
-        mad_keep &= (values >= lower) & (values <= upper)
-    keep = fixed_keep & mad_keep
+    flow_rows = []
+    snapshots = []
+    input_after_knee = np.ones(adata.n_obs, dtype=bool)
+    current_keep = input_after_knee.copy()
+    flow_rows.append({
+        "measurement_set": batch,
+        "step_order": 1,
+        "filter_name": "barcode_filter",
+        "filter_label": f"QC_barcode_filter = {args.barcode_filter}",
+        "threshold": (
+            f"rank ≤ {selected_rank:,}; RNA UMIs ≥ {knee_threshold:,.0f}"
+            if selected_rank is not None else
+            ("manual mode; no knee applied" if args.barcode_filter == "none" else "no valid knee; skipped")
+        ),
+        "applied": selected_rank is not None,
+        "cells_before": input_cells,
+        "cells_after": post_knee_cells,
+        "cells_removed": input_cells - post_knee_cells,
+        "removed_percent": 100 * (input_cells - post_knee_cells) / input_cells if input_cells else 0,
+        "retained_percent_of_input": 100 * post_knee_cells / input_cells if input_cells else 0,
+    })
+
+    def apply_filter(filter_name, filter_label, threshold, values, lower, upper, enabled):
+        nonlocal current_keep
+        before_keep = current_keep.copy()
+        candidate = np.ones(adata.n_obs, dtype=bool)
+        if enabled:
+            candidate &= values >= lower
+            candidate &= values <= upper
+        current_keep &= candidate
+        before_count = int(before_keep.sum())
+        after_count = int(current_keep.sum())
+        flow_rows.append({
+            "measurement_set": batch,
+            "step_order": len(flow_rows) + 1,
+            "filter_name": filter_name,
+            "filter_label": filter_label,
+            "threshold": threshold,
+            "applied": bool(enabled),
+            "cells_before": before_count,
+            "cells_after": after_count,
+            "cells_removed": before_count - after_count,
+            "removed_percent": 100 * (before_count - after_count) / before_count if before_count else 0,
+            "retained_percent_of_input": 100 * after_count / input_cells if input_cells else 0,
+        })
+        snapshots.append({
+            "filter_label": filter_label,
+            "metric_label": filter_name.replace("_", " "),
+            "values_before": values[before_keep],
+            "values_after": values[current_keep],
+            "lower": lower,
+            "upper": upper,
+            "applied": bool(enabled),
+            "removed": before_count - after_count,
+            "cells_before": before_count,
+            "cells_after": after_count,
+        })
+
+    total_counts = adata.obs["total_counts"].to_numpy(dtype=float)
+    n_genes = adata.obs["n_genes_by_counts"].to_numpy(dtype=float)
+    pct_mito = adata.obs["pct_counts_mt"].to_numpy(dtype=float)
+    apply_filter(
+        "total RNA UMIs", "QC_min_counts_per_cell",
+        f"total_counts ≥ {args.min_counts:,}", total_counts, float(args.min_counts), np.inf,
+        args.min_counts > 0,
+    )
+    apply_filter(
+        "detected genes", "QC_min_genes_per_cell",
+        (
+            f"n_genes_by_counts ≥ {args.min_genes:,}"
+            if args.barcode_filter == "none" else
+            f"skipped because QC_barcode_filter = {args.barcode_filter}"
+        ),
+        n_genes, float(args.min_genes), np.inf,
+        args.barcode_filter == "none" and args.min_genes > 0,
+    )
+    apply_filter(
+        "mitochondrial percentage", "QC_pct_mito",
+        f"pct_counts_mt < {args.pct_mito:g}%", pct_mito, -np.inf,
+        np.nextafter(float(args.pct_mito), -np.inf),
+        args.pct_mito < 100,
+    )
+    fixed_keep = current_keep.copy()
+
+    mad_specs = (
+        ("log1p total RNA UMIs", "QC_MAD_total_counts", "total_counts", "log1p_total_counts", args.mad_total_counts, False),
+        ("log1p detected genes", "QC_MAD_n_genes", "n_genes", "log1p_n_genes_by_counts", args.mad_n_genes, False),
+        ("mitochondrial percentage", "QC_MAD_pct_mito", "pct_mito", "pct_counts_mt", args.mad_pct_mito, True),
+    )
+    for metric_name, parameter, key, column, n_mads, upper_only in mad_specs:
+        _median, metric_mad, lower, upper = limits[key]
+        effective = n_mads > 0 and np.isfinite(metric_mad) and metric_mad > 0
+        bound_text = (
+            f"≤ {upper:.3g} ({n_mads:g} MAD upper tail)" if upper_only else
+            f"{lower:.3g} ≤ value ≤ {upper:.3g} ({n_mads:g} MAD)"
+        ) if effective else f"disabled (configured {n_mads:g}; observed MAD {metric_mad:.3g})"
+        apply_filter(
+            metric_name, parameter, bound_text,
+            adata.obs[column].to_numpy(dtype=float), lower, upper, effective,
+        )
+    keep = current_keep
 
     fixed_plot_limits = {
         "log1p_total_counts": (
@@ -244,6 +430,10 @@ def main(args):
         batch,
         args.qc_dir / f"qc_distributions_scRNA_{label}.png",
     )
+    flow = pd.DataFrame(flow_rows)
+    flow.to_csv(args.qc_dir / f"rna_qc_filter_flow_{label}.tsv", sep="\t", index=False)
+    plot_filter_flow(flow, batch, args.qc_dir / f"rna_qc_filter_flow_{label}.png")
+    plot_filter_steps(snapshots, batch, args.qc_dir / f"rna_qc_filter_steps_{label}.png")
     retained = adata[keep].copy()
     retained.write_h5ad(f"{label}_filtered.h5ad")
 

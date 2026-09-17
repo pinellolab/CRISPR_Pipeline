@@ -415,7 +415,7 @@ def image_family(path: Path) -> str:
         return "guide_assignment"
     if any(term in value for term in ("intended_target", "global_analysis", "evaluation", "volcano")):
         return "evaluation"
-    if any(term in value for term in ("scrna", "gene_", "knee_plot")):
+    if any(term in value for term in ("scrna", "rna_qc", "gene_", "knee_plot")):
         return "preprocessing"
     if any(term in value for term in ("loss_curve", "perturbo", "sceptre")):
         return "inference"
@@ -451,6 +451,33 @@ def image_gallery(images: list[tuple[Path, str]]) -> str:
         for path, encoded in images
     )
     return f'<h3>QC visualizations</h3><div class="gallery">{figures}</div>'
+
+
+def measurement_set_filter_flow_content(root: Path | None) -> str:
+    if not root or not root.exists():
+        return ""
+    candidates = sorted(root.glob("**/measurement_set_qc_filter_flow.tsv"))
+    if not candidates:
+        return ""
+    with candidates[-1].open(newline="", encoding="utf-8", errors="replace") as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    columns = [
+        ("measurement_set", "Measurement set"),
+        ("step_order", "Order"),
+        ("filter_label", "Filter parameter"),
+        ("threshold", "Resolved rule"),
+        ("applied", "Applied"),
+        ("cells_before", "Cells before"),
+        ("cells_after", "Cells after"),
+        ("cells_removed", "Removed"),
+        ("removed_percent", "Removed %"),
+        ("retained_percent_of_input", "Input retained %"),
+    ]
+    return (
+        '<h3>Sequential per-measurement-set RNA filters</h3>'
+        '<p>Rows follow the exact execution order; disabled or inapplicable filters remain visible.</p>'
+        + data_table(rows, columns)
+    )
 
 
 def clean_html_cell(value: str) -> str:
@@ -651,6 +678,8 @@ def render(args: argparse.Namespace) -> str:
             metric_card("Task runtime", fmt_seconds(state["runtime"]), "aggregate"),
         ]
         extra = category_flow(qc_data, family) + qc_metrics_content(qc_data, family)
+        if family == "preprocessing":
+            extra += measurement_set_filter_flow_content(getattr(args, "artifact_dir", None))
         if family == "input" and guide:
             cards.extend([
                 metric_card("Guides", guide.get("row_count", "—"), "validated"),
