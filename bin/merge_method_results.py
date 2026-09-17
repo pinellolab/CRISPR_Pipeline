@@ -284,7 +284,7 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
             "perturbo_q_value",
             "perturbo_fc_se",
         ],
-    )
+    ) + _perturbo_diagnostic_columns(merged_element_df)
     merged_element_df = merged_element_df[preferred_order]
     
     # Load base mudata for structure

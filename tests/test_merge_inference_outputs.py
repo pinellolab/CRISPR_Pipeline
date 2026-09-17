@@ -96,6 +96,7 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
             "intended_target_end": [150, 250],
             "log2_fc": [0.5, -0.5],
             "p_value": [0.01, 0.2],
+            "perturbo_crt_low_information": [False, True],
         }
     )
 
@@ -127,6 +128,9 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
 
     assert list(guide_out.sort_values("guide_id")["perturbo_crt_low_information"]) == [True, False]
     assert list(guide_out.sort_values("guide_id")["perturbo_crt_observed_nonzero"]) == [0, 15]
+    # The element merge reorders through a fixed preferred list; the diagnostics
+    # must survive that too (they were lost here on the first TAP-seq head run).
+    assert list(element_out.sort_values("gene_id")["perturbo_crt_low_information"]) == [False, True]
 
     for observed in (guide_out, element_out):
         assert "sceptre_q_value" in observed.columns
