@@ -38,10 +38,15 @@ from intended_target_key_utils import (
 from mudata_uns_io import write_uns_patch
 from inference_covariates import (
     CANONICAL_COVARIATES,
-    GUIDE_UMI_COVARIATE,
-    derive_guide_umi_covariate,
+    GUIDE_UMI_COLUMN,
+    derive_perturbo_log_covariates,
+    ensure_gene_depth_totals,
+    ensure_guide_umi_totals,
     perturbo_covariate_arguments,
+    perturbo_log_name,
 )
+
+GUIDE_UMI_COVARIATE = perturbo_log_name(GUIDE_UMI_COLUMN)
 from result_table_io import write_result_table
 
 
@@ -110,18 +115,23 @@ def _get_assignment_matrix(mdata: md.MuData):
 
 
 def _ensure_covariates(mdata: md.MuData) -> None:
-    """Take the derived guide-UMI covariate from upstream, or derive it once here.
+    """Take the PerTurbo log covariates from upstream, or derive them once here.
 
-    The derivation lives in ``bin/inference_covariates.py``; the shared
-    preparation step already ran it over the analysed cells, so when the column
-    is present it is used as it stands. Recomputing it here is only for the input
-    paths that skip that step, and it now centres over the same cell population
-    either way, because the cells are decided once in ``bin/mudata_concat.py``.
+    The derivations live in ``bin/inference_covariates.py``; the shared
+    preparation step already ran them over the analysed cells, so when the
+    columns are present they are used as they stand. Recomputing here is only for
+    input paths that skip that step -- and the underlying totals are pinned first
+    so that a depth is never measured over an already-subset matrix.
     """
-    if GUIDE_UMI_COVARIATE in mdata[GENE_MODALITY].obs.columns:
-        print(f"Using the upstream {GUIDE_UMI_COVARIATE} column.")
+    expected = [
+        c.perturbo_name for c in CANONICAL_COVARIATES if c.kind == "count"
+    ]
+    if all(name in mdata[GENE_MODALITY].obs.columns for name in expected):
+        print(f"Using the upstream PerTurbo log covariates: {expected}.")
         return
-    derive_guide_umi_covariate(mdata)
+    ensure_guide_umi_totals(mdata)
+    ensure_gene_depth_totals(mdata)
+    derive_perturbo_log_covariates(mdata)
 
 
 def _ensure_library_size(mdata: md.MuData) -> None:
@@ -155,7 +165,22 @@ def _build_guide_identity_mapping(mdata: md.MuData) -> dict[str, str]:
     return dict(zip(perturbo_names.astype(str), guide_ids.tolist()))
 
 
-def _covariate_has_control_variance(input_path: Path, map_key: str, names_key: str) -> bool:
+def _covariate_has_baseline_variance(
+    input_path: Path, map_key: str, names_key: str, *, pool: str
+) -> bool:
+    """Does the guide-UMI covariate vary among the cells the baseline is fit on?
+
+    Which cells those are is the CRT pool's business, so the check has to follow
+    it. Under ``control-anchored`` PerTurbo fits its stage-one baseline on the
+    pure control cells, and a covariate constant across them is unidentifiable
+    there. Under ``all-cells`` -- the shipped high-MOI default -- the baseline is
+    fit on every cell, so the control cells say nothing about identifiability:
+    measuring variance over the controls alone would drop the covariate from a
+    screen that merely has few or no non-targeting guides, and PerTurbo would
+    then be conditioning on less than SCEPTRE, which is the asymmetry this
+    covariate list exists to remove. ``auto`` leaves the choice to PerTurbo, so
+    it is treated as the restrictive case.
+    """
     with _open_mudata(input_path, backed="r") as mdata:
         if GUIDE_UMI_COVARIATE not in mdata[GENE_MODALITY].obs.columns:
             return False
@@ -163,6 +188,11 @@ def _covariate_has_control_variance(input_path: Path, map_key: str, names_key: s
             mdata[GENE_MODALITY].obs[GUIDE_UMI_COVARIATE],
             errors="coerce",
         ).to_numpy(dtype=float)
+        if pool == "all-cells":
+            finite = values[np.isfinite(values)]
+            if finite.size < 2:
+                return False
+            return bool(np.nanstd(finite) > 1e-8)
         guide = mdata[GUIDE_MODALITY]
         mapping = guide.varm[map_key]
         names = [str(x) for x in guide.uns[names_key]]
@@ -311,6 +341,7 @@ def convert_element_effects(
             "p_value",
             "perturbo_posterior_prob",
         ]
+        + _carried_diagnostic_columns(out)
     ]
     out["perturbo_q_value"] = _bh_adjust(out["p_value"])
     return out
@@ -327,9 +358,37 @@ def convert_guide_effects(
     out = _convert_common_effect_columns(effects, crt=crt)
     out["guide_id"] = out["element"].map(guide_name_map).fillna(out["element"]).astype(str)
     out = _maybe_filter_pairs(out, prepared_mudata_path, inference_type="guide", test_all_pairs=test_all_pairs)
-    out = out[["gene_id", "guide_id", "log2_fc", "perturbo_fc_se", "p_value", "perturbo_posterior_prob"]]
+    out = out[
+        ["gene_id", "guide_id", "log2_fc", "perturbo_fc_se", "p_value", "perturbo_posterior_prob"]
+        + _carried_diagnostic_columns(out)
+    ]
     out["perturbo_q_value"] = _bh_adjust(out["p_value"])
     return out
+
+
+# Per-pair CRT diagnostics PerTurbo writes beside the p-value. They travel
+# into the pipeline's result tables under a `perturbo_` prefix so that a call
+# can be read against how much data it rests on and how its tail probability
+# was obtained, without opening PerTurbo's own artifact directory. None of them
+# filters anything: `crt_low_information` is an annotation, not a gate, and the
+# tail columns record why an approximation was replaced, not that the
+# replacement is invalid. Whichever of them a PerTurbo version emits are carried;
+# the tail-policy columns (`crt_tail_failure_reason` onward) arrive with the
+# Chernoff-fallback release and are simply absent before it.
+CRT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
+    "crt_low_information",
+    "crt_observed_nonzero",
+    "crt_expected_nonzero",
+    "crt_saddlepoint_valid",
+    "crt_tail_failure_reason",
+    "crt_used_chernoff",
+    "crt_used_conservative_one",
+    "crt_root_residual_null_sd",
+)
+
+
+def _carried_diagnostic_columns(frame: pd.DataFrame) -> list[str]:
+    return [f"perturbo_{c}" for c in CRT_DIAGNOSTIC_COLUMNS if f"perturbo_{c}" in frame.columns]
 
 
 def _convert_common_effect_columns(effects: pd.DataFrame, *, crt: bool = False) -> pd.DataFrame:
@@ -363,6 +422,9 @@ def _convert_common_effect_columns(effects: pd.DataFrame, *, crt: bool = False) 
     else:
         out["p_value"] = p_value.where(p_value.notna(), posterior)
     out["perturbo_posterior_prob"] = posterior
+    for column in CRT_DIAGNOSTIC_COLUMNS:
+        if column in out.columns:
+            out[f"perturbo_{column}"] = out[column]
     out["gene_id"] = out["gene"].astype(str)
     out["log2_fc"] = pd.to_numeric(out["posterior_mean"], errors="coerce") / math.log(2.0)
     out["perturbo_fc_se"] = pd.to_numeric(out["posterior_scale"], errors="coerce") / math.log(2.0)
@@ -529,17 +591,31 @@ def _run_perturbo(
     # calls is a difference in method rather than in model specification. The
     # preparation step writes them into the MuData's top-level obs for SCEPTRE and
     # leaves them on the modalities for PerTurbo.
+    # Detect on the PerTurbo-side column: for the count terms that is the
+    # precomputed `log_` column, not the raw count SCEPTRE reads. `_ensure_covariates`
+    # has already guaranteed those exist, including on inputs that skipped the shared
+    # preparation step.
     with _open_mudata(input_path, backed="r") as mdata:
-        present = [c for c, _kind, _aliases in CANONICAL_COVARIATES if c in mdata[GENE_MODALITY].obs.columns]
+        obs_columns = set(mdata[GENE_MODALITY].obs.columns)
+    present = [
+        c
+        for c in CANONICAL_COVARIATES
+        if c.perturbo_name is not None and c.perturbo_name in obs_columns
+    ]
     continuous, batch = perturbo_covariate_arguments(present)
-    # Only bites if the guide-UMI term is ever added to CANONICAL_COVARIATES; it is
-    # not one today, so neither method conditions on it.
-    if GUIDE_UMI_COVARIATE in continuous and not _covariate_has_control_variance(
-        input_path, map_key, names_key
+    # Live now that the guide-UMI term is a conditioned covariate: a covariate
+    # constant across the cells PerTurbo fits its baseline on is unidentifiable
+    # there. Which cells those are depends on the resolved CRT pool.
+    if GUIDE_UMI_COVARIATE in continuous and not _covariate_has_baseline_variance(
+        input_path, map_key, names_key, pool=args.resolved_crt_pool
     ):
+        scope = (
+            "every cell" if args.resolved_crt_pool == "all-cells" else "the control cells"
+        )
         print(
-            f"Dropping {GUIDE_UMI_COVARIATE}: it has zero variance in the control cells "
-            "PerTurbo fits its baseline on."
+            f"Dropping {GUIDE_UMI_COVARIATE}: it has zero variance across {scope}, "
+            f"which PerTurbo fits its baseline on under the "
+            f"{args.resolved_crt_pool!r} pool."
         )
         continuous = [c for c in continuous if c != GUIDE_UMI_COVARIATE]
     if continuous:

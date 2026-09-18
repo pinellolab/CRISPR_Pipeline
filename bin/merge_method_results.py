@@ -140,6 +140,15 @@ def _existing_columns(df: pd.DataFrame, columns):
     return [col for col in columns if col in df.columns]
 
 
+def _perturbo_diagnostic_columns(df: pd.DataFrame):
+    """PerTurbo's per-pair CRT diagnostics (`perturbo_crt_*`), carried as they come.
+
+    The adapter writes them beside the p-value; they are kept in the merged
+    tables for debugging and never filter a row.
+    """
+    return [col for col in df.columns if col.startswith("perturbo_crt_")]
+
+
 def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_guide, perturbo_per_element, base_mudata_path, write_mudata=False):
     """
     Merge SCEPTRE and PerTurbo results into a single MuData object.
@@ -192,7 +201,7 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
             "perturbo_q_value",
             "perturbo_fc_se",
         ],
-    )
+    ) + _perturbo_diagnostic_columns(perturbo_guide_df)
     merged_guide_df = pd.merge(
         sceptre_guide_df[sceptre_guide_cols],
         perturbo_guide_df[perturbo_guide_cols],
@@ -228,7 +237,7 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
         "perturbo_p_value",
         "perturbo_q_value",
         "perturbo_fc_se",
-    ]
+    ] + _perturbo_diagnostic_columns(perturbo_element_df)
     sceptre_element_merge_df = sceptre_element_df[sceptre_element_cols].copy()
     perturbo_element_merge_df = perturbo_element_df[perturbo_element_cols].copy()
 
@@ -275,7 +284,7 @@ def merge_method_results(sceptre_per_guide, sceptre_per_element, perturbo_per_gu
             "perturbo_q_value",
             "perturbo_fc_se",
         ],
-    )
+    ) + _perturbo_diagnostic_columns(merged_element_df)
     merged_element_df = merged_element_df[preferred_order]
     
     # Load base mudata for structure

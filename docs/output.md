@@ -40,6 +40,8 @@ The local-analysis tables contain guide-gene or target-element-gene tests restri
 
 The local/global analysis TSVs include raw p-values, BH-adjusted q-values when applicable, and the nonredundant `*_negLog10p` significance transform. Element-level TSVs also include the catalog-facing element annotations: `element_id`, `element_type`, `element_chr`, `element_start`, `element_end`, `element_name`, `guide_ids`, `num_guides`, `gene_name`, and `nPerturbedCells`. Per-guide TSVs include guide sequence, type, targeting status, guide and intended-target coordinates, PAM/strand, tested-gene symbol, and per-guide perturbed-cell count.
 
+When PerTurbo emits them, its per-pair CRT diagnostics also ride along in the local and global per-guide and per-element TSVs under a `perturbo_crt_` prefix (`perturbo_crt_low_information`, `perturbo_crt_observed_nonzero`, `perturbo_crt_expected_nonzero`, `perturbo_crt_saddlepoint_valid`, and the tail-policy columns `perturbo_crt_tail_failure_reason`, `perturbo_crt_used_chernoff`, `perturbo_crt_used_conservative_one`, `perturbo_crt_root_residual_null_sd`). They record how much data a call rests on and how its tail probability was obtained; none of them filters a row, and the catalog tables below do not carry them.
+
 `catalog_per_element_output.tsv.gz` is an additive, per-element catalog view with one row per `(element, gene)` pair and the following columns:
 `sceptre_log2_fc`, `sceptre_p_value`, `sceptre_q_value`, `sceptre_fc_se`, `sceptre_negLog10p`, `perturbo_log2_fc`, `perturbo_p_value`, `perturbo_q_value`, `perturbo_fc_se`, `perturbo_negLog10p`,
 `element_id`, `element_type`, `element_chr`, `element_start`, `element_end`, `element_name`,

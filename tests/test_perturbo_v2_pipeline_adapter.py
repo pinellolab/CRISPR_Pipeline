@@ -87,7 +87,14 @@ def test_prepare_mudata_adds_v2_metadata_and_control_guide_names(tmp_path):
     assert adapter.GUIDE_MAP_KEY in guide.varm
     assert adapter.GUIDE_NAMES_KEY in guide.uns
     assert "total_gene_umis" in gene.obs
-    assert "log1p_total_guide_umis_centered" in gene.obs
+    # PerTurbo conditions on precomputed logs, since it applies no transform of
+    # its own; SCEPTRE gets the plain counts and logs them in its formula.
+    for column in (
+        "log_total_guide_umis",
+        "log_total_gene_umis",
+        "log_num_expressed_genes",
+    ):
+        assert column in gene.obs
     assert any(str(name).startswith("non-targeting|") for name in guide.uns[adapter.GUIDE_NAMES_KEY])
     assert guide_name_map["non-targeting|nt1"] == "nt1"
 
@@ -174,6 +181,11 @@ def test_convert_guide_effects_restores_control_guide_ids_and_filters_pairs(tmp_
             "posterior_scale": [np.log(2) / 10, np.log(2) / 9, np.log(2)],
             "posterior_prob": [0.05, 0.07, 0.8],
             "empirical_p_value": [np.nan, np.nan, 0.9],
+            # Diagnostics PerTurbo writes beside the p-value; the tail-policy
+            # column is one of the Chernoff-fallback release's, the others rc9's.
+            "crt_low_information": [True, False, False],
+            "crt_observed_nonzero": [0, 12, 40],
+            "crt_tail_failure_reason": [16, 0, -1],
         }
     )
 
@@ -183,6 +195,12 @@ def test_convert_guide_effects_restores_control_guide_ids_and_filters_pairs(tmp_
         prepared_path,
         test_all_pairs=False,
     )
+
+    # Carried under the method prefix, as they come, without filtering rows.
+    assert list(observed["perturbo_crt_low_information"]) == [True, False]
+    assert list(observed["perturbo_crt_observed_nonzero"]) == [0, 40]
+    assert list(observed["perturbo_crt_tail_failure_reason"]) == [16, -1]
+    assert "perturbo_crt_used_chernoff" not in observed.columns  # absent upstream, absent here
 
     assert list(observed["guide_id"]) == ["gA", "nt1"]
     assert list(observed["gene_id"]) == ["GENE1", "GENE1"]
@@ -211,7 +229,9 @@ def test_run_perturbo_uses_only_native_pairs_to_test_flag(tmp_path, monkeypatch,
         captured["env"] = env
         return FakeProcess()
 
-    monkeypatch.setattr(adapter, "_covariate_has_control_variance", lambda *args: False)
+    monkeypatch.setattr(
+        adapter, "_covariate_has_baseline_variance", lambda *args, **kwargs: False
+    )
     monkeypatch.setattr(adapter.subprocess, "Popen", fake_popen)
     args = adapter.build_parser().parse_args(
         [
@@ -339,3 +359,87 @@ def test_run_pipeline_adapter_patches_uns_without_rewriting_x(
         assert all(any(frame["element"].str.contains("non-targeting")) for frame in observed_native_pairs)
         assert (tmp_path / "artifacts/element_pairs_to_test.parquet").exists()
         assert (tmp_path / "artifacts/guide_pairs_to_test.parquet").exists()
+
+
+def _write_mudata_without_controls(path):
+    """A screen with no non-targeting guides, so no cell is a control cell."""
+    mdata = _make_mudata()
+    guide = mdata["guide"]
+    guide.var.loc["nt1", "targeting"] = True
+    guide.var.loc["nt1", "type"] = "targeting"
+    guide.var.loc["nt1", "intended_target_name"] = "elemC"
+    guide.var.loc["nt1", "intended_target_chr"] = "chr3"
+    guide.var.loc["nt1", "intended_target_start"] = 500.0
+    guide.var.loc["nt1", "intended_target_end"] = 600.0
+    # A guide-UMI depth that varies across cells, so the covariate is
+    # identifiable on the all-cells baseline even with no control cells. The
+    # assignment layer stays binary; only the raw UMI counts differ.
+    guide.X = sparse.csr_matrix(
+        np.array([[3, 0, 0], [0, 7, 0], [0, 0, 11]], dtype=np.float32)
+    )
+    guide.layers["guide_assignment"] = sparse.csr_matrix(
+        np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float32)
+    )
+    mdata.write(path)
+    return mdata
+
+
+@pytest.mark.parametrize(
+    ("pool", "expect_guide_umi_covariate"),
+    [("all-cells", True), ("control-anchored", False)],
+)
+def test_guide_umi_covariate_survives_the_all_cells_pool_without_controls(
+    tmp_path, monkeypatch, pool, expect_guide_umi_covariate
+):
+    """The baseline-variance guard has to follow the pool.
+
+    Under ``all-cells`` PerTurbo fits its stage-one baseline on every cell, so a
+    screen with no non-targeting guides must keep the guide-UMI covariate --
+    dropping it there left PerTurbo conditioning on less than SCEPTRE. Under
+    ``control-anchored`` the baseline really is the control cells, and with none
+    the covariate is unidentifiable, so it is still dropped.
+    """
+    input_path = tmp_path / "input.h5mu"
+    prepared_path = tmp_path / "prepared.h5mu"
+    _write_mudata_without_controls(input_path)
+    adapter.prepare_mudata_for_perturbo_v2(input_path, prepared_path)
+
+    captured = {}
+
+    class FakeProcess:
+        args = []
+
+    def fake_popen(cmd, env):
+        captured["cmd"] = cmd
+        return FakeProcess()
+
+    monkeypatch.setattr(adapter.subprocess, "Popen", fake_popen)
+    args = adapter.build_parser().parse_args(
+        [
+            "--input", str(input_path),
+            "--per-element-output", str(tmp_path / "element.tsv.gz"),
+            "--per-guide-output", str(tmp_path / "guide.tsv.gz"),
+            "--device", "cpu",
+            "--no-save-model-params",
+        ]
+    )
+    args.resolved_crt_pool = pool
+    adapter._run_perturbo(
+        prepared_path,
+        tmp_path / "fit",
+        map_key=adapter.GUIDE_MAP_KEY,
+        names_key=adapter.GUIDE_NAMES_KEY,
+        pairs_to_test_path=None,
+        gpu_id=None,
+        phase="smoke",
+        args=args,
+    )
+
+    cmd = captured["cmd"]
+    index = cmd.index("--continuous-covariates")
+    passed = []
+    for token in cmd[index + 1:]:
+        if token.startswith("--"):
+            break
+        passed.append(token)
+    assert (adapter.GUIDE_UMI_COVARIATE in passed) is expect_guide_umi_covariate
