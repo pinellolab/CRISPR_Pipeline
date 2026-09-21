@@ -15,6 +15,17 @@
                 "input"
             ],
             "properties": {
+                "ENABLE_POSTCONCAT_EMBEDDING_QC": {
+                    "type": "boolean", "default": true,
+                    "description": "Defer pooled MT/gene QC until guide/HTO intersection; visualize temporary normalization before and after optional clone removal."
+                },
+                "QC_EMBEDDING_n_pcs": {"type": "integer", "default": 50, "minimum": 2, "description": "Requested PCs; capped to cells/variable genes minus one and recorded in QC."},
+                "QC_EMBEDDING_n_neighbors": {"type": "integer", "default": 15, "minimum": 2, "description": "UMAP neighbor count."},
+                "QC_EMBEDDING_n_top_genes": {"type": "integer", "default": 6000, "minimum": 2, "description": "Maximum HVGs for temporary PCA; smaller panels use all expressed nonconstant genes."},
+                "QC_EMBEDDING_hvg_batch_key": {"type": "string", "default": "", "description": "Optional observed biological covariate for HVG selection only; never batch correction."},
+                "QC_EMBEDDING_seed": {"type": "integer", "default": 0, "minimum": 0, "description": "PCA/UMAP random seed."},
+                "QC_EMBEDDING_max_dense_gb": {"type": "number", "default": 16, "exclusiveMinimum": 0, "description": "Maximum estimated scaled-HVG array GB; exceedance fails with a resource message, never silent subsampling."},
+                "GUIDE_ASSIGNMENT_min_guides_per_cell": {"type": "integer", "default": 1, "minimum": 0, "description": "Minimum positive assigned guides; 1 excludes guide-negative cells, including before clone calling."},
                 "input": {
                     "type": [
                         "string",
@@ -272,7 +283,7 @@
                 },
                 "QC_pct_mito": {
                     "type": "number",
-                    "default": 15,
+                    "default": 25,
                     "minimum": 0,
                     "maximum": 100,
                     "description": "Maximum mitochondrial read percentage applied after RNA measurement-set concatenation."

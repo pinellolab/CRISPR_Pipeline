@@ -15,11 +15,12 @@ process filter_guide_assignment_qc {
         export MPLCONFIGDIR="./tmp/mplconfigdir"
         mkdir -p \${MPLCONFIGDIR}
 
-        filter_guide_assignment_qc.py \
+        python ${projectDir}/bin/filter_guide_assignment_qc.py \
             ${mudata_input} \
             guide_assignment_filtered_mudata.h5mu \
             --outdir guide_assignment_qc \
             --max-guides-per-cell ${params.GUIDE_ASSIGNMENT_max_guides_per_cell} \
+            --min-guides-per-cell ${params.GUIDE_ASSIGNMENT_min_guides_per_cell} \
             --batch-column ${params.QC_batch_col ?: 'batch'}
         """
 

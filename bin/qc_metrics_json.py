@@ -3,6 +3,7 @@
 import json
 import math
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -357,6 +358,12 @@ def collect_additional_qc(additional_qc_dir):
             "available": bool(path and os.path.exists(path)),
             "rows": _json_safe(_table_records(path)),
         }
+    if additional_qc_dir:
+        embeddings = []
+        for path in sorted((Path(additional_qc_dir) / 'embeddings').rglob('embedding_qc_metrics.json')):
+            with path.open() as handle:
+                embeddings.append(json.load(handle))
+        results['postconcat_embeddings'] = {'available': bool(embeddings), 'rows': embeddings}
     return results
 
 

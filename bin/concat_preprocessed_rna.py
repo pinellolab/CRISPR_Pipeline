@@ -131,6 +131,8 @@ def main():
     parser.add_argument("--qc-dir", type=Path, default=Path("post_concat_qc"))
     parser.add_argument("--pct-mito", type=float, default=15)
     parser.add_argument("--min-cells-fraction", type=float, default=0.05)
+    parser.add_argument("--defer-global-qc", action="store_true",
+                        help="Preserve raw counts until guide/HTO intersection and clone QC")
     args = parser.parse_args()
     inputs = sorted(map(Path, args.inputs), key=lambda path: path.name)
     if not inputs:
@@ -158,6 +160,11 @@ def main():
     if "pct_counts_mt" not in combined.obs:
         raise ValueError("Per-measurement-set QC did not provide pct_counts_mt")
     args.qc_dir.mkdir(parents=True, exist_ok=True)
+    if args.defer_global_qc:
+        combined.write_h5ad(args.output)
+        (args.qc_dir / "global_qc_deferred.txt").write_text(
+            "MT and fractional gene support are deferred to post-assignment QC.\n")
+        return
     cells_before = combined.n_obs
     mito_before = pd.to_numeric(combined.obs["pct_counts_mt"], errors="coerce").to_numpy(dtype=float)
     mito_keep = mito_before < args.pct_mito

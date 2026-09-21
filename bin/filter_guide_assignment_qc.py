@@ -19,7 +19,7 @@ def assigned_counts(guide):
         raise ValueError("guide.layers['guide_assignment'] is required")
     matrix = guide.layers["guide_assignment"]
     if sp.issparse(matrix):
-        return np.asarray(matrix.getnnz(axis=1)).ravel().astype(int)
+        return np.asarray((matrix > 0).sum(axis=1)).ravel().astype(int)
     return np.count_nonzero(np.asarray(matrix), axis=1).astype(int)
 
 
@@ -34,7 +34,7 @@ def batch_values(mdata, requested):
     return pd.Series("all", index=mdata.obs_names, dtype=str), "unavailable"
 
 
-def plot_filter(counts, keep, label, maximum, output):
+def plot_filter(counts, keep, label, maximum, output, minimum=0):
     upper = max(int(counts.max()) if counts.size else 0, maximum, 1)
     bins = np.arange(-0.5, upper + 1.5, 1)
     before, after = len(counts), int(keep.sum())
@@ -51,7 +51,7 @@ def plot_filter(counts, keep, label, maximum, output):
     axes[2].axis("off")
     text = (
         f"{before:,} cells before\n\n↓\n\n"
-        + (f"assigned gRNAs ≤ {maximum}\nAPPLIED" if maximum > 0 else "FILTER DISABLED")
+        + (f"{minimum} ≤ assigned gRNAs ≤ {maximum}\nAPPLIED" if maximum > 0 else f"assigned gRNAs ≥ {minimum}")
         + f"\n\n↓\n\n{after:,} cells after\n{before-after:,} removed"
     )
     axes[2].text(0.5, 0.5, text, ha="center", va="center", fontsize=11,
@@ -70,10 +70,13 @@ def main():
     parser.add_argument("output_mudata")
     parser.add_argument("--outdir", type=Path, default=Path("guide_assignment_qc"))
     parser.add_argument("--max-guides-per-cell", type=int, default=15)
+    parser.add_argument("--min-guides-per-cell", type=int, default=1)
     parser.add_argument("--batch-column", default="batch")
     args = parser.parse_args()
     if args.max_guides_per_cell < 0:
         parser.error("--max-guides-per-cell must be >= 0; use 0 to disable")
+    if args.min_guides_per_cell < 0 or (args.max_guides_per_cell and args.min_guides_per_cell > args.max_guides_per_cell):
+        parser.error("Guide minimum must be nonnegative and cannot exceed a nonzero maximum")
     args.outdir.mkdir(parents=True, exist_ok=True)
 
     mdata = md.read_h5mu(args.input_mudata)
@@ -82,12 +85,14 @@ def main():
         raise ValueError("Guide and MuData cell orders differ")
     counts = assigned_counts(guide)
     keep = counts <= args.max_guides_per_cell if args.max_guides_per_cell else np.ones(len(counts), bool)
+    keep &= counts >= args.min_guides_per_cell
     batches, batch_column = batch_values(mdata, args.batch_column)
     batch_array = batches.to_numpy()
     pd.DataFrame({
         "cell_barcode": mdata.obs_names.astype(str), "measurement_set": batch_array,
         "assigned_guides": counts, "retained": keep,
-        "filter_reason": np.where(keep, "retained", "assigned_guides_above_maximum"),
+        "filter_reason": np.where(keep, "retained", np.where(counts < args.min_guides_per_cell,
+                                "assigned_guides_below_minimum", "assigned_guides_above_maximum")),
     }).to_csv(args.outdir / "guide_assignment_cell_filter.tsv", sep="\t", index=False)
 
     rows = []
@@ -98,19 +103,20 @@ def main():
         removed = before - after
         rows.append({
             "measurement_set": label, "step_order": 1,
-            "filter_label": "GUIDE_ASSIGNMENT_max_guides_per_cell",
-            "threshold": f"assigned gRNAs per cell <= {args.max_guides_per_cell}" if args.max_guides_per_cell else "disabled",
-            "applied": args.max_guides_per_cell > 0, "cells_before": before,
+            "filter_label": "GUIDE_ASSIGNMENT_min_max_guides_per_cell",
+            "threshold": f"minimum={args.min_guides_per_cell}; maximum={args.max_guides_per_cell or 'unlimited'}",
+            "applied": args.max_guides_per_cell > 0 or args.min_guides_per_cell > 0, "cells_before": before,
             "cells_after": after, "cells_removed": removed,
             "removed_percent": 100 * removed / before if before else 0.0,
             "retained_percent_of_input": 100 * after / before if before else 0.0,
             "batch_column": batch_column,
         })
         plot_filter(counts[selected], keep[selected], label, args.max_guides_per_cell,
-                    args.outdir / f"guide_assignment_filter_steps_{safe(label)}.png")
+                    args.outdir / f"guide_assignment_filter_steps_{safe(label)}.png", args.min_guides_per_cell)
     pd.DataFrame(rows).to_csv(args.outdir / "guide_assignment_filter_flow.tsv", sep="\t", index=False)
     metrics = {
-        "max_guides_per_cell": args.max_guides_per_cell, "applied": args.max_guides_per_cell > 0,
+        "max_guides_per_cell": args.max_guides_per_cell, "min_guides_per_cell": args.min_guides_per_cell,
+        "applied": args.max_guides_per_cell > 0 or args.min_guides_per_cell > 0,
         "batch_column": batch_column, "input_cells": len(keep),
         "retained_cells": int(keep.sum()), "removed_cells": int((~keep).sum()),
     }

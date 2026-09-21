@@ -92,7 +92,7 @@ def family_for(process: str) -> str:
         if any(key in leaf for key in ("downloadreference", "seqspecparser", "createguideref", "createhashingref")):
             return "input"
         return "mapping"
-    if any(key in value for key in ("preprocessing_pipeline", "preprocessanndata", "doublets", "filter_hashing")):
+    if any(key in value for key in ("preprocessing_pipeline", "preprocessanndata", "doublets", "filter_hashing", "embedding_before_clone", "embedding_after_clone")):
         return "preprocessing"
     if any(key in value for key in ("createmudata", "anndata_concat", "mudata_concat", "hashing_concat")):
         return "mudata"
@@ -435,6 +435,8 @@ def qc_metrics_content(data: dict[str, Any], family: str) -> str:
 
 def image_family(path: Path) -> str:
     value = str(path).lower()
+    if 'embedding' in value:
+        return 'preprocessing'
     if "seqspec" in value:
         return "seqspec"
     if any(term in value for term in ("guide_", "guides_", "sgrna", "cells_per_guide", "guides_per_cell", "hto_", "hashing_qc")):

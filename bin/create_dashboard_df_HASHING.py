@@ -949,6 +949,11 @@ def collect_additional_qc_blocks(additional_qc_dir):
     if not additional_qc_dir or not os.path.exists(additional_qc_dir):
         return blocks
 
+    # Reuse the same embedding section as the non-hashing dashboard.
+    from create_dashboard_df import collect_additional_qc_blocks as shared_qc_blocks
+    blocks.extend(block for block in shared_qc_blocks(additional_qc_dir)
+                  if block.iloc[0]['description'] == 'Post-concatenation embeddings')
+
     # Gene QC (scRNA)
     gene_dir = os.path.join(additional_qc_dir, "gene")
     gene_metrics = _safe_read_tsv(os.path.join(gene_dir, "gene_metrics.tsv"))

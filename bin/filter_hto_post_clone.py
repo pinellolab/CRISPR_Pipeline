@@ -63,7 +63,7 @@ def plot_batch(frame, flow, minimum, label, outpath):
         if index + 1 < len(flow):
             axes[2].annotate("", xy=(0.5, y_positions[index + 1] + 0.10), xytext=(0.5, y - 0.10),
                              arrowprops={"arrowstyle": "->", "color": "#64748b"})
-    fig.suptitle(f"{label}: post-clone HTO filtering", fontsize=14)
+    fig.suptitle(f"{label}: HTO filtering on GEX/guide-qualified cells", fontsize=14)
     fig.tight_layout()
     fig.savefig(outpath, dpi=170, facecolor="white", bbox_inches="tight")
     plt.close(fig)

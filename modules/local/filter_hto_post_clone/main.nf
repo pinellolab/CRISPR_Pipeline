@@ -17,7 +17,7 @@ process filter_hto_post_clone {
         export MPLCONFIGDIR="./tmp/mplconfigdir"
         mkdir -p \${MPLCONFIGDIR}
 
-        filter_hto_post_clone.py \
+        python ${projectDir}/bin/filter_hto_post_clone.py \
             ${mudata_input} \
             hto_filtered_mudata.h5mu \
             --outdir hto_qc \

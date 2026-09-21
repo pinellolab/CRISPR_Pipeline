@@ -7,6 +7,7 @@ process additional_qc_plots {
         path saturation_qc_input
         path guide_assignment_qc_input
         path hto_qc_input
+        path embedding_qc_input, stageAs: 'embedding_inputs/part??/*'
 
     output:
         path "additional_qc", emit: additional_qc
@@ -17,6 +18,8 @@ process additional_qc_plots {
         mkdir -p \${MPLCONFIGDIR}
 
         mkdir -p additional_qc/gene additional_qc/guide additional_qc/intended_target additional_qc/global_analysis
+        mkdir -p additional_qc/embeddings
+        cp -R embedding_inputs/. additional_qc/embeddings/
 
         if find ${clone_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
             mkdir -p additional_qc/clones

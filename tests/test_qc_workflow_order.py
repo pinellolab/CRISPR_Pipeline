@@ -25,10 +25,10 @@ def test_guide_and_hto_filters_follow_the_required_cell_lineage():
     guide_workflow = (ROOT / "subworkflows" / "local" / "guide_assignment_pipeline" / "main.nf").read_text()
     assert guide_workflow.index("mudata_concat(") < guide_workflow.index("filter_guide_assignment_qc(")
     assert "CloneRemoval = remove_clonal_cells(GuideAssignment.concat_mudata)" in workflow
-    assert workflow.index("CloneRemoval = remove_clonal_cells(GuideAssignment.concat_mudata)") < workflow.index(
-        "HTOFilter = filter_hto_post_clone(mudata_before_hto)"
+    assert workflow.index("HTOFilter = filter_hto_post_clone(GuideAssignment.concat_mudata)") < workflow.index(
+        "CloneRemoval = remove_clonal_cells(qualified_mudata)"
     )
-    assert workflow.index("HTOFilter = filter_hto_post_clone(mudata_before_hto)") < workflow.index(
+    assert workflow.index("HTOFilter = filter_hto_post_clone(GuideAssignment.concat_mudata)") < workflow.index(
         "Inference = inference_pipeline(mudata_for_inference"
     )
     assert "Hashing_Concat.concatenated_hashing_unfiltered_demux" in workflow

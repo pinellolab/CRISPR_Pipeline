@@ -955,6 +955,18 @@ def collect_additional_qc_blocks(additional_qc_dir):
     if not additional_qc_dir or not os.path.exists(additional_qc_dir):
         return blocks
 
+    embedding_root = os.path.join(additional_qc_dir, 'embeddings')
+    for metrics_path in sorted(glob.glob(os.path.join(embedding_root, '**', 'embedding_qc_metrics.json'), recursive=True)):
+        with open(metrics_path) as handle:
+            metrics = json.load(handle)
+        image_paths = sorted(glob.glob(os.path.join(os.path.dirname(metrics_path), '*.png')))
+        blocks.append(new_block(
+            'scRNA', 'Post-concatenation embeddings', f"Temporary RNA QC: {metrics['stage']}",
+            'Median-depth normalization → log1p → HVG → scale → PCA → UMAP; raw MuData unchanged.', True,
+            table=pd.DataFrame([metrics]), table_description='Resolved QC settings and cell counts',
+            image=image_paths, image_description=[os.path.basename(p) for p in image_paths],
+        ))
+
     # Gene QC (scRNA)
     gene_dir = os.path.join(additional_qc_dir, "gene")
     gene_metrics = _safe_read_tsv(os.path.join(gene_dir, "gene_metrics.tsv"))

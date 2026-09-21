@@ -17,6 +17,6 @@ process concat_preprocessed_rna {
         --output filtered_anndata.h5ad \
         --qc-dir post_concat_qc \
         --pct-mito ${pct_mito} \
-        --min-cells-fraction ${min_cells_fraction}
+        --min-cells-fraction ${min_cells_fraction} ${params.ENABLE_POSTCONCAT_EMBEDDING_QC ? '--defer-global-qc' : ''}
     """
 }

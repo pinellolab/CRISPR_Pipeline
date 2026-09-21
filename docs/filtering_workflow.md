@@ -1,5 +1,11 @@
 # Filtering and MuData assembly order
 
+> Historical lineage below describes the pre-embedding implementation. The
+> default workflow is now documented in [Post-concatenation QC](postconcat_embedding_qc.md):
+> GEX/guide/HTO intersection → parallel clone calling and MT/embedding QC →
+> fresh MT/embedding QC after clones → raw-count gene-support filter → inference.
+> Do not use the older diagrams below to infer the current MT/HTO order.
+
 The Gary Hon samplesheet contains three measurement-set batches:
 `IGVFDS6244NAXC`, `IGVFDS8721BKRO`, and `IGVFDS9613DDRB`. Its `lane` column is
 empty, so `measurement_sets` is the key that pairs RNA, guide, and hashing data.

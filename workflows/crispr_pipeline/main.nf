@@ -18,6 +18,8 @@ include { additional_qc_plots } from '../../modules/local/additional_qc_plots'
 include { remove_clonal_cells } from '../../modules/local/remove_clonal_cells'
 include { sequencing_saturation } from '../../modules/local/sequencing_saturation'
 include { filter_hto_post_clone } from '../../modules/local/filter_hto_post_clone'
+include { postconcat_embedding_qc as embedding_before_clone } from '../../modules/local/postconcat_embedding_qc'
+include { postconcat_embedding_qc as embedding_after_clone } from '../../modules/local/postconcat_embedding_qc'
 
 // Import hashing-specific modules
 include { CreateMuData } from '../../modules/local/CreateMuData'
@@ -184,24 +186,40 @@ workflow CRISPR_PIPELINE {
             params.Multiplicity_of_infection,
             params.GUIDE_ASSIGNMENT_capture_method,
             params.REFERENCE_restrict_genes_to_gtf,
-            // Preserve all demultiplexed HTO classes through guide assignment
-            // and clone removal. HTO support/singlet filtering happens later
-            // on the surviving cell population.
+            // Preserve classes until GEX/guide QC; HTO filtering then establishes
+            // the common raw-count population for clone calling and embedding QC.
             Hashing_Concat.concatenated_hashing_unfiltered_demux
         )
 
         // Shared processing pipeline
         GuideAssignment = guide_assignment_pipeline(MergeMuData.mudata)
+        // HTO support is assessed on GEX/guide-qualified cells before the parallel branches.
+        HTOFilter = filter_hto_post_clone(GuideAssignment.concat_mudata)
+        qualified_mudata = HTOFilter.filtered_mudata
+        if (params.ENABLE_POSTCONCAT_EMBEDDING_QC) {
+            BeforeEmbedding = embedding_before_clone(qualified_mudata, 'before_clone')
+        }
         if (params.ENABLE_CLONE_REMOVAL) {
-            CloneRemoval = remove_clonal_cells(GuideAssignment.concat_mudata)
+            CloneRemoval = remove_clonal_cells(qualified_mudata)
             mudata_before_hto = CloneRemoval.filtered_mudata
             clone_qc_dir = CloneRemoval.clone_qc
         } else {
-            mudata_before_hto = GuideAssignment.concat_mudata
+            mudata_before_hto = qualified_mudata
             clone_qc_dir = file("${workflow.projectDir}/assets/clone_qc_empty")
         }
-        HTOFilter = filter_hto_post_clone(mudata_before_hto)
-        mudata_for_inference = HTOFilter.filtered_mudata
+        mudata_for_inference = mudata_before_hto
+        if (params.ENABLE_POSTCONCAT_EMBEDDING_QC) {
+            if (params.ENABLE_CLONE_REMOVAL) {
+                AfterEmbedding = embedding_after_clone(mudata_before_hto, 'after_clone')
+                mudata_for_inference = AfterEmbedding.filtered_mudata
+                embedding_dirs = BeforeEmbedding.qc_dir.mix(AfterEmbedding.qc_dir).collect()
+            } else {
+                mudata_for_inference = BeforeEmbedding.filtered_mudata
+                embedding_dirs = BeforeEmbedding.qc_dir.collect()
+            }
+        } else {
+            embedding_dirs = file("${workflow.projectDir}/assets/embedding_qc_empty")
+        }
         Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
 
         evaluation_pipeline (
@@ -214,7 +232,8 @@ workflow CRISPR_PIPELINE {
             clone_qc_dir,
             saturation_qc_dir,
             GuideAssignment.guide_assignment_qc,
-            HTOFilter.hto_qc
+            HTOFilter.hto_qc,
+            embedding_dirs
         )
 
         if (params.ENABLE_BENCHMARK) {
@@ -271,6 +290,9 @@ workflow CRISPR_PIPELINE {
 
         // Shared processing pipeline
         GuideAssignment = guide_assignment_pipeline(mudata_for_processing)
+        if (params.ENABLE_POSTCONCAT_EMBEDDING_QC) {
+            BeforeEmbedding = embedding_before_clone(GuideAssignment.concat_mudata, 'before_clone')
+        }
         if (params.ENABLE_CLONE_REMOVAL) {
             CloneRemoval = remove_clonal_cells(GuideAssignment.concat_mudata)
             mudata_for_inference = CloneRemoval.filtered_mudata
@@ -278,6 +300,18 @@ workflow CRISPR_PIPELINE {
         } else {
             mudata_for_inference = GuideAssignment.concat_mudata
             clone_qc_dir = file("${workflow.projectDir}/assets/clone_qc_empty")
+        }
+        if (params.ENABLE_POSTCONCAT_EMBEDDING_QC) {
+            if (params.ENABLE_CLONE_REMOVAL) {
+                AfterEmbedding = embedding_after_clone(mudata_for_inference, 'after_clone')
+                mudata_for_inference = AfterEmbedding.filtered_mudata
+                embedding_dirs = BeforeEmbedding.qc_dir.mix(AfterEmbedding.qc_dir).collect()
+            } else {
+                mudata_for_inference = BeforeEmbedding.filtered_mudata
+                embedding_dirs = BeforeEmbedding.qc_dir.collect()
+            }
+        } else {
+            embedding_dirs = file("${workflow.projectDir}/assets/embedding_qc_empty")
         }
         Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
 
@@ -291,7 +325,8 @@ workflow CRISPR_PIPELINE {
             clone_qc_dir,
             saturation_qc_dir,
             GuideAssignment.guide_assignment_qc,
-            file("${workflow.projectDir}/assets/hto_qc_empty")
+            file("${workflow.projectDir}/assets/hto_qc_empty"),
+            embedding_dirs
         )
 
         if (params.ENABLE_BENCHMARK) {

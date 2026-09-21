@@ -13,6 +13,9 @@
 
 # CRISPR Pipeline
 
+Temporary normalization, PCA/UMAP and pre/post-clone measurement-set QC are
+documented in [Post-concatenation embedding QC](docs/postconcat_embedding_qc.md).
+
 A comprehensive pipeline for single-cell Perturb-Seq analysis that enables robust processing and analysis of CRISPR screening data at single-cell resolution.
 
 Optional guide-barcode clone filtering and 10x-style sequencing-saturation QC
