@@ -21,19 +21,19 @@ process additional_qc_plots {
         mkdir -p additional_qc/embeddings
         cp -R embedding_inputs/. additional_qc/embeddings/
 
-        if find ${clone_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
+        if find -L ${clone_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
             mkdir -p additional_qc/clones
             cp -R ${clone_qc_input}/. additional_qc/clones/
         fi
-        if find ${saturation_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
+        if find -L ${saturation_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
             mkdir -p additional_qc/sequencing_saturation
             cp -R ${saturation_qc_input}/. additional_qc/sequencing_saturation/
         fi
-        if find ${guide_assignment_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
+        if find -L ${guide_assignment_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
             mkdir -p additional_qc/guide_assignment_filter
             cp -R ${guide_assignment_qc_input}/. additional_qc/guide_assignment_filter/
         fi
-        if find ${hto_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
+        if find -L ${hto_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
             mkdir -p additional_qc/hto_filter
             cp -R ${hto_qc_input}/. additional_qc/hto_filter/
         fi

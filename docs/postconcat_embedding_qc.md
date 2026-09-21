@@ -93,5 +93,22 @@ content in the whole transcriptome.
 
 Live dashboards collect published plots after each process completes; final
 dashboards include the same panels through `additional_qc/embeddings`.
+The live **Post-concatenation QC** category appears between Guide assignment
+and Inference. It contains pre/post-clone embedding tasks, clone calling and
+HTO intersection QC, with actual per-stage settings and per-set retention
+tables available before the final report exists.
+
+Nextflow publishes the emitted QC **directory**, not a glob for undeclared
+child outputs. Collection uses `find -L` because Nextflow stages input folders
+as symlinks. The W&B publisher watches nested PNG/TSV/JSON changes, including
+asynchronous publications that arrive after a trace update.
+
+The image budget is 32 MB by default (`WANDB_MAX_IMAGE_BYTES` in the wrapper),
+under the default 50 MB HTML limit. Core normalized QC panels receive first
+priority. The Final dashboard category explicitly lists image omissions if
+the configured limit is reached. Identical plots in the before/after-clone
+stages remain visible in both stages; duplicate copies of the same stage are
+deduplicated. A separate renderer revision identifies report-only refreshes
+without relabeling the pipeline version used to generate scientific results.
 Existing upstream knee/MAD/Scrublet panels remain available rather than being
 replaced by these post-concatenation views.

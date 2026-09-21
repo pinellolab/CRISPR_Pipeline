@@ -1,7 +1,7 @@
 process filter_guide_assignment_qc {
     tag "max_assigned_guides_${params.GUIDE_ASSIGNMENT_max_guides_per_cell}"
     cache 'lenient'
-    publishDir "${params.outdir}/guide_assignment_qc", mode: params.publish_dir_mode, pattern: "guide_assignment_qc/*", overwrite: true
+    publishDir "${params.outdir}/guide_assignment_qc", mode: params.publish_dir_mode, pattern: "guide_assignment_qc", overwrite: true
 
     input:
         path mudata_input

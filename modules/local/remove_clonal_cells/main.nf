@@ -1,7 +1,7 @@
 process remove_clonal_cells {
     tag "${params.CLONE_REMOVAL_action}"
     cache 'lenient'
-    publishDir "${params.outdir}/clone_removal", mode: params.publish_dir_mode, pattern: "clone_qc/*", overwrite: true
+    publishDir "${params.outdir}/clone_removal", mode: params.publish_dir_mode, pattern: "clone_qc", overwrite: true
 
     input:
         path mudata_input

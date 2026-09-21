@@ -3,6 +3,7 @@
 set -Eeuo pipefail
 
 PIPELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export WANDB_DASHBOARD_RENDERER_REVISION="$(git -C "$PIPELINE_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
 PYTHON_BIN="${WANDB_PYTHON:-python}"
 RUN_NAME="${WANDB_RUN_NAME:-crispr_$(date -u +%Y%m%dT%H%M%SZ)}"
 RUN_ID="${WANDB_SOURCE_RUN_ID:-$("$PYTHON_BIN" -c 'import uuid; print(uuid.uuid4())')}"
@@ -42,6 +43,7 @@ done
   --status-file "$STATUS_FILE" --dashboard-html "$DASHBOARD_HTML" \
   --poll-seconds "${WANDB_POLL_SECONDS:-30}" \
   --max-total-bytes "${WANDB_MAX_BYTES:-20000000}" \
+  --max-image-bytes "${WANDB_MAX_IMAGE_BYTES:-32000000}" \
   --max-final-html-bytes "${WANDB_MAX_FINAL_HTML_BYTES:-50000000}" &
 MONITOR_PID=$!
 

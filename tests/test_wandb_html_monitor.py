@@ -50,6 +50,17 @@ def test_signature_changes_when_trace_changes(tmp_path):
     assert monitor.input_signature(paths, trace, status) != first
 
 
+def test_nested_publication_triggers_refresh_without_trace_change(tmp_path):
+    root = tmp_path/'outputs'
+    nested = root/'postconcat_embedding_qc'/'after_clone'
+    nested.mkdir(parents=True)
+    paths = {'artifact_dir':root}
+    trace, status = tmp_path/'trace.tsv', tmp_path/'status.json'
+    first = monitor.input_signature(paths, trace, status)
+    (nested/'pca.png').write_bytes(b'new-plot')
+    assert monitor.input_signature(paths, trace, status) != first
+
+
 def test_signature_changes_when_nextflow_log_reports_live_progress(tmp_path):
     trace = tmp_path / "trace.tsv"
     status = tmp_path / "status.json"

@@ -54,6 +54,15 @@ def input_signature(
         if path.exists():
             stat = path.stat()
             records.append((str(path), stat.st_size, stat.st_mtime_ns))
+    # A nested publish may finish after the trace update without touching the
+    # output root mtime. Watch the actual QC artifacts, not only directories.
+    root = paths.get('artifact_dir')
+    if root and root.exists():
+        for path in sorted(root.rglob('*')):
+            if path.suffix not in {'.png', '.json', '.tsv'} or not path.is_file():
+                continue
+            stat = path.stat()
+            records.append((str(path), stat.st_size, stat.st_mtime_ns))
     return hashlib.sha256(json.dumps(records, sort_keys=True).encode()).hexdigest()
 
 
@@ -111,7 +120,7 @@ def main() -> int:
     parser.add_argument("--poll-seconds", type=float, default=30)
     parser.add_argument("--max-total-bytes", type=int, default=20_000_000)
     parser.add_argument("--max-final-html-bytes", type=int, default=50_000_000)
-    parser.add_argument("--max-image-bytes", type=int, default=10_000_000)
+    parser.add_argument("--max-image-bytes", type=int, default=32_000_000)
     parser.add_argument("--tail-lines", type=int, default=30)
     args = parser.parse_args()
 
@@ -159,6 +168,7 @@ def main() -> int:
                 "telemetry_layout": "single-visible-html",
                 "source_run_id": args.source_run_id,
                 "dashboard_series_id": args.wandb_run_id,
+                "dashboard_renderer_revision": os.environ.get('WANDB_DASHBOARD_RENDERER_REVISION', 'unrecorded'),
             },
             settings=wandb.Settings(init_timeout=20),
         )

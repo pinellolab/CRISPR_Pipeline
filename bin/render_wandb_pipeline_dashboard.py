@@ -23,6 +23,7 @@ FAMILIES = [
     ("preprocessing", "Preprocessing", "Cell and gene filtering"),
     ("mudata", "MuData", "Modalities assembled"),
     ("guide_assignment", "Guide assignment", "Guide-to-cell calls"),
+    ("postconcat_qc", "Post-concatenation QC", "MT, clone filtering, normalization, PCA and UMAP"),
     ("inference", "Inference", "SCEPTRE and Perturbo"),
     ("evaluation", "Evaluation", "Controls and benchmarking"),
     ("final", "Final dashboard", "Published report and artifacts"),
@@ -48,7 +49,7 @@ CATEGORY_FLOWS = {
         ("Call cells per measurement set", "Calculate an independent barcode-rank knee for every measurement set"),
         ("Apply per-set cell filters", "Apply the RNA UMI floor, two-sided RNA-complexity MAD bounds and Scrublet"),
         ("Concatenate retained cells", "Combine independently filtered measurement-set matrices"),
-        ("Apply global QC", "Apply the mitochondrial cell cutoff, then fractional gene-support filtering"),
+        ("Retain raw counts", "Pooled MT and gene-support QC are shown in Post-concatenation QC when the embedding workflow is enabled"),
     ],
     "mudata": [
         ("Intersect barcodes", "Align retained RNA and guide cells, plus hashing cells when enabled"),
@@ -60,13 +61,18 @@ CATEGORY_FLOWS = {
         ("Call guide-positive cells", "Convert guide UMI evidence into guide_assignment values"),
         ("Audit recovery", "Report assignment rate, multiplicity, cells per guide and recovered guides"),
     ],
+    "postconcat_qc": [
+        ("Qualified cell intersection", "Start with GEX-qualified cells, assigned guides, and filtered HTO singlets when enabled"),
+        ("Parallel raw-count branches", "Apply MT → temporary normalization/PCA/UMAP; independently call/remove clones from the same qualified raw counts"),
+        ("Recompute after clone removal", "Apply MT and independently normalize/PCA/UMAP on the surviving original counts, not on the earlier normalized matrix"),
+        ("Deliver raw counts", "Apply fractional gene-support filtering; no normalized matrix, PCA/UMAP arrays or neighbors are added to the delivered MuData"),
+    ],
     "inference": [
         ("Define tests", "Build intended/local guide–gene pairs and global tests from validated metadata"),
         ("Fit methods", "Run configured SCEPTRE and/or PerTurbo local and global analyses"),
         ("Merge chunks", "Combine chunked results, preserve method-native statistics and build catalogs"),
     ],
     "evaluation": [
-        ("Optional clone filter", "Detect or remove clonal guide-barcode groups only when enabled"),
         ("Sequencing saturation", "Estimate 10x-style RNA library saturation when enabled"),
         ("Evaluate controls", "Compare intended effects, non-targeting controls and benchmark truth sets"),
     ],
@@ -81,6 +87,9 @@ CATEGORY_FLOWS = {
 def family_for(process: str) -> str:
     value = process.lower()
     leaf = value.split(":")[-1]
+    if any(key in leaf for key in ('embedding_before_clone', 'embedding_after_clone',
+                                   'postconcat_embedding_qc', 'remove_clonal_cells', 'filter_hto_post_clone')):
+        return 'postconcat_qc'
     if "seqspec" in value:
         return "seqspec"
     if any(key in leaf for key in (
@@ -92,7 +101,7 @@ def family_for(process: str) -> str:
         if any(key in leaf for key in ("downloadreference", "seqspecparser", "createguideref", "createhashingref")):
             return "input"
         return "mapping"
-    if any(key in value for key in ("preprocessing_pipeline", "preprocessanndata", "doublets", "filter_hashing", "embedding_before_clone", "embedding_after_clone")):
+    if any(key in value for key in ("preprocessing_pipeline", "preprocessanndata", "doublets", "filter_hashing")):
         return "preprocessing"
     if any(key in value for key in ("createmudata", "anndata_concat", "mudata_concat", "hashing_concat")):
         return "mudata"
@@ -435,8 +444,8 @@ def qc_metrics_content(data: dict[str, Any], family: str) -> str:
 
 def image_family(path: Path) -> str:
     value = str(path).lower()
-    if 'embedding' in value:
-        return 'preprocessing'
+    if any(term in value for term in ('embedding', 'before_clone', 'after_clone', 'clone_qc', 'clone_removal', '/clones/', 'clone_filter', 'hto_filter', 'hashing_qc')):
+        return 'postconcat_qc'
     if "seqspec" in value:
         return "seqspec"
     if any(term in value for term in ("guide_", "guides_", "sgrna", "cells_per_guide", "guides_per_cell", "hto_", "hashing_qc")):
@@ -450,22 +459,45 @@ def image_family(path: Path) -> str:
     return "final"
 
 
-def collect_images(root: Path | None, max_bytes: int = 10_000_000) -> dict[str, list[tuple[Path, str]]]:
+def embedding_stage(path: Path) -> str:
+    for part in path.parts:
+        if part in ('before_clone', 'after_clone'):
+            return part
+    metrics = path.parent / 'embedding_qc_metrics.json'
+    if metrics.is_file():
+        try:
+            return str(json.loads(metrics.read_text()).get('stage', ''))
+        except (OSError, ValueError):
+            pass
+    return ''
+
+
+def collect_images(root: Path | None, max_bytes: int = 32_000_000,
+                   omitted: list | None = None) -> dict[str, list[tuple[Path, str]]]:
     selected: dict[str, list[tuple[Path, str]]] = defaultdict(list)
     if not root or not root.exists():
         return selected
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     used = 0
-    for path in sorted(root.rglob("*.png")):
+    # Reserve the first slots for the central post-concatenation diagnostics.
+    priorities = {'normalization_check.png', 'pca_variance_ratio.png', 'pca_qc_panel.png',
+                  'umap_qc_panel.png', 'postconcat_qc_flow.png'}
+    for path in sorted(root.rglob("*.png"), key=lambda p: (p.name not in priorities, str(p))):
         size = path.stat().st_size
-        if size > 3_000_000 or used + size > max_bytes:
-            continue
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        content = path.read_bytes()
+        # Preserve identical pre/post-clone images as distinct scientific views,
+        # while collapsing duplicate published copies within the same stage.
+        digest = (hashlib.sha256(content).hexdigest(), embedding_stage(path))
         if digest in seen:
             continue
         seen.add(digest)
+        if used + size > max_bytes:
+            if omitted is not None:
+                omitted.append({'plot': str(path.relative_to(root)), 'bytes': size,
+                                'reason': 'image byte budget'})
+            continue
         used += size
-        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        encoded = base64.b64encode(content).decode("ascii")
         selected[image_family(path)].append((path, encoded))
     return selected
 
@@ -474,8 +506,8 @@ def image_gallery(images: list[tuple[Path, str]]) -> str:
     if not images:
         return ""
     figures = "".join(
-        f'<figure><img loading="lazy" src="data:image/png;base64,{encoded}" alt="{html.escape(path.stem)}">'
-        f'<figcaption>{html.escape(path.stem.replace("_", " "))}</figcaption></figure>'
+        f'<figure><img loading="lazy" src="data:image/png;base64,{encoded}" alt="{html.escape((embedding_stage(path) + " " + path.stem).strip())}">'
+        f'<figcaption>{html.escape((embedding_stage(path) + " · " + path.stem.replace("_", " ")).strip(" ·"))}</figcaption></figure>'
         for path, encoded in images
     )
     return f'<h3>QC visualizations</h3><div class="gallery">{figures}</div>'
@@ -520,8 +552,8 @@ def assignment_filter_flow_content(root: Path | None) -> str:
         ),
         (
             "**/hto_filter_flow.tsv",
-            "Post-clone HTO filters",
-            "HTO support and singlet retention are calculated after guide QC and optional clone removal.",
+            "HTO intersection filters",
+            "In the embedding workflow HTO support and singlet retention are calculated after guide QC, before the parallel clone/embedding branches.",
         ),
     ]
     columns = [
@@ -538,11 +570,62 @@ def assignment_filter_flow_content(root: Path | None) -> str:
         if not candidates:
             continue
         rows = []
+        seen_tables = set()
         for candidate in candidates:
+            digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+            if digest in seen_tables:
+                continue
+            seen_tables.add(digest)
             with candidate.open(newline="", encoding="utf-8", errors="replace") as handle:
                 rows.extend(csv.DictReader(handle, delimiter="\t"))
         sections.append(f"<h3>{html.escape(title)}</h3><p>{html.escape(note)}</p>" + data_table(rows, columns))
     return "".join(sections)
+
+
+def postconcat_qc_content(root: Path | None) -> str:
+    if not root or not root.exists():
+        return '<p>Post-concatenation QC artifacts have not been published yet.</p>'
+    stages = {}
+    for path in sorted(root.rglob('embedding_qc_metrics.json')):
+        try:
+            row = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        stages[row.get('stage', str(path))] = (row, path.parent)
+    if not stages:
+        return '<p>Post-concatenation QC artifacts have not been published yet.</p>'
+    rows = [entry[0] for _, entry in sorted(stages.items(), reverse=True)]
+    content = '<h3>Actual normalization and embedding settings</h3>' + data_table(rows, [
+        ('stage', 'Stage'), ('status', 'Status'), ('input_cells', 'Input cells'),
+        ('retained_cells', 'After MT'), ('cells', 'Cells embedded'), ('mito_cutoff', 'MT cutoff %'),
+        ('normalization_target_sum', 'Median-depth target'), ('feature_selection', 'Feature selection'), ('genes', 'Expressed genes'),
+        ('pca_features', 'PCA features'), ('requested_pcs', 'Requested PCs'), ('effective_pcs', 'Used PCs'),
+        ('effective_neighbors', 'Neighbors'), ('genes_after', 'Delivered genes'),
+        ('normalized_matrix_saved', 'Normalized matrix saved'), ('omitted_covariates', 'Unavailable covariates')])
+    content += '<p>No batch correction. Independent pre/post-clone UMAPs can rotate; compare covariate patterns, not absolute positions. TAP-seq measures a targeted panel, not the entire transcriptome.</p>'
+    for stage, (row, directory) in sorted(stages.items(), reverse=True):
+        flow = directory / 'measurement_filter_flow.tsv'
+        if flow.exists():
+            with flow.open() as handle:
+                flow_rows = list(csv.DictReader(handle, delimiter='\t'))
+            content += f'<h3>{html.escape(stage)}: mitochondrial filtering by measurement set</h3>' + data_table(flow_rows, [
+                ('measurement_set', 'Measurement set'), ('cells_before', 'Before'), ('cells_after', 'After'),
+                ('cells_removed', 'Removed'), ('threshold', 'MT cutoff %')])
+    clone_paths = sorted(root.rglob('clone_metrics.tsv'))
+    if clone_paths:
+        with clone_paths[-1].open() as handle:
+            clone_rows = list(csv.DictReader(handle, delimiter='\t'))
+        if clone_rows:
+            content += '<h3>Clone calling/removal</h3>' + data_table(clone_rows, [(k, k.replace('_', ' ')) for k in clone_rows[0]])
+            for row in clone_rows:
+                if row.get('applicability') == 'low_power_warning':
+                    content += '<p class="empty"><strong>Clone-calling applicability warning:</strong> ' + html.escape(row.get('applicability_note', '')) + '</p>'
+    content += ('<h3>Scope relative to the reference QC scripts</h3>'
+                '<p>Implemented: median-depth normalization, log1p, HVG/all-panel feature selection, '
+                'scale clipping at 10, PCA variance, PCA/UMAP covariate panels and per-measurement-set filters. '
+                'Cell-cycle scores are shown only if present. Private cell-cycle gene lists, Leiden resolution sweeps '
+                'and replicate-versus-cluster tests are not implemented in this QC pass.</p>')
+    return content
 
 
 def clean_html_cell(value: str) -> str:
@@ -718,8 +801,9 @@ def render(args: argparse.Namespace) -> str:
     qc_metrics_json = getattr(args, "qc_metrics_json", None)
     if qc_metrics_json and qc_metrics_json.exists():
         qc_data = json.loads(qc_metrics_json.read_text(encoding="utf-8"))
+    omitted_images = []
     artifact_images = collect_images(
-        getattr(args, "artifact_dir", None), getattr(args, "max_image_bytes", 10_000_000)
+        getattr(args, "artifact_dir", None), getattr(args, "max_image_bytes", 32_000_000), omitted_images
     )
 
     graph_nodes = []
@@ -747,6 +831,13 @@ def render(args: argparse.Namespace) -> str:
             extra += measurement_set_filter_flow_content(getattr(args, "artifact_dir", None))
         if family == "guide_assignment":
             extra += assignment_filter_flow_content(getattr(args, "artifact_dir", None))
+        if family == 'postconcat_qc':
+            extra += postconcat_qc_content(getattr(args, 'artifact_dir', None))
+        if family == 'final':
+            included = sum(len(items) for items in artifact_images.values())
+            extra += f'<h3>QC image coverage</h3><p data-images-included="{included}" data-images-omitted="{len(omitted_images)}">{included} unique stage-specific QC images embedded; {len(omitted_images)} omitted by the configured size budget.</p>'
+            if omitted_images:
+                extra += data_table(omitted_images, [('plot', 'Omitted plot'), ('bytes', 'Bytes'), ('reason', 'Reason')], limit=len(omitted_images))
         if family == "input" and guide:
             cards.extend([
                 metric_card("Guides", guide.get("row_count", "—"), "validated"),
@@ -811,8 +902,8 @@ def main() -> int:
     parser.add_argument("--final-dashboard-html", type=Path)
     parser.add_argument("--nextflow-log", type=Path)
     parser.add_argument("--tail-lines", type=int, default=30)
-    parser.add_argument("--max-image-bytes", type=int, default=10_000_000)
-    parser.add_argument("--max-html-bytes", type=int, default=20_000_000)
+    parser.add_argument("--max-image-bytes", type=int, default=32_000_000)
+    parser.add_argument("--max-html-bytes", type=int, default=50_000_000)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     document = render(args)

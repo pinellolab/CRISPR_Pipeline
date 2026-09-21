@@ -3,7 +3,7 @@ process postconcat_embedding_qc {
     cpus 4
     memory '32 GB'
     container { params.containers.base }
-    publishDir { "${params.outdir}/postconcat_embedding_qc/${stage}" }, mode: params.publish_dir_mode, pattern: 'embedding_qc/*', overwrite: true
+    publishDir { "${params.outdir}/postconcat_embedding_qc/${stage}" }, mode: params.publish_dir_mode, pattern: 'embedding_qc', overwrite: true
 
     input:
     path mudata_input

@@ -1,7 +1,7 @@
 process sequencing_saturation {
     tag "RNA BUS rarefaction"
     cache 'lenient'
-    publishDir "${params.outdir}/sequencing_saturation", mode: params.publish_dir_mode, pattern: "saturation_qc/*", overwrite: true
+    publishDir "${params.outdir}/sequencing_saturation", mode: params.publish_dir_mode, pattern: "saturation_qc", overwrite: true
 
     input:
         path mapping_dirs

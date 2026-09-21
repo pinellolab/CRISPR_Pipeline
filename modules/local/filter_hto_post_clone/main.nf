@@ -1,7 +1,7 @@
 process filter_hto_post_clone {
     tag "min_${params.HTO_min_positive_cells}_singlets_${params.HTO_keep_singlets_only}"
     cache 'lenient'
-    publishDir "${params.outdir}/hashing_qc", mode: params.publish_dir_mode, pattern: "hto_qc/*", overwrite: true
+    publishDir "${params.outdir}/hashing_qc", mode: params.publish_dir_mode, pattern: "hto_qc", overwrite: true
 
     input:
         path mudata_input
