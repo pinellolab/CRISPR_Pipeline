@@ -182,6 +182,45 @@ def test_scrublet_skip_policy_retains_preceding_qc_cells_and_records_error(tmp_p
     assert scrublet["cells_before"] == scrublet["cells_after"] == 2
 
 
+def test_mad_limits_are_computed_after_fixed_minimum(tmp_path, monkeypatch):
+    mapping = tmp_path / "B3_ks_transcripts_out"
+    counts = mapping / "counts_unfiltered"
+    counts.mkdir(parents=True)
+    low = np.tile(np.array([[1, 1, 1]], dtype=np.int32), (100, 1))
+    high = np.tile(np.array([[400, 350, 250]], dtype=np.int32), (10, 1))
+    raw = ad.AnnData(
+        X=sparse.csr_matrix(np.vstack([low, high])),
+        obs=pd.DataFrame(index=[f"BC{i:03d}" for i in range(110)]),
+        var=pd.DataFrame(index=["ENSG1.1", "ENSG2.1", "ENSG3.1"]),
+    )
+    raw.write_h5ad(counts / "adata.h5ad")
+    (counts / "cells_x_genes.genes.names.txt").write_text("GENE1\nGENE2\nGENE3\n")
+    covariates = tmp_path / "parse_covariate.csv"
+    pd.DataFrame(
+        {"batch": ["B3"], "concat_batch": ["sample_0"], "barcode_key": ["B3"]}
+    ).to_csv(covariates, index=False)
+
+    monkeypatch.chdir(tmp_path)
+    MODULE.main(
+        Namespace(
+            mapping_dir=str(mapping), covariates=str(covariates), qc_dir=tmp_path / "B3_qc",
+            min_counts=500, reference="human", barcode_filter="none",
+            mad_total_counts=5, mad_n_genes=5, enable_scrublet=False,
+            scrublet_expected_doublet_rate=0.08, scrublet_n_prin_comps=30,
+            scrublet_adaptive_pca_fallback=True, scrublet_failure_policy="error",
+            bc_replacement=False, use_multimapping=False,
+        )
+    )
+
+    audit = pd.read_csv(tmp_path / "B3_qc" / "measurement_set_qc_B3.tsv", sep="\t")
+    assert audit.loc[0, "post_min_counts_cells"] == 10
+    assert audit.loc[0, "post_mad_cells"] == 10
+    assert audit.loc[0, "retained_cells"] == 10
+    flow = pd.read_csv(tmp_path / "B3_qc" / "rna_qc_filter_flow_B3.tsv", sep="\t")
+    total_mad = flow.loc[flow["filter_label"] == "QC_MAD_total_counts"].iloc[0]
+    assert total_mad["cells_before"] == total_mad["cells_after"] == 10
+
+
 def test_concatenated_gene_metrics_are_recomputed():
     matrix = sparse.csr_matrix(np.array([[1, 0], [2, 3]], dtype=np.int32))
     combined = ad.AnnData(X=matrix, var=pd.DataFrame({"symbol": ["A", "B"]}, index=["g1", "g2"]))

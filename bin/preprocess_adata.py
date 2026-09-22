@@ -462,10 +462,12 @@ def main(args):
         percent_top=tuple(value for value in (50, 100, 200, 500) if value <= adata.n_vars) or None,
     )
 
-    limits = {
-        "total_counts": mad_limits(adata.obs["log1p_total_counts"], args.mad_total_counts),
-        "n_genes": mad_limits(adata.obs["log1p_n_genes_by_counts"], args.mad_n_genes),
-    }
+    # MAD limits are intentionally populated as the sequential filters run.
+    # Computing them once on all knee-called barcodes lets the low-count tail
+    # define an upper bound below QC_min_counts_per_cell, which can remove every
+    # otherwise eligible cell. Each robust limit must describe the population
+    # that actually reaches that step.
+    limits = {}
     flow_rows = []
     snapshots = []
     input_after_knee = np.ones(adata.n_obs, dtype=bool)
@@ -542,6 +544,9 @@ def main(args):
         ("log1p detected genes", "QC_MAD_n_genes", "n_genes", "log1p_n_genes_by_counts", args.mad_n_genes, False),
     )
     for metric_name, parameter, key, column, n_mads, upper_only in non_mito_mad_specs:
+        values = adata.obs[column].to_numpy(dtype=float)
+        active_values = values[current_keep]
+        limits[key] = mad_limits(active_values, n_mads, upper_only=upper_only)
         _median, metric_mad, lower, upper = limits[key]
         effective = n_mads > 0 and np.isfinite(metric_mad) and metric_mad > 0
         bound_text = (
@@ -550,7 +555,7 @@ def main(args):
         ) if effective else f"disabled (configured {n_mads:g}; observed MAD {metric_mad:.3g})"
         apply_filter(
             metric_name, parameter, bound_text,
-            adata.obs[column].to_numpy(dtype=float), lower, upper, effective,
+            values, lower, upper, effective,
             bound_kind="MAD", lower_label=f"Lower {n_mads:g} MAD", upper_label=f"Upper {n_mads:g} MAD",
         )
 
