@@ -25,6 +25,12 @@
                 "QC_EMBEDDING_hvg_batch_key": {"type": "string", "default": "", "description": "Optional observed biological covariate for HVG selection only; never batch correction."},
                 "QC_EMBEDDING_seed": {"type": "integer", "default": 0, "minimum": 0, "description": "PCA/UMAP random seed."},
                 "QC_EMBEDDING_max_dense_gb": {"type": "number", "default": 16, "exclusiveMinimum": 0, "description": "Maximum estimated scaled-HVG array GB; exceedance fails with a resource message, never silent subsampling."},
+                "QC_EMBEDDING_cell_cycle": {"type": "string", "default": "auto", "enum": ["auto", "on", "off"], "description": "Cell-cycle scoring mode. auto scores non-TAP-seq human/mouse RNA and skips targeted TAP-seq panels."},
+                "QC_EMBEDDING_min_cell_cycle_genes": {"type": "integer", "default": 10, "minimum": 1, "description": "Minimum represented S and G2M markers required per phase before scoring."},
+                "QC_EMBEDDING_enable_leiden": {"type": "boolean", "default": true, "description": "Run a visualization-only Leiden resolution sweep on the temporary post-concatenation neighbor graph."},
+                "QC_EMBEDDING_leiden_resolutions": {"type": "string", "default": "0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2", "description": "Comma-separated nonnegative Leiden resolutions."},
+                "QC_EMBEDDING_leiden_diagnostic_resolution": {"type": "number", "default": 0.5, "minimum": 0, "description": "Requested resolution for the diagnostic measurement-set composition view; nearest sweep value is used."},
+                "QC_EMBEDDING_leiden_n_iterations": {"type": "integer", "default": 2, "minimum": 1, "description": "Native igraph Leiden iterations per resolution."},
                 "GUIDE_ASSIGNMENT_min_guides_per_cell": {"type": "integer", "default": 1, "minimum": 0, "description": "Minimum positive assigned guides; 1 excludes guide-negative cells, including before clone calling."},
                 "input": {
                     "type": [

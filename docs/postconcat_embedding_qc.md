@@ -41,7 +41,8 @@ count as guides and are preserved.
 | MT 25/30% sweep | Single user cutoff | Single configurable cutoff, default 25% |
 | Median-depth/log1p/HVG/scale/PCA50/neighbors15 | No matching pre/post-clone embeddings | Add matching visualization-only recipe |
 | `diff_day` HVG covariate | No universal biological day annotation | Explicit optional HVG batch key |
-| Private cell-cycle/plate annotations | Not available for all assays | Plot existing annotations; record missing ones |
+| Private cell-cycle/plate annotations | Private marker files are not portable | Package the canonical 97-gene Regev/Scanpy list; score eligible whole-transcriptome assays and record marker overlap |
+| Leiden 0.0–1.2 sweep | Not previously present | Run native igraph Leiden on the temporary graph; keep clusters out of inference data |
 | Saved normalized AnnData and embeddings | Counts required for inference | Do not save normalized matrices or embedding arrays |
 
 ```mermaid
@@ -68,6 +69,23 @@ nonconstant genes and cap PCs at `min(requested, cells-1, genes-1)`.
 cannot be assumed to exist in other datasets. Set it explicitly if appropriate.
 It controls HVG selection only, not integration or batch correction.
 
+`QC_EMBEDDING_cell_cycle=auto` scores whole-transcriptome human and mouse
+assays after median-depth normalization and log1p. It uses the packaged 97-gene
+Regev/Scanpy list (first 43 S-phase, remaining 54 G2M); mouse symbols use
+mouse-style capitalization. At least `QC_EMBEDDING_min_cell_cycle_genes=10`
+markers from **each** phase must be represented. TAP-seq is skipped in `auto`
+because a targeted panel cannot provide an unbiased score; `on` explicitly
+overrides that guard, while `off` disables scoring. The metrics JSON records the
+reference, marker source, represented counts, status and skip reason.
+
+`QC_EMBEDDING_enable_leiden=true` runs the configurable resolution list
+`QC_EMBEDDING_leiden_resolutions` (default 0.0–1.2 by 0.1) with two native
+igraph Leiden iterations. The resolution nearest
+`QC_EMBEDDING_leiden_diagnostic_resolution` (default 0.5) supplies the
+measurement-set composition view. This uses the existing container's igraph
+implementation because that image does not contain the separate `leidenalg`
+package.
+
 Outputs under `postconcat_embedding_qc/{before_clone,after_clone}` include:
 
 - RNA-depth/detected-gene scatter colored by mitochondrial fraction, MT
@@ -77,13 +95,24 @@ Outputs under `postconcat_embedding_qc/{before_clone,after_clone}` include:
 - PCA variance-ratio and cumulative-variance curves and TSV;
 - PCA/UMAP multipanels colored by measurement set, RNA depth, detected genes,
   MT percentage, assigned-guide count and any existing supported covariates;
+- a dedicated pooled PCA containing every high-quality cell colored by
+  measurement set, plus a shared-coordinate grid highlighting each set with
+  the same categorical palette;
+- cell-cycle phase proportions by measurement set for eligible non-TAP-seq
+  assays, plus marker-overlap and phase-count tables;
+- Leiden cluster-count/modularity curves, synchronized UMAPs across all
+  resolutions and diagnostic measurement-set composition;
 - effective settings and omitted covariates in `embedding_qc_metrics.json`.
 
-Private cell-cycle lists, Parse-specific plate maps, well annotations, and
-Leiden composition tests are not invented or imported. Available cell-cycle
-scores are visualized; absent scores are recorded as unavailable. Embeddings
-are descriptive QC, not evidence that technical variation has been corrected.
+Parse-specific plate maps and well annotations are not invented. Cell-cycle
+scores are computed only when the assay and marker overlap support them;
+otherwise the reason is recorded. Embeddings and Leiden clusters are
+descriptive QC, not evidence that technical variation has been corrected.
 Independent pre/post UMAP coordinates need not have matching orientation.
+
+The packaged cell-cycle markers follow the Scanpy cell-cycle tutorial and its
+Regev-lab marker list. They are vendored so runs do not depend on network access
+or Olga's private filesystem paths.
 
 All computations run in the existing base container. No host packages are
 installed. Scaling is memory guarded; no cells are silently subsampled.
@@ -103,7 +132,7 @@ child outputs. Collection uses `find -L` because Nextflow stages input folders
 as symlinks. The W&B publisher watches nested PNG/TSV/JSON changes, including
 asynchronous publications that arrive after a trace update.
 
-The image budget is 32 MB by default (`WANDB_MAX_IMAGE_BYTES` in the wrapper),
+The image budget is 38 MB by default (`WANDB_MAX_IMAGE_BYTES` in the wrapper),
 under the default 50 MB HTML limit. Core normalized QC panels receive first
 priority. The Final dashboard category explicitly lists image omissions if
 the configured limit is reached. Identical plots in the before/after-clone

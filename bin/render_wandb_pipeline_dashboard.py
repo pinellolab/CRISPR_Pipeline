@@ -472,7 +472,7 @@ def embedding_stage(path: Path) -> str:
     return ''
 
 
-def collect_images(root: Path | None, max_bytes: int = 32_000_000,
+def collect_images(root: Path | None, max_bytes: int = 38_000_000,
                    omitted: list | None = None) -> dict[str, list[tuple[Path, str]]]:
     selected: dict[str, list[tuple[Path, str]]] = defaultdict(list)
     if not root or not root.exists():
@@ -481,7 +481,9 @@ def collect_images(root: Path | None, max_bytes: int = 32_000_000,
     used = 0
     # Reserve the first slots for the central post-concatenation diagnostics.
     priorities = {'normalization_check.png', 'pca_variance_ratio.png', 'pca_qc_panel.png',
-                  'umap_qc_panel.png', 'postconcat_qc_flow.png'}
+                  'pca_measurement_sets_colored.png', 'pca_by_measurement_set.png', 'umap_qc_panel.png',
+                  'leiden_resolution_sweep.png', 'leiden_sweep_umap.png',
+                  'cell_cycle_by_measurement_set.png', 'postconcat_qc_flow.png'}
     for path in sorted(root.rglob("*.png"), key=lambda p: (p.name not in priorities, str(p))):
         size = path.stat().st_size
         content = path.read_bytes()
@@ -594,13 +596,25 @@ def postconcat_qc_content(root: Path | None) -> str:
         stages[row.get('stage', str(path))] = (row, path.parent)
     if not stages:
         return '<p>Post-concatenation QC artifacts have not been published yet.</p>'
-    rows = [entry[0] for _, entry in sorted(stages.items(), reverse=True)]
+    rows = []
+    for _, (source, _) in sorted(stages.items(), reverse=True):
+        row = source.copy()
+        cell_cycle = source.get('cell_cycle', {})
+        leiden = source.get('leiden', {})
+        row.update(cell_cycle_status=cell_cycle.get('status', '—'),
+                   cell_cycle_overlap=(f"S {cell_cycle.get('s_markers_present', '—')} / "
+                                       f"G2M {cell_cycle.get('g2m_markers_present', '—')}"),
+                   leiden_status=leiden.get('status', '—'),
+                   leiden_diagnostic_clusters=leiden.get('diagnostic_clusters', '—'))
+        rows.append(row)
     content = '<h3>Actual normalization and embedding settings</h3>' + data_table(rows, [
         ('stage', 'Stage'), ('status', 'Status'), ('input_cells', 'Input cells'),
         ('retained_cells', 'After MT'), ('cells', 'Cells embedded'), ('mito_cutoff', 'MT cutoff %'),
         ('normalization_target_sum', 'Median-depth target'), ('feature_selection', 'Feature selection'), ('genes', 'Expressed genes'),
         ('pca_features', 'PCA features'), ('requested_pcs', 'Requested PCs'), ('effective_pcs', 'Used PCs'),
         ('effective_neighbors', 'Neighbors'), ('genes_after', 'Delivered genes'),
+        ('cell_cycle_status', 'Cell cycle'), ('cell_cycle_overlap', 'CC markers represented'),
+        ('leiden_status', 'Leiden sweep'), ('leiden_diagnostic_clusters', 'Diagnostic clusters'),
         ('normalized_matrix_saved', 'Normalized matrix saved'), ('omitted_covariates', 'Unavailable covariates')])
     content += '<p>No batch correction. Independent pre/post-clone UMAPs can rotate; compare covariate patterns, not absolute positions. TAP-seq measures a targeted panel, not the entire transcriptome.</p>'
     for stage, (row, directory) in sorted(stages.items(), reverse=True):
@@ -622,9 +636,11 @@ def postconcat_qc_content(root: Path | None) -> str:
                     content += '<p class="empty"><strong>Clone-calling applicability warning:</strong> ' + html.escape(row.get('applicability_note', '')) + '</p>'
     content += ('<h3>Scope relative to the reference QC scripts</h3>'
                 '<p>Implemented: median-depth normalization, log1p, HVG/all-panel feature selection, '
-                'scale clipping at 10, PCA variance, PCA/UMAP covariate panels and per-measurement-set filters. '
-                'Cell-cycle scores are shown only if present. Private cell-cycle gene lists, Leiden resolution sweeps '
-                'and replicate-versus-cluster tests are not implemented in this QC pass.</p>')
+                'scale clipping at 10, PCA variance, PCA/UMAP covariate panels, PCA measurement-set facets, '
+                'cell-cycle scoring for eligible whole-transcriptome assays, native-igraph Leiden sweeps and '
+                'measurement-set composition views. Cell-cycle scoring is skipped automatically for targeted '
+                'TAP-seq panels unless explicitly forced. These are descriptive QC views; no transformed matrix, '
+                'embedding or cluster assignment is saved into the inference MuData.</p>')
     return content
 
 
@@ -902,7 +918,7 @@ def main() -> int:
     parser.add_argument("--final-dashboard-html", type=Path)
     parser.add_argument("--nextflow-log", type=Path)
     parser.add_argument("--tail-lines", type=int, default=30)
-    parser.add_argument("--max-image-bytes", type=int, default=32_000_000)
+    parser.add_argument("--max-image-bytes", type=int, default=38_000_000)
     parser.add_argument("--max-html-bytes", type=int, default=50_000_000)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()

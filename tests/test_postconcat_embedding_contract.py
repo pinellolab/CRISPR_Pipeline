@@ -15,6 +15,10 @@ def test_counts_not_normalized_in_place():
     assert "sp.csr_matrix(raw.X, dtype=np.float32).copy()" in script
     assert 'filtered.write_h5mu(args.output)' in script
     assert 'temp.write' not in script
+    assert 'faceted_measurement_pca(temp, args)' in script
+    assert "result['cell_cycle'] = score_cell_cycle(temp, args)" in script
+    assert "result['leiden'] = run_leiden_sweep(temp, args)" in script
+    assert "temp.obs[[args.batch_key] + keys].to_csv" in script
 
 def test_concat_defers_filters():
     script = (ROOT/'bin/concat_preprocessed_rna.py').read_text()

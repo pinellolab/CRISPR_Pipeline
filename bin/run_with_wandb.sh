@@ -43,7 +43,7 @@ done
   --status-file "$STATUS_FILE" --dashboard-html "$DASHBOARD_HTML" \
   --poll-seconds "${WANDB_POLL_SECONDS:-30}" \
   --max-total-bytes "${WANDB_MAX_BYTES:-20000000}" \
-  --max-image-bytes "${WANDB_MAX_IMAGE_BYTES:-32000000}" \
+  --max-image-bytes "${WANDB_MAX_IMAGE_BYTES:-38000000}" \
   --max-final-html-bytes "${WANDB_MAX_FINAL_HTML_BYTES:-50000000}" &
 MONITOR_PID=$!
 

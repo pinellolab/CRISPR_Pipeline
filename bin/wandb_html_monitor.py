@@ -120,7 +120,7 @@ def main() -> int:
     parser.add_argument("--poll-seconds", type=float, default=30)
     parser.add_argument("--max-total-bytes", type=int, default=20_000_000)
     parser.add_argument("--max-final-html-bytes", type=int, default=50_000_000)
-    parser.add_argument("--max-image-bytes", type=int, default=32_000_000)
+    parser.add_argument("--max-image-bytes", type=int, default=38_000_000)
     parser.add_argument("--tail-lines", type=int, default=30)
     args = parser.parse_args()
 
