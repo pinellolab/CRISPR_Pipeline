@@ -218,6 +218,9 @@ METRIC_CATALOG = {
             {"name": "scrublet_n_prin_comps_used", "description": "Principal components actually used by Scrublet after any adaptive fallback.", "unit": "components"},
             {"name": "scrublet_pca_fallback_enabled", "description": "Whether the narrow PCA-dimension fallback was enabled.", "unit": None},
             {"name": "scrublet_pca_fallback_used", "description": "Whether this measurement set required the adaptive PCA fallback.", "unit": None},
+            {"name": "scrublet_failure_policy", "description": "Configured behavior when Scrublet cannot fit: error or skip.", "unit": None},
+            {"name": "scrublet_status", "description": "Whether Scrublet was applied, disabled, or skipped after an error.", "unit": None},
+            {"name": "scrublet_skip_reason", "description": "Recorded exception when Scrublet was skipped under the explicit skip policy.", "unit": None},
         ],
     },
     "dashboard_derived": {

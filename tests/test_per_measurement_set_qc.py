@@ -79,6 +79,7 @@ def test_one_measurement_set_is_filtered_and_audited(tmp_path, monkeypatch):
             scrublet_expected_doublet_rate=0.08,
             scrublet_n_prin_comps=30,
             scrublet_adaptive_pca_fallback=True,
+            scrublet_failure_policy="error",
             bc_replacement=False,
             use_multimapping=False,
         )
@@ -136,6 +137,49 @@ def test_scrublet_pca_fallback_retries_only_dimension_error(monkeypatch):
     assert fallback_used is True
     assert scores.tolist() == [0.1, 0.4]
     assert predicted.tolist() == [False, True]
+
+
+def test_scrublet_skip_policy_retains_preceding_qc_cells_and_records_error(tmp_path, monkeypatch):
+    mapping = tmp_path / "B2_ks_transcripts_out"
+    counts = mapping / "counts_unfiltered"
+    counts.mkdir(parents=True)
+    raw = ad.AnnData(
+        X=sparse.csr_matrix(np.array([[10, 3, 5], [8, 2, 3]], dtype=np.int32)),
+        obs=pd.DataFrame(index=["AAAA", "AAAC"]),
+        var=pd.DataFrame(index=["ENSG1.1", "ENSG2.1", "ENSG3.1"]),
+    )
+    raw.write_h5ad(counts / "adata.h5ad")
+    (counts / "cells_x_genes.genes.names.txt").write_text("MT-CO1\nRPLP0\nGENE1\n")
+    covariates = tmp_path / "parse_covariate.csv"
+    pd.DataFrame(
+        {"batch": ["B2"], "concat_batch": ["sample_0"], "barcode_key": ["B2"]}
+    ).to_csv(covariates, index=False)
+
+    def fail_scrublet(*_args, **_kwargs):
+        raise ZeroDivisionError("float division by zero")
+
+    monkeypatch.setattr(MODULE, "run_scrublet_with_pca_fallback", fail_scrublet)
+    monkeypatch.chdir(tmp_path)
+    MODULE.main(
+        Namespace(
+            mapping_dir=str(mapping), covariates=str(covariates), qc_dir=tmp_path / "B2_qc",
+            min_counts=2, reference="human", barcode_filter="none",
+            mad_total_counts=0, mad_n_genes=0, enable_scrublet=True,
+            scrublet_expected_doublet_rate=0.08, scrublet_n_prin_comps=30,
+            scrublet_adaptive_pca_fallback=True, scrublet_failure_policy="skip",
+            bc_replacement=False, use_multimapping=False,
+        )
+    )
+
+    filtered = ad.read_h5ad(tmp_path / "B2_filtered.h5ad")
+    assert filtered.n_obs == 2
+    audit = pd.read_csv(tmp_path / "B2_qc" / "measurement_set_qc_B2.tsv", sep="\t")
+    assert audit.loc[0, "scrublet_status"] == "skipped_error"
+    assert "ZeroDivisionError" in audit.loc[0, "scrublet_skip_reason"]
+    flow = pd.read_csv(tmp_path / "B2_qc" / "rna_qc_filter_flow_B2.tsv", sep="\t")
+    scrublet = flow.loc[flow["filter_label"] == "Scrublet doublet removal"].iloc[0]
+    assert not bool(scrublet["applied"])
+    assert scrublet["cells_before"] == scrublet["cells_after"] == 2
 
 
 def test_concatenated_gene_metrics_are_recomputed():

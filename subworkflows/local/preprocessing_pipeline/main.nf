@@ -28,7 +28,8 @@ workflow preprocessing_pipeline {
         params.ENABLE_SCRUBLET,
         scrublet_expected_doublet_rate,
         params.SCRUBLET_n_prin_comps,
-        params.SCRUBLET_adaptive_pca_fallback
+        params.SCRUBLET_adaptive_pca_fallback,
+        params.SCRUBLET_failure_policy
     )
 
     filtered_measurement_sets = Preprocessed_AnnData.filtered_measurement_set

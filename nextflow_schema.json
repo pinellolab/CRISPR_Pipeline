@@ -114,6 +114,13 @@
                     "description": "Retry Scrublet with a smaller valid PCA dimension when the requested count exceeds the usable matrix dimension.",
                     "help_text": "This catches only Scrublet's explicit n_components dimensionality error. Requested and actual dimensions and whether fallback occurred are recorded in measurement_set_qc_metrics.tsv. Other failures remain fatal."
                 },
+                "SCRUBLET_failure_policy": {
+                    "type": "string",
+                    "default": "error",
+                    "enum": ["error", "skip"],
+                    "description": "Behavior when Scrublet still fails after any adaptive PCA retry.",
+                    "help_text": "error stops the workflow. skip retains cells passing the preceding knee, UMI, and MAD filters, marks Scrublet as not applied for that measurement set, and records the exception in QC outputs and the dashboard."
+                },
                 "is_10x3v3": {
                     "type": "boolean",
                     "default": true,

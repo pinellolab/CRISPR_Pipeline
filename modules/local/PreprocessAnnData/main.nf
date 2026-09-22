@@ -16,6 +16,7 @@ process PreprocessAnnData {
     val scrublet_expected_doublet_rate
     val scrublet_n_prin_comps
     val scrublet_adaptive_pca_fallback
+    val scrublet_failure_policy
 
     output:
     path "*_filtered.h5ad", emit: filtered_measurement_set
@@ -41,6 +42,7 @@ process PreprocessAnnData {
             --mad-n-genes ${mad_n_genes} \
             --scrublet-expected-doublet-rate ${scrublet_expected_doublet_rate} \
             --scrublet-n-prin-comps ${scrublet_n_prin_comps} \
+            --scrublet-failure-policy ${scrublet_failure_policy} \
             ${scrubletArg} ${scrubletFallbackArg} ${bcArg} ${mmArg}
         """
 }

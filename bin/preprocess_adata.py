@@ -556,65 +556,95 @@ def main(args):
 
     pre_scrublet_keep = current_keep.copy()
     scrublet_removed = 0
+    scrublet_status = "disabled"
+    scrublet_skip_reason = ""
+    scrublet_n_prin_comps_used = np.nan
+    scrublet_pca_fallback_used = False
     if args.enable_scrublet:
         selected = np.flatnonzero(current_keep)
-        scrub, scores, predicted, scrublet_n_prin_comps_used, scrublet_pca_fallback_used = run_scrublet_with_pca_fallback(
-            adata.X[selected],
-            args.scrublet_expected_doublet_rate,
-            args.scrublet_n_prin_comps,
-            args.scrublet_adaptive_pca_fallback,
-        )
-        threshold = float(scrub.threshold_) if scrub.threshold_ is not None else np.nan
-        adata.obs["doublet_scores"] = np.nan
-        adata.obs.iloc[selected, adata.obs.columns.get_loc("doublet_scores")] = scores
-        adata.obs["predicted_doublets"] = False
-        predicted_column = adata.obs.columns.get_loc("predicted_doublets")
-        adata.obs.iloc[selected, predicted_column] = predicted
-        adata.obs["doublet_info"] = adata.obs["predicted_doublets"].astype(str)
-        current_keep[selected[predicted]] = False
-        scrublet_removed = int(predicted.sum())
-        before_count = int(pre_scrublet_keep.sum())
-        after_count = int(current_keep.sum())
-        flow_rows.append({
-            "measurement_set": batch,
-            "step_order": len(flow_rows) + 1,
-            "filter_name": "scrublet_doublet_score",
-            "filter_label": "Scrublet doublet removal",
-            "threshold": (
-                f"expected_doublet_rate = {args.scrublet_expected_doublet_rate:g}; "
-                f"PCA components = {scrublet_n_prin_comps_used}"
-                f"{' (adaptive fallback)' if scrublet_pca_fallback_used else ''}; "
-                f"call threshold = {threshold:.3g}"
-            ),
-            "applied": True,
-            "cells_before": before_count,
-            "cells_after": after_count,
-            "cells_removed": scrublet_removed,
-            "removed_percent": 100 * scrublet_removed / before_count if before_count else 0,
-            "retained_percent_of_input": 100 * after_count / input_cells if input_cells else 0,
-        })
-        snapshots.append({
-            "filter_label": "Scrublet doublet removal",
-            "metric_label": "Scrublet doublet score",
-            "values_before": scores,
-            "values_after": scores[~predicted],
-            "lower": -np.inf,
-            "upper": threshold,
-            "bound_kind": "Scrublet",
-            "lower_label": None,
-            "upper_label": f"Scrublet threshold ({threshold:.3g})",
-            "applied": True,
-            "removed": scrublet_removed,
-            "cells_before": before_count,
-            "cells_after": after_count,
-        })
-        plot_scrublet_scores(
-            scores, predicted, threshold, batch,
-            args.qc_dir / f"scrublet_scores_scRNA_{label}.png",
-        )
+        try:
+            scrub, scores, predicted, scrublet_n_prin_comps_used, scrublet_pca_fallback_used = run_scrublet_with_pca_fallback(
+                adata.X[selected],
+                args.scrublet_expected_doublet_rate,
+                args.scrublet_n_prin_comps,
+                args.scrublet_adaptive_pca_fallback,
+            )
+        except Exception as error:
+            if args.scrublet_failure_policy == "error":
+                raise
+            scrublet_status = "skipped_error"
+            scrublet_skip_reason = " ".join(
+                f"{type(error).__name__}: {error}".split()
+            )
+            before_count = int(pre_scrublet_keep.sum())
+            print(
+                f"{batch}: Scrublet skipped by SCRUBLET_failure_policy=skip "
+                f"after {scrublet_skip_reason}"
+            )
+            flow_rows.append({
+                "measurement_set": batch,
+                "step_order": len(flow_rows) + 1,
+                "filter_name": "scrublet_doublet_score",
+                "filter_label": "Scrublet doublet removal",
+                "threshold": f"skipped after error: {scrublet_skip_reason}",
+                "applied": False,
+                "cells_before": before_count,
+                "cells_after": before_count,
+                "cells_removed": 0,
+                "removed_percent": 0,
+                "retained_percent_of_input": 100 * before_count / input_cells if input_cells else 0,
+            })
+        else:
+            scrublet_status = "applied"
+            threshold = float(scrub.threshold_) if scrub.threshold_ is not None else np.nan
+            adata.obs["doublet_scores"] = np.nan
+            adata.obs.iloc[selected, adata.obs.columns.get_loc("doublet_scores")] = scores
+            adata.obs["predicted_doublets"] = False
+            predicted_column = adata.obs.columns.get_loc("predicted_doublets")
+            adata.obs.iloc[selected, predicted_column] = predicted
+            adata.obs["doublet_info"] = adata.obs["predicted_doublets"].astype(str)
+            current_keep[selected[predicted]] = False
+            scrublet_removed = int(predicted.sum())
+            before_count = int(pre_scrublet_keep.sum())
+            after_count = int(current_keep.sum())
+            flow_rows.append({
+                "measurement_set": batch,
+                "step_order": len(flow_rows) + 1,
+                "filter_name": "scrublet_doublet_score",
+                "filter_label": "Scrublet doublet removal",
+                "threshold": (
+                    f"expected_doublet_rate = {args.scrublet_expected_doublet_rate:g}; "
+                    f"PCA components = {scrublet_n_prin_comps_used}"
+                    f"{' (adaptive fallback)' if scrublet_pca_fallback_used else ''}; "
+                    f"call threshold = {threshold:.3g}"
+                ),
+                "applied": True,
+                "cells_before": before_count,
+                "cells_after": after_count,
+                "cells_removed": scrublet_removed,
+                "removed_percent": 100 * scrublet_removed / before_count if before_count else 0,
+                "retained_percent_of_input": 100 * after_count / input_cells if input_cells else 0,
+            })
+            snapshots.append({
+                "filter_label": "Scrublet doublet removal",
+                "metric_label": "Scrublet doublet score",
+                "values_before": scores,
+                "values_after": scores[~predicted],
+                "lower": -np.inf,
+                "upper": threshold,
+                "bound_kind": "Scrublet",
+                "lower_label": None,
+                "upper_label": f"Scrublet threshold ({threshold:.3g})",
+                "applied": True,
+                "removed": scrublet_removed,
+                "cells_before": before_count,
+                "cells_after": after_count,
+            })
+            plot_scrublet_scores(
+                scores, predicted, threshold, batch,
+                args.qc_dir / f"scrublet_scores_scRNA_{label}.png",
+            )
     else:
-        scrublet_n_prin_comps_used = np.nan
-        scrublet_pca_fallback_used = False
         count = int(current_keep.sum())
         flow_rows.append({
             "measurement_set": batch,
@@ -686,6 +716,9 @@ def main(args):
         "mad_total_counts_n": args.mad_total_counts,
         "mad_n_genes_n": args.mad_n_genes,
         "scrublet_enabled": args.enable_scrublet,
+        "scrublet_failure_policy": args.scrublet_failure_policy,
+        "scrublet_status": scrublet_status,
+        "scrublet_skip_reason": scrublet_skip_reason,
         "scrublet_expected_doublet_rate": args.scrublet_expected_doublet_rate,
         "scrublet_n_prin_comps_requested": args.scrublet_n_prin_comps,
         "scrublet_n_prin_comps_used": scrublet_n_prin_comps_used,
@@ -718,6 +751,7 @@ if __name__ == "__main__":
     parser.add_argument("--scrublet-expected-doublet-rate", type=float, default=0.08)
     parser.add_argument("--scrublet-n-prin-comps", type=int, default=30)
     parser.add_argument("--scrublet-adaptive-pca-fallback", action="store_true")
+    parser.add_argument("--scrublet-failure-policy", choices=["error", "skip"], default="error")
     parser.add_argument("--bc-replacement", action="store_true")
     parser.add_argument("--use-multimapping", action="store_true")
     parsed = parser.parse_args()
