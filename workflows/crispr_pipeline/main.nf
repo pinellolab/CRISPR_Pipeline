@@ -197,7 +197,7 @@ workflow CRISPR_PIPELINE {
         HTOFilter = filter_hto_post_clone(GuideAssignment.concat_mudata)
         qualified_mudata = HTOFilter.filtered_mudata
         if (params.ENABLE_POSTCONCAT_EMBEDDING_QC) {
-            BeforeEmbedding = embedding_before_clone(qualified_mudata, 'before_clone')
+            BeforeEmbedding = embedding_before_clone(qualified_mudata, 'before_clone', file("${projectDir}/assets/cell_cycle/regev_lab_cell_cycle_genes.txt"))
         }
         if (params.ENABLE_CLONE_REMOVAL) {
             CloneRemoval = remove_clonal_cells(qualified_mudata)
@@ -210,7 +210,7 @@ workflow CRISPR_PIPELINE {
         mudata_for_inference = mudata_before_hto
         if (params.ENABLE_POSTCONCAT_EMBEDDING_QC) {
             if (params.ENABLE_CLONE_REMOVAL) {
-                AfterEmbedding = embedding_after_clone(mudata_before_hto, 'after_clone')
+                AfterEmbedding = embedding_after_clone(mudata_before_hto, 'after_clone', file("${projectDir}/assets/cell_cycle/regev_lab_cell_cycle_genes.txt"))
                 mudata_for_inference = AfterEmbedding.filtered_mudata
                 embedding_dirs = BeforeEmbedding.qc_dir.mix(AfterEmbedding.qc_dir).collect()
             } else {
@@ -291,7 +291,7 @@ workflow CRISPR_PIPELINE {
         // Shared processing pipeline
         GuideAssignment = guide_assignment_pipeline(mudata_for_processing)
         if (params.ENABLE_POSTCONCAT_EMBEDDING_QC) {
-            BeforeEmbedding = embedding_before_clone(GuideAssignment.concat_mudata, 'before_clone')
+            BeforeEmbedding = embedding_before_clone(GuideAssignment.concat_mudata, 'before_clone', file("${projectDir}/assets/cell_cycle/regev_lab_cell_cycle_genes.txt"))
         }
         if (params.ENABLE_CLONE_REMOVAL) {
             CloneRemoval = remove_clonal_cells(GuideAssignment.concat_mudata)
@@ -303,7 +303,7 @@ workflow CRISPR_PIPELINE {
         }
         if (params.ENABLE_POSTCONCAT_EMBEDDING_QC) {
             if (params.ENABLE_CLONE_REMOVAL) {
-                AfterEmbedding = embedding_after_clone(mudata_for_inference, 'after_clone')
+                AfterEmbedding = embedding_after_clone(mudata_for_inference, 'after_clone', file("${projectDir}/assets/cell_cycle/regev_lab_cell_cycle_genes.txt"))
                 mudata_for_inference = AfterEmbedding.filtered_mudata
                 embedding_dirs = BeforeEmbedding.qc_dir.mix(AfterEmbedding.qc_dir).collect()
             } else {

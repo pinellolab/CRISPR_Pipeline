@@ -8,6 +8,7 @@ process postconcat_embedding_qc {
     input:
     path mudata_input
     val stage
+    path cell_cycle_genes
 
     output:
     path 'postconcat_filtered.h5mu', emit: filtered_mudata
@@ -31,7 +32,7 @@ process postconcat_embedding_qc {
         --max-dense-gb ${params.QC_EMBEDDING_max_dense_gb} \
         --reference '${params.REFERENCE_transcriptome}' \${TAPSEQ_ARG} \
         --cell-cycle '${params.QC_EMBEDDING_cell_cycle}' \
-        --cell-cycle-genes ${projectDir}/assets/cell_cycle/regev_lab_cell_cycle_genes.txt \
+        --cell-cycle-genes ${cell_cycle_genes} \
         --min-cell-cycle-genes ${params.QC_EMBEDDING_min_cell_cycle_genes} \
         \${LEIDEN_ARG} --leiden-resolutions '${params.QC_EMBEDDING_leiden_resolutions}' \
         --leiden-diagnostic-resolution ${params.QC_EMBEDDING_leiden_diagnostic_resolution} \

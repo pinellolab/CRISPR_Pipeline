@@ -4,10 +4,19 @@ ROOT = Path(__file__).parents[1]
 
 def test_pre_and_post_clone_use_independent_raw_sources():
     workflow = (ROOT/'workflows/crispr_pipeline/main.nf').read_text()
-    assert "embedding_before_clone(qualified_mudata, 'before_clone')" in workflow
+    assert "embedding_before_clone(qualified_mudata, 'before_clone', file(" in workflow
     assert 'remove_clonal_cells(qualified_mudata)' in workflow
-    assert "embedding_after_clone(mudata_before_hto, 'after_clone')" in workflow
+    assert "embedding_after_clone(mudata_before_hto, 'after_clone', file(" in workflow
     assert 'remove_clonal_cells(BeforeEmbedding.filtered_mudata)' not in workflow
+
+
+def test_cell_cycle_markers_are_staged_as_a_process_input():
+    module = (ROOT/"modules/local/postconcat_embedding_qc/main.nf").read_text()
+    workflow = (ROOT/"workflows/crispr_pipeline/main.nf").read_text()
+    assert "path cell_cycle_genes" in module
+    assert "--cell-cycle-genes ${cell_cycle_genes}" in module
+    assert "${projectDir}/assets/cell_cycle/regev_lab_cell_cycle_genes.txt" in workflow
+
 
 def test_counts_not_normalized_in_place():
     script = (ROOT/'bin/postconcat_embedding_qc.py').read_text()
