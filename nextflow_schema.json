@@ -85,7 +85,8 @@
                 "ENABLE_SCRUBLET": {
                     "type": "boolean",
                     "default": true,
-                    "description": "Run Scrublet independently on every RNA measurement set after UMI and MAD filtering."
+                    "description": "Run Scrublet independently on every RNA measurement set after UMI and MAD filtering when hashing/HTO is disabled.",
+                    "help_text": "When ENABLE_DATA_HASHING=true, HTO singlet filtering replaces Scrublet and this option is ignored."
                 },
                 "SCRUBLET_assay_type": {
                     "type": "string",

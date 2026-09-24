@@ -16,6 +16,10 @@ workflow preprocessing_pipeline {
     // it would be consumed as a second queue input and only the first RNA
     // measurement set would launch a QC task.
     parsed_covariate_value = parsed_covariate_file.first()
+    // HTO singlet selection is the mutually exclusive doublet/multiplet filter
+    // for hashing-enabled experiments. Scrublet is only meaningful when HTO is
+    // unavailable, even if ENABLE_SCRUBLET remains true in a shared config.
+    scrublet_enabled = params.ENABLE_SCRUBLET && !params.ENABLE_DATA_HASHING
     scrublet_expected_doublet_rate = params.SCRUBLET_expected_doublet_rate != null ? (params.SCRUBLET_expected_doublet_rate as Double) : (params.SCRUBLET_assay_type == 'cc-perturb-seq' ? 0.025 : 0.08)
     Preprocessed_AnnData = PreprocessAnnData(
         trans_out_dir,
@@ -25,7 +29,7 @@ workflow preprocessing_pipeline {
         params.QC_barcode_filter,
         params.QC_MAD_total_counts,
         params.QC_MAD_n_genes,
-        params.ENABLE_SCRUBLET,
+        scrublet_enabled,
         scrublet_expected_doublet_rate,
         params.SCRUBLET_n_prin_comps,
         params.SCRUBLET_adaptive_pca_fallback,

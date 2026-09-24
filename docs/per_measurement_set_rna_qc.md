@@ -88,6 +88,11 @@ remain visible with zero removal.
 of `0.08`; `cc-perturb-seq` resolves to `0.025`. A numeric
 `SCRUBLET_expected_doublet_rate` overrides the profile.
 
+Scrublet runs only when `ENABLE_SCRUBLET=true` and
+`ENABLE_DATA_HASHING=false`. For hashing-enabled experiments, HTO positive
+singlet filtering is the doublet/multiplet-removal mechanism and Scrublet is
+skipped automatically.
+
 When `SCRUBLET_adaptive_pca_fallback=true`, only Scrublet's explicit
 `n_components` dimensionality error is retried. The retry uses one fewer
 component than Scrublet's reported usable dimension. Requested and actual PCA

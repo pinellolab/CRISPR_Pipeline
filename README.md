@@ -141,7 +141,7 @@ Demo mode is strictly for pre-runs. The pipeline prints warnings at startup and 
 | `ENABLE_DATA_HASHING` | `false` | `true`, `false` | Enables the hashing workflow: hash seqspec checks, hash mapping, hashtag filtering, demultiplexing, hash-aware MuData creation, and hash dashboard sections. |
 | `HTO_min_positive_cells` | `20` | Integer `>= 1` | Calls an HTO within a measurement set only when at least this many positive singlet cells remain **after guide-assignment and optional clone filtering**. |
 | `HTO_keep_singlets_only` | `true` | `true`, `false` | When hashing is enabled, retains only cells assigned to a called single HTO after post-clone support is recalculated. |
-| `ENABLE_SCRUBLET` | `true` | `true`, `false` | Runs Scrublet independently after UMI/MAD filtering in every RNA measurement set. |
+| `ENABLE_SCRUBLET` | `true` | `true`, `false` | Runs Scrublet independently after UMI/MAD filtering in non-hashing workflows. When `ENABLE_DATA_HASHING=true`, HTO singlet filtering replaces Scrublet and this setting is ignored. |
 | `SCRUBLET_assay_type` | `droplet` | `droplet`, `cc-perturb-seq` | Resolves the automatic expected-doublet rate: `0.08` for droplet data and `0.025` for CC-Perturb-seq. |
 | `SCRUBLET_expected_doublet_rate` | `null` | `null` or fraction in `(0,1)` | Optional explicit expected-doublet rate overriding the assay profile. |
 | `SCRUBLET_n_prin_comps` | `30` | Positive integer | Principal components initially requested for Scrublet. |

@@ -40,3 +40,9 @@ def test_scrublet_is_not_reapplied_after_mudata_aggregation():
     preprocessing = (ROOT / "subworkflows" / "local" / "preprocessing_pipeline" / "main.nf").read_text()
     assert "params.ENABLE_SCRUBLET" in preprocessing
     assert "params.SCRUBLET_assay_type" in preprocessing
+
+
+def test_hashing_disables_scrublet_before_preprocessing():
+    preprocessing = (ROOT / "subworkflows" / "local" / "preprocessing_pipeline" / "main.nf").read_text()
+    assert "params.ENABLE_SCRUBLET && !params.ENABLE_DATA_HASHING" in preprocessing
+    assert "scrublet_enabled," in preprocessing
