@@ -515,6 +515,154 @@ def image_gallery(images: list[tuple[Path, str]]) -> str:
     return f'<h3>QC visualizations</h3><div class="gallery">{figures}</div>'
 
 
+def measurement_set_names(data: dict[str, Any]) -> list[str]:
+    observed = data.get("observed_metrics", {}) if data else {}
+    names = {
+        str(row.get("measurement_set"))
+        for row in observed.get("mapping_json", [])
+        if row.get("measurement_set")
+    }
+    names.update(
+        str(row.get("measurement_set"))
+        for row in observed.get("measurement_set_rna_qc", {}).get("rows", [])
+        if row.get("measurement_set")
+    )
+    return sorted(names)
+
+
+def _percent_bar(value: Any, label: str) -> str:
+    numeric = number(value)
+    width = max(0.0, min(100.0, numeric if numeric is not None else 0.0))
+    shown = display_value(value)
+    return (
+        '<div class="mini-bar"><div class="mini-bar-label"><span>' + html.escape(label) +
+        '</span><strong>' + html.escape(shown) + '%</strong></div>'
+        f'<div class="mini-bar-track"><i style="width:{width:.2f}%"></i></div></div>'
+    )
+
+
+def mapping_measurement_set_cards(data: dict[str, Any]) -> str:
+    observed = data.get("observed_metrics", {}) if data else {}
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in observed.get("mapping_json", []):
+        if row.get("measurement_set"):
+            grouped[str(row["measurement_set"])].append(row)
+    if not grouped:
+        return ""
+    cards = []
+    for measurement_set, rows in sorted(grouped.items()):
+        rows = sorted(rows, key=lambda row: str(row.get("modality", "")))
+        total_reads = sum(number(row.get("metrics", {}).get("n_processed")) or 0 for row in rows)
+        modality_chips = "".join(
+            '<span>' + html.escape(str(row.get("modality", "unknown"))) + '</span>' for row in rows
+        )
+        modality_sections = []
+        for row in rows:
+            metrics = row.get("metrics", {})
+            modality = str(row.get("modality", "unknown"))
+            facts = [
+                ("Reads processed", metrics.get("n_processed")),
+                ("Pseudoaligned", f'{display_value(metrics.get("p_pseudoaligned"))}%'),
+                ("Unique", f'{display_value(metrics.get("p_unique"))}%'),
+                ("Reads on-list", f'{display_value(metrics.get("percentageReadsOnOnlist"))}%'),
+                ("Barcodes on-list", f'{display_value(metrics.get("percentageBarcodesOnOnlist"))}%'),
+                ("Median UMI/barcode", metrics.get("medianUMIsPerBarcode")),
+            ]
+            fact_html = "".join(
+                '<div class="measurement-fact"><span>' + html.escape(label) + '</span><strong>' +
+                html.escape(display_value(value)) + '</strong></div>' for label, value in facts
+            )
+            bars = _percent_bar(metrics.get("p_pseudoaligned"), "Pseudoaligned")
+            if metrics.get("percentageReadsOnOnlist") is not None:
+                bars += _percent_bar(metrics.get("percentageReadsOnOnlist"), "Reads on-list")
+            modality_sections.append(
+                '<section class="modality-block"><h4>' + html.escape(modality) + '</h4>' +
+                '<div class="measurement-facts">' + fact_html + '</div>' + bars + '</section>'
+            )
+        cards.append(
+            '<details class="measurement-card"><summary><div><span class="measurement-name">' +
+            html.escape(measurement_set) + '</span><span class="measurement-subtitle">' +
+            html.escape(", ".join(str(row.get("modality", "unknown")) for row in rows)) +
+            '</span></div><div class="measurement-summary"><strong>' +
+            html.escape(display_value(int(total_reads))) + '</strong><span>processed reads</span></div>' +
+            '<div class="modality-chips">' + modality_chips + '</div></summary>' +
+            '<div class="measurement-body">' + "".join(modality_sections) + '</div></details>'
+        )
+    return (
+        '<div class="measurement-section"><div class="measurement-section-head"><div>'
+        '<span class="eyebrow">Measurement-set hierarchy</span><h3>Mapping by measurement set</h3>'
+        '<p>Open a card to inspect RNA and feature-barcode mapping separately.</p></div>'
+        f'<span class="measurement-count">{len(cards)} sets</span></div>' + "".join(cards) + '</div>'
+    )
+
+
+def preprocessing_measurement_set_cards(
+    data: dict[str, Any], images: list[tuple[Path, str]]
+) -> tuple[str, set[Path]]:
+    observed = data.get("observed_metrics", {}) if data else {}
+    rows = observed.get("measurement_set_rna_qc", {}).get("rows", [])
+    if not rows:
+        return "", set()
+    used: set[Path] = set()
+    cards = []
+    plot_priority = ("knee_plot", "rna_qc_filter_flow", "rna_qc_filter_steps", "qc_distributions", "scrublet_scores")
+    for row in sorted(rows, key=lambda item: str(item.get("measurement_set", ""))):
+        measurement_set = str(row.get("measurement_set", "unknown"))
+        matching = [(path, encoded) for path, encoded in images if measurement_set.lower() in path.name.lower()]
+        matching.sort(key=lambda item: next(
+            (index for index, prefix in enumerate(plot_priority) if prefix in item[0].name.lower()),
+            len(plot_priority),
+        ))
+        used.update(path for path, _ in matching)
+        input_cells = number(row.get("input_barcodes")) or 0
+        retained = number(row.get("retained_cells")) or 0
+        retained_pct = (100.0 * retained / input_cells) if input_cells else 0.0
+        stages = [
+            ("Input barcodes", row.get("input_barcodes")),
+            ("Automatic knee", row.get("post_knee_cells")),
+            (f'RNA UMI ≥ {display_value(row.get("fixed_min_counts"))}', row.get("post_min_counts_cells")),
+            (f'{display_value(row.get("mad_total_counts_n"))} MAD counts + genes', row.get("post_mad_cells")),
+            ("After Scrublet" if row.get("scrublet_enabled") else "Scrublet skipped", row.get("retained_cells")),
+        ]
+        stage_html = "".join(
+            '<div class="filter-stage"><span>' + html.escape(label) + '</span><strong>' +
+            html.escape(display_value(value)) + '</strong></div>' for label, value in stages
+        )
+        plots = "".join(
+            f'<figure><img loading="lazy" src="data:image/png;base64,{encoded}" alt="{html.escape(path.stem)}">'
+            f'<figcaption>{html.escape(path.stem.replace("_", " "))}</figcaption></figure>'
+            for path, encoded in matching
+        )
+        facts = [
+            ("Knee UMI", row.get("knee_umi_threshold")),
+            ("Knee rank", row.get("knee_rank")),
+            ("Retained", row.get("retained_cells")),
+            ("Retained %", f"{retained_pct:.2f}%"),
+            ("Scrublet removed", row.get("removed_by_scrublet")),
+            ("PCA components", row.get("scrublet_n_prin_comps_used")),
+        ]
+        fact_html = "".join(
+            '<div class="measurement-fact"><span>' + html.escape(label) + '</span><strong>' +
+            html.escape(display_value(value)) + '</strong></div>' for label, value in facts
+        )
+        cards.append(
+            '<details class="measurement-card preprocessing-card"><summary><div><span class="measurement-name">' +
+            html.escape(measurement_set) + '</span><span class="measurement-subtitle">automatic knee → UMI → MAD → doublet policy</span></div>'
+            '<div class="measurement-summary"><strong>' + html.escape(display_value(int(retained))) +
+            f'</strong><span>retained · {retained_pct:.2f}%</span></div></summary>'
+            '<div class="measurement-body"><h4>Cell-filter sequence</h4><div class="filter-stages">' +
+            stage_html + '</div><div class="measurement-facts">' + fact_html + '</div>' +
+            ('<div class="measurement-plots">' + plots + '</div>' if plots else '<p class="empty">Plots have not been published for this set yet.</p>') +
+            '</div></details>'
+        )
+    return (
+        '<div class="measurement-section"><div class="measurement-section-head"><div>'
+        '<span class="eyebrow">Measurement-set hierarchy</span><h3>Preprocessing by measurement set</h3>'
+        '<p>Open a card to inspect the ordered filters, retained cells and associated QC plots.</p></div>'
+        f'<span class="measurement-count">{len(cards)} sets</span></div>' + "".join(cards) + '</div>', used
+    )
+
+
 def measurement_set_filter_flow_content(root: Path | None) -> str:
     if not root or not root.exists():
         return ""
@@ -842,8 +990,14 @@ def render(args: argparse.Namespace) -> str:
             metric_card("Cached", state["cached"], "processes"),
             metric_card("Task runtime", fmt_seconds(state["runtime"]), "aggregate"),
         ]
+        family_images = artifact_images.get(family, [])
         extra = category_flow(qc_data, family) + qc_metrics_content(qc_data, family)
+        if family == "mapping":
+            extra += mapping_measurement_set_cards(qc_data)
         if family == "preprocessing":
+            measurement_cards, used_images = preprocessing_measurement_set_cards(qc_data, family_images)
+            extra += measurement_cards
+            family_images = [(path, encoded) for path, encoded in family_images if path not in used_images]
             extra += measurement_set_filter_flow_content(getattr(args, "artifact_dir", None))
         if family == "guide_assignment":
             extra += assignment_filter_flow_content(getattr(args, "artifact_dir", None))
@@ -867,7 +1021,7 @@ def render(args: argparse.Namespace) -> str:
             extra += final_inference_content(getattr(args, "final_dashboard_html", None))
         if family == "evaluation":
             extra += evaluation_artifact_content(getattr(args, "artifact_dir", None))
-        extra += image_gallery(artifact_images.get(family, []))
+        extra += image_gallery(family_images)
         sections.append(
             f'<section id="family-{family}" class="family-panel"><div class="family-heading">'
             f'<div><span class="eyebrow">Pipeline family</span><h2>{html.escape(title)}</h2>'
@@ -893,8 +1047,14 @@ def render(args: argparse.Namespace) -> str:
 .node.completed .node-status,.completed.status-badge{{background:var(--green)}} .node.running .node-status,.running.status-badge{{background:var(--cyan);box-shadow:0 0 12px var(--cyan)}} .node.failed .node-status,.failed.status-badge{{background:var(--red)}} .node.pending{{opacity:.65}} .family-panel{{display:none}} .family-panel.active{{display:block}} .family-heading{{display:flex;justify-content:space-between;align-items:flex-start}} .status-badge{{border-radius:99px;padding:5px 10px;text-transform:uppercase;font-size:10px;font-weight:800;color:#06121e;background:var(--grey)}}
 .table-wrap{{overflow:auto;border:1px solid var(--line);border-radius:10px}} table{{border-collapse:collapse;width:100%;min-width:700px}} th,td{{text-align:left;padding:10px 12px;border-bottom:1px solid #e2e8f0}} th{{color:#475569;background:#f1f5f9;font-size:11px;text-transform:uppercase;letter-spacing:.06em}} td{{font-family:ui-monospace,monospace;font-size:12px}} .pill{{padding:3px 7px;border-radius:99px;background:#e2e8f0;font-size:10px}} .pill.completed,.pill.cached{{background:#dcfce7;color:#166534}} .pill.running,.pill.submitted,.pill.new{{background:#e0f2fe;color:#075985}} .pill.failed,.pill.aborted{{background:#ffe4e6;color:#be123c}} figure{{margin:18px 0;background:#fff;border-radius:12px;padding:10px}} figure img{{display:block;max-width:100%;margin:auto}} figcaption{{color:#50647b;padding:8px 4px 2px}} .empty{{color:var(--muted);border:1px dashed var(--line);border-radius:10px;padding:20px}} footer{{color:#607994;font-size:11px;margin:20px 2px}}
 .gallery{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}} .gallery figure{{margin:0;min-width:0}} .failure-evidence{{background:#fff1f2;border:1px solid #fecdd3;border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 12px 30px #0f172a12}} details{{background:#fff;border:1px solid #fecdd3;border-radius:10px;margin-top:10px;padding:10px 12px}} summary{{cursor:pointer;font-weight:700;color:#be123c}} pre{{white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;background:#f8fafc;border-radius:8px;padding:12px;color:#334155;font:11px/1.45 ui-monospace,monospace}} .evidence-note{{color:var(--amber)}} .table-search{{width:min(520px,100%);background:#fff;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin:0 0 10px}} .result-block{{border-top:1px solid var(--line);margin-top:22px;padding-top:2px}} .qc-callout{{border:1px solid #fde68a;background:#fffbeb;border-radius:10px;padding:12px;margin:10px 0}}
+.measurement-section{{margin:24px 0;padding:16px;border:1px solid var(--line);border-radius:14px;background:#f8fafc}} .measurement-section-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:10px}} .measurement-section-head h3{{margin:3px 0}} .measurement-count{{white-space:nowrap;background:#dff3fb;color:#075985;border-radius:99px;padding:6px 10px;font-size:11px;font-weight:800}}
+details.measurement-card{{border-color:var(--line);border-radius:12px;padding:0;overflow:hidden;box-shadow:0 4px 14px #0f172a0a}} details.measurement-card[open]{{border-color:#7dd3fc;box-shadow:0 0 0 2px #0ea5e91a}} details.measurement-card>summary{{list-style:none;color:var(--text);display:grid;grid-template-columns:auto minmax(240px,1fr) auto auto;align-items:center;gap:18px;padding:14px 16px;background:#fff}} details.measurement-card>summary::-webkit-details-marker{{display:none}} details.measurement-card>summary:before{{content:'›';font-size:22px;color:var(--cyan);transition:.15s}} details.measurement-card[open]>summary:before{{transform:rotate(90deg)}}
+.measurement-name,.measurement-subtitle,.measurement-summary span{{display:block}} .measurement-name{{font:700 13px ui-monospace,monospace}} .measurement-subtitle{{color:var(--muted);font-size:11px;font-weight:500;margin-top:2px}} .measurement-summary{{text-align:right}} .measurement-summary strong{{font-size:18px}} .measurement-summary span{{color:var(--muted);font-size:10px}} .modality-chips{{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}} .modality-chips span{{background:#e0f2fe;color:#075985;border-radius:99px;padding:4px 7px;font-size:10px;text-transform:uppercase}}
+.measurement-body{{border-top:1px solid var(--line);padding:16px;background:#fbfdff}} .measurement-body h4{{margin:4px 0 10px;text-transform:capitalize}} .modality-block{{border:1px solid var(--line);border-radius:10px;background:#fff;padding:14px;margin-bottom:12px}} .measurement-facts{{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:8px;margin:10px 0}} .measurement-fact{{background:#f1f5f9;border-radius:8px;padding:9px}} .measurement-fact span,.measurement-fact strong{{display:block}} .measurement-fact span{{color:var(--muted);font-size:10px}} .measurement-fact strong{{font-size:13px;margin-top:3px}}
+.mini-bar{{margin:10px 0}} .mini-bar-label{{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}} .mini-bar-track{{height:7px;border-radius:99px;background:#e2e8f0;overflow:hidden;margin-top:4px}} .mini-bar-track i{{display:block;height:100%;background:linear-gradient(90deg,#22d3ee,#0f8fc5);border-radius:99px}} .filter-stages{{display:flex;gap:22px;overflow-x:auto;padding:3px 2px 12px}} .filter-stage{{position:relative;flex:1 0 145px;border:1px solid var(--line);border-radius:9px;background:#fff;padding:10px}} .filter-stage:not(:last-child):after{{content:'→';position:absolute;right:-17px;top:31%;color:#94a3b8}} .filter-stage span,.filter-stage strong{{display:block}} .filter-stage span{{font-size:10px;color:var(--muted)}} .filter-stage strong{{font-size:16px;margin-top:3px}}
+.measurement-plots{{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px;margin-top:14px}} .measurement-plots figure{{margin:0;border:1px solid var(--line)}}
 .process-flow{{border:1px solid var(--line);background:#f8fafc;border-radius:12px;padding:14px;margin:18px 0}} .flow-steps{{display:flex;align-items:stretch;overflow-x:auto;gap:24px;padding:4px 2px}} .flow-step{{position:relative;flex:1 0 180px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px}} .flow-step:not(:last-child):after{{content:'→';position:absolute;right:-18px;top:38%;color:#94a3b8;font-size:20px}} .flow-step strong,.flow-step span{{display:block}} .flow-step span{{color:var(--muted);font-size:11px;margin-top:5px}} .filter-chips{{display:flex;flex-wrap:wrap;gap:7px}} .filter-chips span{{background:#e0f2fe;color:#0c4a6e;border-radius:99px;padding:5px 9px;font-size:11px}} .flow-note{{margin-top:9px;font-size:12px}}
-@media(max-width:700px){{.shell{{padding:15px}}header{{display:block}}.live{{margin-top:12px;width:max-content}}}}
+@media(max-width:700px){{.shell{{padding:15px}}header{{display:block}}.live{{margin-top:12px;width:max-content}}details.measurement-card>summary{{grid-template-columns:auto 1fr}}.measurement-summary,.modality-chips{{grid-column:2;text-align:left;justify-content:flex-start}}.measurement-plots{{grid-template-columns:1fr}}}}
 </style></head><body><div class="shell">
 <header><div><span class="eyebrow">CRISPR Pipeline · execution dashboard</span><h1>{html.escape(args.run_name)}</h1><div class="run-id">{html.escape(args.run_id)}</div></div><div class="live {html.escape(args.status.lower())}"><i></i><span>{html.escape(args.status.upper())}</span></div></header>
 <div class="summary">{metric_card("Completed", counts["COMPLETED"] + counts["CACHED"], "tasks")}{metric_card("Running", counts["RUNNING"] + counts["SUBMITTED"] + counts["NEW"], "tasks")}{metric_card("Failed", counts["FAILED"] + counts["ABORTED"], "tasks")}{metric_card("Cached", counts["CACHED"], "tasks")}{metric_card("Task runtime", fmt_seconds(total_runtime), "aggregate")}{metric_card("Guides", guide.get("row_count", "—"), "validated")}</div>
