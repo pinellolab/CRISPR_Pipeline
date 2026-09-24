@@ -44,7 +44,11 @@ process inference_perturbo {
         def crt_arg = params.INFERENCE_PERTURBO_CRT ? '--crt' : '--no-crt'
         def write_mudata_arg = params.INFERENCE_PERTURBO_WRITE_MUDATA ? '--output-mudata inference_mudata.h5mu' : ''
         def results_ext = params.INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT == 'parquet' ? 'parquet' : 'tsv.gz'
+        def compact_floats_arg = params.INFERENCE_PERTURBO_COMPACT_RESULT_FLOATS ? '--compact-result-floats' : '--no-compact-result-floats'
         """
+        export MPLCONFIGDIR="\$PWD/.mplconfig"
+        mkdir -p "\$MPLCONFIGDIR"
+        echo '[perturbo task] cpus=${task.cpus}; requested_ram_bytes=${task.memory.toBytes()}; container=${task.container}'
         perturbo_v2_pipeline_adapter.py \\
             --input ${mudata} \\
             --pairs-mudata ${pairs_mudata} \\
@@ -55,6 +59,9 @@ process inference_perturbo {
             --local-per-guide-output perturbo_local_analysis_per_guide_output.tsv.gz \\
             ${write_mudata_arg} \\
             --v2-artifact-dir perturbo_v2_outputs \\
+            --result-batch-rows ${params.INFERENCE_PERTURBO_RESULT_BATCH_ROWS} \\
+            --max-bh-working-bytes ${params.INFERENCE_PERTURBO_MAX_BH_WORKING_BYTES} \\
+            ${compact_floats_arg} \\
             ${crt_arg} \\
             --crt-pool ${control_group.perturbo_crt_pool} \\
             --control-group-setting ${control_group.setting} \\

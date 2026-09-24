@@ -1,5 +1,7 @@
 import pathlib
 import sys
+import json
+import os
 
 import anndata as ad
 import mudata as mu
@@ -14,6 +16,7 @@ if str(BIN_DIR) not in sys.path:
     sys.path.insert(0, str(BIN_DIR))
 
 import perturbo_v2_pipeline_adapter as adapter
+import bounded_perturbo_results as bounded
 
 
 def _make_mudata():
@@ -69,6 +72,185 @@ def test_open_mudata_closes_backed_file_manager(tmp_path):
         assert file_manager.is_open
 
     assert not file_manager.is_open
+
+
+@pytest.mark.parametrize(("flag", "value"), [("--result-batch-rows", "0"), ("--max-bh-working-bytes", "0")])
+def test_conversion_memory_preflight_happens_before_input_or_fit(tmp_path, monkeypatch, flag, value):
+    args = adapter.build_parser().parse_args(
+        ["--input", str(tmp_path / "missing.h5mu"), "--per-element-output", str(tmp_path / "e.parquet"), "--per-guide-output", str(tmp_path / "g.parquet"), flag, value]
+    )
+    monkeypatch.setattr(adapter, "prepare_mudata_for_perturbo_v2", lambda *a, **k: (_ for _ in ()).throw(AssertionError("input opened")))
+    with pytest.raises(ValueError, match="positive"):
+        adapter.run_pipeline_adapter(args)
+
+
+def test_published_raw_fit_survives_later_conversion_failure(tmp_path):
+    fit = tmp_path / "fit"
+    fit.mkdir()
+    pd.DataFrame({"element": ["g"], "gene": ["G"], "posterior_mean": [0.0]}).to_parquet(
+        fit / "element_effects.parquet", index=False
+    )
+    durable = adapter._publish_raw_fit(fit, tmp_path / "artifacts", "element")
+
+    with pytest.raises(RuntimeError, match="injected"):
+        raise RuntimeError("injected conversion failure")
+
+    manifest = json.loads((durable / "conversion_manifest.json").read_text())
+    bounded.verify_manifest(durable, manifest)
+    assert (durable / "element_effects.parquet").exists()
+
+
+def test_parallel_wait_publishes_success_before_raising_peer_failure(tmp_path):
+    artifact = tmp_path / "artifacts"
+    artifact.mkdir()
+    fit_dirs = {}
+    for name in ("element", "guide"):
+        fit_dirs[name] = artifact / f".{name}.partial"
+        fit_dirs[name].mkdir()
+        pd.DataFrame({"p_value": [0.1]}).to_parquet(
+            fit_dirs[name] / "element_effects.parquet", index=False
+        )
+
+    class Process:
+        def __init__(self, code):
+            self.code = code
+            self.args = ["perturbo"]
+
+        def poll(self):
+            return self.code
+
+    with pytest.raises(Exception):
+        adapter._wait_publish_fits(
+            {"element": Process(0), "guide": Process(2)}, fit_dirs, artifact
+        )
+
+    assert (artifact / "element/element_effects.parquet").exists()
+    assert not (artifact / "guide").exists()
+
+
+def test_publication_failure_terminates_and_waits_for_live_peer(tmp_path, monkeypatch):
+    class Process:
+        args = ["perturbo"]
+
+        def __init__(self, code):
+            self.code = code
+            self.terminated = False
+            self.waited = False
+
+        def poll(self):
+            return self.code
+
+        def terminate(self):
+            self.terminated = True
+            self.code = -15
+
+        def wait(self):
+            self.waited = True
+            return self.code
+
+    complete = Process(0)
+    live = Process(None)
+    monkeypatch.setattr(adapter, "_publish_raw_fit", lambda *args: (_ for _ in ()).throw(OSError("disk full")))
+
+    with pytest.raises(OSError, match="disk full"):
+        adapter._wait_publish_fits(
+            {"element": complete, "guide": live},
+            {"element": tmp_path / "element", "guide": tmp_path / "guide"},
+            tmp_path,
+        )
+
+    assert live.terminated and live.waited
+
+
+def test_requested_pairs_fallback_filters_in_bounded_batches(tmp_path):
+    raw = tmp_path / "element_effects.parquet"
+    requested = tmp_path / "element_effects_requested_pairs.parquet"
+    pairs = tmp_path / "pairs.parquet"
+    pd.DataFrame(
+        {
+            "element": ["a", "a", "b"], "gene": ["G1", "G2", "G2"],
+            "posterior_mean": [0.0, 0.0, 0.0], "posterior_scale": [1.0, 1.0, 1.0],
+            "posterior_prob": [0.1, 0.2, 0.3], "unused_diagnostic": [1, 2, 3],
+        }
+    ).to_parquet(raw, row_group_size=1, index=False)
+    pd.DataFrame({"element": ["a"], "gene": ["G2"]}).to_parquet(pairs, index=False)
+
+    adapter._ensure_requested_pairs(raw, requested, pairs, batch_rows=1)
+
+    observed = pd.read_parquet(requested)
+    assert list(observed[["element", "gene"]].itertuples(index=False, name=None)) == [("a", "G2")]
+    assert "unused_diagnostic" not in observed
+
+
+@pytest.mark.parametrize("suffix", [".tsv", ".tsv.gz"])
+def test_direct_raw_render_preserves_identifier_text_and_empty_headers(tmp_path, suffix):
+    raw = tmp_path / "requested.parquet"
+    pd.DataFrame(
+        {
+            "element": ["NA", "001"], "gene": ["001", "NA"],
+            "posterior_mean": [0.0, 0.0], "posterior_scale": [1.0, 1.0],
+            "posterior_prob": [0.1, 0.2],
+        }
+    ).to_parquet(raw, index=False)
+    output = tmp_path / f"result{suffix}"
+    adapter._write_bounded_effects(
+        raw, output, inference_type="guide", prepared_path=None,
+        guide_name_map={}, crt=False, scratch_dir=tmp_path,
+        max_bh_working_bytes=1 << 20, compact_floats=False, batch_rows=1,
+    )
+    observed = pd.read_csv(output, sep="\t", dtype=str, keep_default_na=False)
+    assert list(observed["guide_id"]) == ["NA", "001"]
+    assert list(observed["gene_id"]) == ["001", "NA"]
+
+    empty_raw = tmp_path / "empty.parquet"
+    pd.DataFrame(
+        {name: pd.Series(dtype=dtype) for name, dtype in {
+            "element": "string", "gene": "string", "posterior_mean": "float64",
+            "posterior_scale": "float64", "posterior_prob": "float64",
+        }.items()}
+    ).to_parquet(empty_raw, index=False)
+    empty_output = tmp_path / f"empty{suffix}"
+    adapter._write_bounded_effects(
+        empty_raw, empty_output, inference_type="guide", prepared_path=None,
+        guide_name_map={}, crt=False, scratch_dir=tmp_path,
+        max_bh_working_bytes=1 << 20, compact_floats=False, batch_rows=1,
+    )
+    assert list(pd.read_csv(empty_output, sep="\t").columns) == [
+        "gene_id", "guide_id", "log2_fc", "perturbo_fc_se", "p_value",
+        "perturbo_posterior_prob", "perturbo_q_value",
+    ]
+
+
+def test_bounded_bh_clips_only_for_adjustment_and_carries_typed_diagnostics(tmp_path):
+    raw = tmp_path / "diagnostics.parquet"
+    p = np.array([-np.inf, np.inf, 2.0, -1.0, np.nan])
+    pd.DataFrame(
+        {
+            "element": ["g"] * 5, "gene": [f"G{i}" for i in range(5)],
+            "posterior_mean": np.zeros(5, dtype=np.float32),
+            "posterior_scale": np.ones(5, dtype=np.float32),
+            "posterior_prob": np.full(5, 0.5, dtype=np.float32),
+            "crt_saddlepoint_p_value": p,
+            "crt_low_information": pd.Series([True, False, True, False, True], dtype="bool"),
+            "crt_tail_failure_reason": pd.Series([16, 0, -1, 2, 3], dtype="int16"),
+            "crt_saddlepoint_valid": pd.Series([1.0, np.nan, 0.0, 1.0, np.nan], dtype="float64"),
+            "crt_root_residual_null_sd": pd.Series([0.1, 0.2, np.nan, 0.4, 0.5], dtype="float64"),
+        }
+    ).to_parquet(raw, index=False)
+    output = tmp_path / "result.parquet"
+    adapter._write_bounded_effects(
+        raw, output, inference_type="guide", prepared_path=None, guide_name_map={},
+        crt=True, scratch_dir=tmp_path, max_bh_working_bytes=1 << 20,
+        compact_floats=False, batch_rows=2,
+    )
+    observed = pd.read_parquet(output)
+    np.testing.assert_array_equal(observed["p_value"].to_numpy(), p)
+    expected_q = adapter._bh_adjust(pd.Series(p)).to_numpy()
+    np.testing.assert_allclose(observed["perturbo_q_value"], expected_q, equal_nan=True)
+    assert observed["perturbo_crt_low_information"].dtype == bool
+    assert observed["perturbo_crt_tail_failure_reason"].dtype == np.int16
+    assert observed["perturbo_crt_saddlepoint_valid"].dtype == np.float64
+    assert np.isnan(observed.loc[1, "perturbo_crt_saddlepoint_valid"])
 
 
 def test_prepare_mudata_adds_v2_metadata_and_control_guide_names(tmp_path):
@@ -275,7 +457,11 @@ def test_run_pipeline_adapter_patches_uns_without_rewriting_x(
 ):
     pytest.importorskip("pyarrow")
     input_path = tmp_path / "input.h5mu"
-    _make_mudata().write(input_path)
+    input_mudata = _make_mudata()
+    if test_all_pairs:
+        input_mudata["guide"].var["guide_id"] = ["NA", "001", "nt1"]
+        input_mudata.uns["pairs_to_test"]["guide_id"] = ["NA", "001", "nt1"]
+    input_mudata.write(input_path)
 
     import h5py
 
@@ -301,7 +487,7 @@ def test_run_pipeline_adapter_patches_uns_without_rewriting_x(
     )
     guide_effects = pd.DataFrame(
         {
-            "element": ["gA", "gB"],
+            "element": ["NA", "001"] if test_all_pairs else ["gA", "gB"],
             "gene": ["GENE1", "GENE2"],
             "posterior_mean": [np.log(2), np.log(3)],
             "posterior_scale": [np.log(2) / 10, np.log(2) / 9],
@@ -310,6 +496,13 @@ def test_run_pipeline_adapter_patches_uns_without_rewriting_x(
     )
 
     observed_native_pairs = []
+
+    class FinishedProcess:
+        args = ["perturbo"]
+
+        @staticmethod
+        def poll():
+            return 0
 
     def fake_run_perturbo(
         input_path, out_dir, *, map_key, names_key, pairs_to_test_path, args, **kwargs
@@ -320,21 +513,41 @@ def test_run_pipeline_adapter_patches_uns_without_rewriting_x(
         )
         effects = element_effects if map_key == adapter.ELEMENT_MAP_KEY else guide_effects
         effects.to_parquet(out_dir / "element_effects.parquet", index=False)
-        return object()
+        (out_dir / "crt_metadata.json").write_text('{"raw": true}\n')
+        if pairs_to_test_path is not None:
+            pairs = pd.read_parquet(pairs_to_test_path)
+            effects.merge(pairs, on=["element", "gene"], how="inner").to_parquet(
+                out_dir / "element_effects_requested_pairs.parquet", index=False
+            )
+        return FinishedProcess()
 
     monkeypatch.setattr(adapter, "_run_perturbo", fake_run_perturbo)
-    monkeypatch.setattr(adapter, "_wait_for_fits", lambda processes: None)
 
     output_mudata = tmp_path / "output.h5mu"
+    primary_element = tmp_path / ("per_element.tsv.gz" if test_all_pairs else "per_element.parquet")
+    primary_guide = tmp_path / ("per_guide.tsv.gz" if test_all_pairs else "per_guide.parquet")
     cli_args = [
         "--input", str(input_path),
-        "--per-element-output", str(tmp_path / "per_element.tsv.gz"),
-        "--per-guide-output", str(tmp_path / "per_guide.tsv.gz"),
+        "--per-element-output", str(primary_element),
+        "--per-guide-output", str(primary_guide),
         "--output-mudata", str(output_mudata),
         "--v2-artifact-dir", str(tmp_path / "artifacts"),
     ]
     if test_all_pairs:
-        cli_args.append("--test-all-pairs")
+        cli_args.extend(
+            [
+                "--test-all-pairs",
+                "--local-per-element-output", str(tmp_path / "local_element.tsv.gz"),
+                "--local-per-guide-output", str(tmp_path / "local_guide.pq"),
+            ]
+        )
+    else:
+        cli_args.extend(
+            [
+                "--local-per-element-output", str(tmp_path / "local_element.tsv.gz"),
+                "--local-per-guide-output", str(tmp_path / "local_guide.tsv.gz"),
+            ]
+        )
     args = adapter.build_parser().parse_args(cli_args)
     adapter.run_pipeline_adapter(args)
 
@@ -350,16 +563,49 @@ def test_run_pipeline_adapter_patches_uns_without_rewriting_x(
     assert f"{analysis_prefix}_per_guide_results" in result.uns
     assert list(pd.DataFrame(result.uns["per_element_results"])["gene_id"]) == ["GENE1", "GENE2"]
     if test_all_pairs:
-        assert observed_native_pairs == [None, None]
-        assert not (tmp_path / "artifacts/element_pairs_to_test.parquet").exists()
-        assert not (tmp_path / "artifacts/guide_pairs_to_test.parquet").exists()
+        assert len(observed_native_pairs) == 2
+        assert (tmp_path / "local_element.tsv.gz").exists()
+        assert (tmp_path / "local_guide.pq").exists()
+        assert list(pd.read_parquet(tmp_path / "local_guide.pq")["guide_id"].astype(str)) == ["NA", "001"]
+        embedded_guides = pd.DataFrame(result.uns["global_analysis_per_guide_results"])
+        assert list(embedded_guides["guide_id"].astype(str)) == ["NA", "001"]
     else:
+        assert primary_element.exists()
+        assert primary_guide.exists()
+        assert (tmp_path / "local_element.tsv.gz").exists()
+        assert (tmp_path / "local_guide.tsv.gz").exists()
+        assert list(pd.read_csv(tmp_path / "local_element.tsv.gz", sep="\t")["gene_id"]) == list(
+            pd.read_parquet(primary_element)["gene_id"]
+        )
         assert len(observed_native_pairs) == 2
         assert all(list(frame.columns) == ["element", "gene"] for frame in observed_native_pairs)
         assert all(any(frame["element"].str.contains("non-targeting")) for frame in observed_native_pairs)
         assert (tmp_path / "artifacts/element_pairs_to_test.parquet").exists()
         assert (tmp_path / "artifacts/guide_pairs_to_test.parquet").exists()
 
+    if test_all_pairs:
+        def fitting_must_not_run(*args, **kwargs):
+            raise AssertionError("conversion-only recovery launched a fit")
+
+        monkeypatch.setattr(adapter, "_run_perturbo", fitting_must_not_run)
+        monkeypatch.setattr(adapter, "prepare_mudata_for_perturbo_v2", fitting_must_not_run)
+        recovery_cli = list(cli_args)
+        output_index = recovery_cli.index("--output-mudata")
+        del recovery_cli[output_index : output_index + 2]
+        recovery_args = adapter.build_parser().parse_args(
+            recovery_cli + ["--conversion-only-artifact-dir", str(tmp_path / "artifacts")]
+        )
+        adapter.run_pipeline_adapter(recovery_args)
+        assert (tmp_path / "artifacts/element/crt_metadata.json").read_text() == '{"raw": true}\n'
+
+        original = input_path.stat()
+        input_path.touch()
+        changed_args = adapter.build_parser().parse_args(
+            recovery_cli + ["--conversion-only-artifact-dir", str(tmp_path / "artifacts")]
+        )
+        with pytest.raises(ValueError, match="provenance"):
+            adapter.run_pipeline_adapter(changed_args)
+        os.utime(input_path, ns=(original.st_atime_ns, original.st_mtime_ns))
 
 def _write_mudata_without_controls(path):
     """A screen with no non-targeting guides, so no cell is a control cell."""
