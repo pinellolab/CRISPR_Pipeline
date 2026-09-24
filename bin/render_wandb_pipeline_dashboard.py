@@ -443,14 +443,21 @@ def qc_metrics_content(data: dict[str, Any], family: str) -> str:
 
 
 def image_family(path: Path) -> str:
-    value = str(path).lower()
-    if any(term in value for term in ('embedding', 'before_clone', 'after_clone', 'clone_qc', 'clone_removal', '/clones/', 'clone_filter', 'hto_filter', 'hashing_qc')):
+    # The output directory itself may contain "embedding_qc".  Classifying
+    # the entire absolute path would therefore route every image to post-QC.
+    value = path.as_posix().lower()
+    parts = {part.lower() for part in path.parts}
+    if any(term in parts for term in (
+        'postconcat_embedding_qc', 'embedding_qc', 'embeddings', 'before_clone',
+        'after_clone', 'clone_qc', 'clone_removal', 'clones', 'clone_filter',
+        'hto_filter', 'hashing_qc',
+    )):
         return 'postconcat_qc'
     if "seqspec" in value:
         return "seqspec"
     if any(term in value for term in ("guide_", "guides_", "sgrna", "cells_per_guide", "guides_per_cell", "hto_", "hashing_qc")):
         return "guide_assignment"
-    if any(term in value for term in ("intended_target", "global_analysis", "evaluation", "volcano")):
+    if any(term in value for term in ("intended_target", "global_analysis", "evaluation", "volcano", "sequencing_saturation")):
         return "evaluation"
     if any(term in value for term in ("scrna", "rna_qc", "gene_", "knee_plot")):
         return "preprocessing"
@@ -660,6 +667,48 @@ def preprocessing_measurement_set_cards(
         '<span class="eyebrow">Measurement-set hierarchy</span><h3>Preprocessing by measurement set</h3>'
         '<p>Open a card to inspect the ordered filters, retained cells and associated QC plots.</p></div>'
         f'<span class="measurement-count">{len(cards)} sets</span></div>' + "".join(cards) + '</div>', used
+    )
+
+
+def figure_measurement_set_cards(
+    images: list[tuple[Path, str]],
+    measurement_sets: list[str],
+    title: str,
+    description: str,
+    card_subtitle: str,
+) -> tuple[str, set[Path]]:
+    cards = []
+    used: set[Path] = set()
+    for measurement_set in measurement_sets:
+        matching = [
+            (path, encoded)
+            for path, encoded in images
+            if measurement_set.lower() in path.name.lower()
+        ]
+        if not matching:
+            continue
+        used.update(path for path, _ in matching)
+        plots = "".join(
+            f'<figure><img loading="lazy" src="data:image/png;base64,{encoded}" alt="{html.escape(path.stem)}">'
+            f'<figcaption>{html.escape(path.stem.replace("_", " "))}</figcaption></figure>'
+            for path, encoded in matching
+        )
+        cards.append(
+            '<details class="measurement-card figure-card"><summary><div><span class="measurement-name">' +
+            html.escape(measurement_set) + '</span><span class="measurement-subtitle">' +
+            html.escape(card_subtitle) + '</span></div><div class="measurement-summary"><strong>' +
+            str(len(matching)) + '</strong><span>QC plot' + ('s' if len(matching) != 1 else '') +
+            '</span></div></summary><div class="measurement-body"><div class="measurement-plots">' +
+            plots + '</div></div></details>'
+        )
+    if not cards:
+        return "", set()
+    return (
+        '<div class="measurement-section"><div class="measurement-section-head"><div>'
+        '<span class="eyebrow">Measurement-set hierarchy</span><h3>' + html.escape(title) + '</h3><p>' +
+        html.escape(description) + '</p></div><span class="measurement-count">' +
+        str(len(cards)) + ' sets</span></div>' + "".join(cards) + '</div>',
+        used,
     )
 
 
@@ -1000,8 +1049,24 @@ def render(args: argparse.Namespace) -> str:
             family_images = [(path, encoded) for path, encoded in family_images if path not in used_images]
             extra += measurement_set_filter_flow_content(getattr(args, "artifact_dir", None))
         if family == "guide_assignment":
+            assignment_cards, used_images = figure_measurement_set_cards(
+                family_images, measurement_set_names(qc_data),
+                "Guide assignment by measurement set",
+                "Open a card to inspect guide-cell calling and assignment filtering for that set.",
+                "guide calling and assignment filters",
+            )
+            extra += assignment_cards
+            family_images = [(path, encoded) for path, encoded in family_images if path not in used_images]
             extra += assignment_filter_flow_content(getattr(args, "artifact_dir", None))
         if family == 'postconcat_qc':
+            postconcat_cards, used_images = figure_measurement_set_cards(
+                family_images, measurement_set_names(qc_data),
+                "Post-concatenation views by measurement set",
+                "Open a card to inspect how each set occupies normalized PCA and UMAP space.",
+                "normalized embedding views",
+            )
+            extra += postconcat_cards
+            family_images = [(path, encoded) for path, encoded in family_images if path not in used_images]
             extra += postconcat_qc_content(getattr(args, 'artifact_dir', None))
         if family == 'final':
             included = sum(len(items) for items in artifact_images.values())
@@ -1029,7 +1094,12 @@ def render(args: argparse.Namespace) -> str:
             f'<div class="metrics">{"".join(cards)}</div>{extra}<h3>Processes</h3>{process_table(state["rows"])}</section>'
         )
 
-    current = next((family for family, _, _ in reversed(FAMILIES) if family_states[family]["status"] in {"failed", "running", "completed"}), "input")
+    if args.status.lower() == "completed" and measurement_set_names(qc_data):
+        current = "preprocessing"
+    else:
+        current = next((family for family, _, _ in reversed(FAMILIES)
+                        if family_states[family]["status"] in {"failed", "running", "completed"}),
+                       "input")
     generated = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     failures = failure_content(
         trace_rows, getattr(args, "nextflow_log", None), getattr(args, "tail_lines", 30)
@@ -1060,7 +1130,7 @@ details.measurement-card{{border-color:var(--line);border-radius:12px;padding:0;
 <div class="summary">{metric_card("Completed", counts["COMPLETED"] + counts["CACHED"], "tasks")}{metric_card("Running", counts["RUNNING"] + counts["SUBMITTED"] + counts["NEW"], "tasks")}{metric_card("Failed", counts["FAILED"] + counts["ABORTED"], "tasks")}{metric_card("Cached", counts["CACHED"], "tasks")}{metric_card("Task runtime", fmt_seconds(total_runtime), "aggregate")}{metric_card("Guides", guide.get("row_count", "—"), "validated")}</div>
 <div class="graph-card"><div class="graph-head"><div><span class="eyebrow">Live dependency view</span><h2>Pipeline execution</h2></div><p>Click a family to inspect its QC and tasks</p></div><nav class="graph">{"".join(graph_nodes)}</nav></div>
 {failures}{"".join(sections)}<footer>Generated {generated} · Self-contained W&amp;B HTML media · No credentials, FASTQs or unbounded task logs embedded</footer></div>
-<script>function selectFamily(id){{const node=document.querySelector('[data-family="'+id+'"]'),panel=document.getElementById('family-'+id);if(!node||!panel)return;document.querySelectorAll('.node,.family-panel').forEach(x=>x.classList.remove('active'));node.classList.add('active');panel.classList.add('active');if(location.hash!=='#'+id)history.replaceState(null,'','#'+id);}}function filterTable(id,q){{q=q.toLowerCase();document.querySelectorAll('#'+id+' tbody tr').forEach(r=>r.style.display=r.textContent.toLowerCase().includes(q)?'':'none');}}selectFamily(location.hash.slice(1)||'input');window.addEventListener('hashchange',()=>selectFamily(location.hash.slice(1)));</script>
+<script>function selectFamily(id){{const node=document.querySelector('[data-family="'+id+'"]'),panel=document.getElementById('family-'+id);if(!node||!panel)return;document.querySelectorAll('.node,.family-panel').forEach(x=>x.classList.remove('active'));node.classList.add('active');panel.classList.add('active');if(location.hash!=='#'+id)history.replaceState(null,'','#'+id);}}function filterTable(id,q){{q=q.toLowerCase();document.querySelectorAll('#'+id+' tbody tr').forEach(r=>r.style.display=r.textContent.toLowerCase().includes(q)?'':'none');}}selectFamily(location.hash.slice(1)||'{current}');window.addEventListener('hashchange',()=>selectFamily(location.hash.slice(1)));</script>
 </body></html>'''
 
 

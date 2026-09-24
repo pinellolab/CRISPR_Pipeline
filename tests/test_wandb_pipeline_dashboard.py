@@ -257,3 +257,64 @@ def test_preprocessing_cards_keep_each_sets_plots_inside_its_card():
     assert "rna qc filter flow SET A" in result
     assert "SET_B" not in result
     assert used == {first_knee, first_flow}
+
+
+def test_absolute_output_name_does_not_force_every_image_into_postconcat():
+    root = Path("/results/results_embedding_qc_20260921")
+    assert dashboard.image_family(root / "measurement_set_qc/figures/knee_plot_scRNA_SET_A.png") == "preprocessing"
+    assert dashboard.image_family(root / "guide_assignment_qc/guide_assignment_filter_steps_SET_A.png") == "guide_assignment"
+    assert dashboard.image_family(root / "pipeline_dashboard/additional_qc/intended_target_volcano.png") == "evaluation"
+    assert dashboard.image_family(root / "postconcat_embedding_qc/after_clone/embedding_qc/pca_qc_panel.png") == "postconcat_qc"
+
+
+def test_figure_cards_group_stage_plots_by_measurement_set():
+    first = Path("guide_assignment_filter_steps_SET_A.png")
+    second = Path("guide_assignment_filter_steps_SET_B.png")
+
+    result, used = dashboard.figure_measurement_set_cards(
+        [(first, "Zmlyc3Q="), (second, "c2Vjb25k")],
+        ["SET_A", "SET_B"],
+        "Guide assignment by measurement set",
+        "Open a card.",
+        "guide calling",
+    )
+
+    assert "Guide assignment by measurement set" in result
+    assert result.count('<details class="measurement-card figure-card">') == 2
+    assert "SET_A" in result and "SET_B" in result
+    assert used == {first, second}
+
+
+def test_completed_dashboard_opens_on_measurement_set_hierarchy(tmp_path):
+    trace = tmp_path / "trace.tsv"
+    trace.write_text("process\tname\tstatus\nworkflow:PreprocessAnnData\tpreprocess\tCOMPLETED\n", encoding="utf-8")
+    guide = tmp_path / "guides.json"
+    guide.write_text("{}", encoding="utf-8")
+    seqspec = tmp_path / "seqspec.csv"
+    seqspec.write_text("Sample,IsWinner\n", encoding="utf-8")
+    metrics = tmp_path / "metrics.json"
+    metrics.write_text(
+        '{"observed_metrics":{"measurement_set_rna_qc":{"rows":['
+        '{"measurement_set":"SET_A","input_barcodes":100,"retained_cells":80}]}}}',
+        encoding="utf-8",
+    )
+
+    result = dashboard.render(
+        argparse.Namespace(
+            trace=trace,
+            run_id="completed-run",
+            run_name="completed run",
+            status="completed",
+            guide_report=guide,
+            seqspec_table=seqspec,
+            seqspec_image=None,
+            qc_metrics_json=metrics,
+            artifact_dir=None,
+            final_dashboard_html=None,
+            nextflow_log=None,
+            max_image_bytes=1_000_000,
+            tail_lines=10,
+        )
+    )
+
+    assert "selectFamily(location.hash.slice(1)||'preprocessing')" in result
