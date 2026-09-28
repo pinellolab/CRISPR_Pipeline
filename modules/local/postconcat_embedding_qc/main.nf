@@ -25,6 +25,9 @@ process postconcat_embedding_qc {
     python ${projectDir}/bin/postconcat_embedding_qc.py ${mudata_input} \
         --stage ${stage} --pct-mito ${params.QC_pct_mito} \
         --min-cells-fraction ${params.QC_min_cells_per_gene} \
+        ${params.QC_target_gene_rescue ? '--target-gene-rescue' : '--no-target-gene-rescue'} \
+        --target-gene-min-assigned-cells ${params.QC_target_gene_min_assigned_cells} \
+        --target-gene-min-detected-fraction ${params.QC_target_gene_min_detected_fraction} \
         --n-pcs ${params.QC_EMBEDDING_n_pcs} --n-neighbors ${params.QC_EMBEDDING_n_neighbors} \
         --n-top-genes ${params.QC_EMBEDDING_n_top_genes} \
         --hvg-batch-key '${params.QC_EMBEDDING_hvg_batch_key}' \

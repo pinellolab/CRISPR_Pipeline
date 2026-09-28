@@ -1019,14 +1019,21 @@ def render(args: argparse.Namespace) -> str:
         getattr(args, "artifact_dir", None), getattr(args, "max_image_bytes", 32_000_000), omitted_images
     )
 
+    if args.status.lower() == "completed" and measurement_set_names(qc_data):
+        current = "preprocessing"
+    else:
+        current = next((family for family, _, _ in reversed(FAMILIES)
+                        if family_states[family]["status"] in {"failed", "running", "completed"}),
+                       "input")
+
     graph_nodes = []
     for index, (family, title, subtitle) in enumerate(FAMILIES, start=1):
         state = family_states[family]
         graph_nodes.append(
-            f'<button class="node {state["status"]}" data-family="{family}" onclick="selectFamily(\'{family}\')">'
+            f'<label for="family-tab-{family}" class="node {state["status"]}" data-family="{family}" tabindex="0" role="tab">'
             f'<span class="node-index">{index:02d}</span><span class="node-status"></span>'
             f'<strong>{html.escape(title)}</strong><small>{html.escape(subtitle)}</small>'
-            f'<span class="node-count">{state["completed"]} complete · {state["running"]} running · {state["failed"]} failed</span></button>'
+            f'<span class="node-count">{state["completed"]} complete · {state["running"]} running · {state["failed"]} failed</span></label>'
         )
 
     sections = []
@@ -1101,6 +1108,17 @@ def render(args: argparse.Namespace) -> str:
                         if family_states[family]["status"] in {"failed", "running", "completed"}),
                        "input")
     generated = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    family_tabs = "".join(
+        f'<input class="family-tab" type="radio" name="pipeline-family" id="family-tab-{family}"'
+        f'{" checked" if family == current else ""}>'
+        for family, _, _ in FAMILIES
+    )
+    family_tab_css = "".join(
+        f'#family-tab-{family}:checked~.graph-card .node[data-family="{family}"]'
+        f'{{transform:translateY(-3px);border-color:var(--cyan);box-shadow:0 0 0 2px #0f8fc522}}'
+        f'#family-tab-{family}:checked~.family-panels #family-{family}{{display:block}}'
+        for family, _, _ in FAMILIES
+    )
     failures = failure_content(
         trace_rows, getattr(args, "nextflow_log", None), getattr(args, "tail_lines", 30)
     )
@@ -1113,8 +1131,8 @@ def render(args: argparse.Namespace) -> str:
 .shell{{max-width:1500px;margin:auto;padding:28px}} header{{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;margin-bottom:20px}} h1{{font-size:27px;margin:4px 0}} h2{{margin:3px 0 0;font-size:24px}} h3{{margin-top:28px}} p{{color:var(--muted);margin:4px 0}} .eyebrow{{color:var(--cyan);font:600 11px ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase}}
 .run-id{{font-family:ui-monospace,monospace;color:var(--muted)}} .live{{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:99px;padding:8px 12px}} .live i{{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 12px var(--amber)}} .live.completed i{{background:var(--green);box-shadow:0 0 12px var(--green)}} .live.failed i,.live.interrupted i{{background:var(--red);box-shadow:0 0 12px var(--red)}} .live.running i{{background:var(--cyan);box-shadow:0 0 12px var(--cyan)}}
 .summary,.metrics{{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:18px 0}} .metric{{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 5px 18px #0f172a0d}} .metric-label{{color:var(--muted);font-size:12px}} .metric-value{{font-size:24px;font-weight:750;margin-top:4px}} .metric-detail{{color:#66809d;font-size:11px}}
-.graph-card,.family-panel{{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 12px 30px #0f172a12}} .graph-head{{display:flex;justify-content:space-between;align-items:center}} .graph{{display:flex;align-items:stretch;overflow-x:auto;padding:20px 2px 10px}} .node{{position:relative;flex:0 0 145px;min-height:132px;text-align:left;color:var(--text);background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:.18s}} .node:hover,.node.active{{transform:translateY(-3px);border-color:var(--cyan);box-shadow:0 0 0 2px #0f8fc522}} .node:not(:last-child){{margin-right:29px}} .node:not(:last-child):after{{content:'→';position:absolute;right:-23px;top:49px;color:#94a3b8;font-size:22px}} .node strong,.node small,.node-count{{display:block}} .node strong{{margin-top:18px}} .node small{{color:var(--muted);font-size:11px;min-height:34px}} .node-count{{font-size:10px;color:#7890aa;margin-top:7px}} .node-index{{font:600 10px ui-monospace,monospace;color:#6c86a1}} .node-status{{position:absolute;right:12px;top:12px;width:10px;height:10px;border-radius:50%;background:var(--grey)}}
-.node.completed .node-status,.completed.status-badge{{background:var(--green)}} .node.running .node-status,.running.status-badge{{background:var(--cyan);box-shadow:0 0 12px var(--cyan)}} .node.failed .node-status,.failed.status-badge{{background:var(--red)}} .node.pending{{opacity:.65}} .family-panel{{display:none}} .family-panel.active{{display:block}} .family-heading{{display:flex;justify-content:space-between;align-items:flex-start}} .status-badge{{border-radius:99px;padding:5px 10px;text-transform:uppercase;font-size:10px;font-weight:800;color:#06121e;background:var(--grey)}}
+.graph-card,.family-panel{{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 12px 30px #0f172a12}} .graph-head{{display:flex;justify-content:space-between;align-items:center}} .graph{{display:flex;align-items:stretch;overflow-x:auto;padding:20px 2px 10px}} .node{{position:relative;text-decoration:none;flex:0 0 145px;min-height:132px;text-align:left;color:var(--text);background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:.18s}} .node:hover,.node.active{{transform:translateY(-3px);border-color:var(--cyan);box-shadow:0 0 0 2px #0f8fc522}} .node:not(:last-child){{margin-right:29px}} .node:not(:last-child):after{{content:'→';position:absolute;right:-23px;top:49px;color:#94a3b8;font-size:22px}} .node strong,.node small,.node-count{{display:block}} .node strong{{margin-top:18px}} .node small{{color:var(--muted);font-size:11px;min-height:34px}} .node-count{{font-size:10px;color:#7890aa;margin-top:7px}} .node-index{{font:600 10px ui-monospace,monospace;color:#6c86a1}} .node-status{{position:absolute;right:12px;top:12px;width:10px;height:10px;border-radius:50%;background:var(--grey)}}
+.node.completed .node-status,.completed.status-badge{{background:var(--green)}} .node.running .node-status,.running.status-badge{{background:var(--cyan);box-shadow:0 0 12px var(--cyan)}} .node.failed .node-status,.failed.status-badge{{background:var(--red)}} .node.pending{{opacity:.65}} .family-tab{{position:absolute;inline-size:1px;block-size:1px;opacity:0;pointer-events:none}} .family-panel{{display:none;scroll-margin-top:12px}} {family_tab_css} .family-heading{{display:flex;justify-content:space-between;align-items:flex-start}} .status-badge{{border-radius:99px;padding:5px 10px;text-transform:uppercase;font-size:10px;font-weight:800;color:#06121e;background:var(--grey)}}
 .table-wrap{{overflow:auto;border:1px solid var(--line);border-radius:10px}} table{{border-collapse:collapse;width:100%;min-width:700px}} th,td{{text-align:left;padding:10px 12px;border-bottom:1px solid #e2e8f0}} th{{color:#475569;background:#f1f5f9;font-size:11px;text-transform:uppercase;letter-spacing:.06em}} td{{font-family:ui-monospace,monospace;font-size:12px}} .pill{{padding:3px 7px;border-radius:99px;background:#e2e8f0;font-size:10px}} .pill.completed,.pill.cached{{background:#dcfce7;color:#166534}} .pill.running,.pill.submitted,.pill.new{{background:#e0f2fe;color:#075985}} .pill.failed,.pill.aborted{{background:#ffe4e6;color:#be123c}} figure{{margin:18px 0;background:#fff;border-radius:12px;padding:10px}} figure img{{display:block;max-width:100%;margin:auto}} figcaption{{color:#50647b;padding:8px 4px 2px}} .empty{{color:var(--muted);border:1px dashed var(--line);border-radius:10px;padding:20px}} footer{{color:#607994;font-size:11px;margin:20px 2px}}
 .gallery{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}} .gallery figure{{margin:0;min-width:0}} .failure-evidence{{background:#fff1f2;border:1px solid #fecdd3;border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 12px 30px #0f172a12}} details{{background:#fff;border:1px solid #fecdd3;border-radius:10px;margin-top:10px;padding:10px 12px}} summary{{cursor:pointer;font-weight:700;color:#be123c}} pre{{white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;background:#f8fafc;border-radius:8px;padding:12px;color:#334155;font:11px/1.45 ui-monospace,monospace}} .evidence-note{{color:var(--amber)}} .table-search{{width:min(520px,100%);background:#fff;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin:0 0 10px}} .result-block{{border-top:1px solid var(--line);margin-top:22px;padding-top:2px}} .qc-callout{{border:1px solid #fde68a;background:#fffbeb;border-radius:10px;padding:12px;margin:10px 0}}
 .measurement-section{{margin:24px 0;padding:16px;border:1px solid var(--line);border-radius:14px;background:#f8fafc}} .measurement-section-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:10px}} .measurement-section-head h3{{margin:3px 0}} .measurement-count{{white-space:nowrap;background:#dff3fb;color:#075985;border-radius:99px;padding:6px 10px;font-size:11px;font-weight:800}}
@@ -1127,10 +1145,10 @@ details.measurement-card{{border-color:var(--line);border-radius:12px;padding:0;
 @media(max-width:700px){{.shell{{padding:15px}}header{{display:block}}.live{{margin-top:12px;width:max-content}}details.measurement-card>summary{{grid-template-columns:auto 1fr}}.measurement-summary,.modality-chips{{grid-column:2;text-align:left;justify-content:flex-start}}.measurement-plots{{grid-template-columns:1fr}}}}
 </style></head><body><div class="shell">
 <header><div><span class="eyebrow">CRISPR Pipeline · execution dashboard</span><h1>{html.escape(args.run_name)}</h1><div class="run-id">{html.escape(args.run_id)}</div></div><div class="live {html.escape(args.status.lower())}"><i></i><span>{html.escape(args.status.upper())}</span></div></header>
+{family_tabs}
 <div class="summary">{metric_card("Completed", counts["COMPLETED"] + counts["CACHED"], "tasks")}{metric_card("Running", counts["RUNNING"] + counts["SUBMITTED"] + counts["NEW"], "tasks")}{metric_card("Failed", counts["FAILED"] + counts["ABORTED"], "tasks")}{metric_card("Cached", counts["CACHED"], "tasks")}{metric_card("Task runtime", fmt_seconds(total_runtime), "aggregate")}{metric_card("Guides", guide.get("row_count", "—"), "validated")}</div>
 <div class="graph-card"><div class="graph-head"><div><span class="eyebrow">Live dependency view</span><h2>Pipeline execution</h2></div><p>Click a family to inspect its QC and tasks</p></div><nav class="graph">{"".join(graph_nodes)}</nav></div>
-{failures}{"".join(sections)}<footer>Generated {generated} · Self-contained W&amp;B HTML media · No credentials, FASTQs or unbounded task logs embedded</footer></div>
-<script>function selectFamily(id){{const node=document.querySelector('[data-family="'+id+'"]'),panel=document.getElementById('family-'+id);if(!node||!panel)return;document.querySelectorAll('.node,.family-panel').forEach(x=>x.classList.remove('active'));node.classList.add('active');panel.classList.add('active');if(location.hash!=='#'+id)history.replaceState(null,'','#'+id);}}function filterTable(id,q){{q=q.toLowerCase();document.querySelectorAll('#'+id+' tbody tr').forEach(r=>r.style.display=r.textContent.toLowerCase().includes(q)?'':'none');}}selectFamily(location.hash.slice(1)||'{current}');window.addEventListener('hashchange',()=>selectFamily(location.hash.slice(1)));</script>
+{failures}<div class="family-panels">{"".join(sections)}</div><footer>Generated {generated} · Self-contained W&amp;B HTML media · No credentials, FASTQs or unbounded task logs embedded</footer></div>
 </body></html>'''
 
 

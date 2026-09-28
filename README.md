@@ -981,12 +981,15 @@ replacement succeeds. The project therefore has one visible current dashboard
 instead of a Step selector containing stale copies. The
 interface retains its dependency graph, process-family panels, searchable task
 tables, bounded failure evidence, QC metrics, and image galleries while it is
-running and after it finishes.
+running and after it finishes. Live refreshes use the cumulative
+`WANDB_MAX_BYTES` budget (400 MB by default), while the completed dashboard has
+a separate reserved upload allowance.
 
 The pipeline's ordinary `pipeline_dashboard/dashboard.html` is used only as a
 bounded source of final inference rows and evaluation artifacts. It never
 replaces the advanced execution dashboard. `WANDB_MAX_FINAL_HTML_BYTES`
-controls the per-update HTML limit and defaults to 50 MB. Live replacement is
+controls the per-file HTML limit and defaults to 100 MB. The final snapshot is
+attempted independently of the live-refresh byte budget. Live replacement is
 enabled by default; set `WANDB_PUBLISH_LIVE_HTML=false` only to suppress
 intermediate dashboard updates.
 

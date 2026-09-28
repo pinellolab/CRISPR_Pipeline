@@ -138,3 +138,28 @@ def test_wrapper_defaults_to_live_visible_replacement():
     wrapper = (BIN / "run_with_wandb.sh").read_text(encoding="utf-8")
     assert '${WANDB_PUBLISH_LIVE_HTML:-true}' in wrapper
     assert '${WANDB_REPLACE_RUN:-true}' in wrapper
+
+
+def test_live_budget_does_not_consume_reserved_final_upload():
+    allowed, message = monitor.upload_allowed(
+        size=60, sent_bytes=95, final=False,
+        max_total_bytes=100, max_final_html_bytes=75,
+    )
+    assert not allowed
+    assert "reserving the final dashboard" in message
+
+    allowed, message = monitor.upload_allowed(
+        size=60, sent_bytes=95, final=True,
+        max_total_bytes=100, max_final_html_bytes=75,
+    )
+    assert allowed
+    assert "reserved upload allowance" in message
+
+
+def test_per_file_limit_still_protects_final_upload():
+    allowed, message = monitor.upload_allowed(
+        size=76, sent_bytes=0, final=True,
+        max_total_bytes=100, max_final_html_bytes=75,
+    )
+    assert not allowed
+    assert "above the per-file limit" in message

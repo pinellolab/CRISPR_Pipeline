@@ -22,6 +22,13 @@ Runs launched with `bin/run_with_wandb.sh` use these defaults:
 - W&B remains fail-open: telemetry cannot change the Nextflow exit status or
   scientific outputs.
 
+Live refreshes share a cumulative upload budget (`WANDB_MAX_BYTES`, 400 MB by
+default). The completed dashboard does not consume that live budget and is
+always attempted using its own per-file allowance
+(`WANDB_MAX_FINAL_HTML_BYTES`, 100 MB by default). If live refreshes exhaust
+their budget, the most recent successful live view remains visible until the
+reserved final update replaces it.
+
 Nextflow appends completed tasks to `trace.tsv`; therefore the monitor also
 reads bounded `TaskHandler` records from the Nextflow log to display submitted
 and running tasks before they complete. A red failure-evidence panel is shown

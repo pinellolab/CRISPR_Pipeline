@@ -19,8 +19,134 @@ import scanpy as sc
 import scipy.sparse as sp
 
 
+CONTROL_TYPES = {'safe-targeting', 'non-targeting', 'negative control'}
+
+
 def vector(x):
     return np.asarray(x).ravel()
+
+
+def normalize_gene_id(value):
+    """Normalize versioned Ensembl IDs while leaving symbols unchanged."""
+    text = str(value).strip()
+    if text.upper().startswith('ENSG'):
+        return text.split('.', 1)[0]
+    return text
+
+
+def boolean_series(values):
+    return values.map(
+        lambda value: bool(value) if isinstance(value, (bool, np.bool_))
+        else str(value).strip().lower() in {'true', '1', 't', 'yes'}
+    )
+
+
+def target_gene_assignment_support(mdata, gene):
+    """Count unique assigned cells for canonical non-control target genes."""
+    guide = mdata.mod['guide']
+    if 'guide_assignment' not in guide.layers:
+        raise ValueError("Target-aware gene rescue requires guide.layers['guide_assignment']")
+    required = {'intended_target_name', 'targeting'}
+    missing = required.difference(guide.var.columns)
+    if missing:
+        raise ValueError(f'Target-aware gene rescue missing guide metadata: {sorted(missing)}')
+
+    targeting = boolean_series(guide.var['targeting'])
+    guide_type = guide.var.get('type', pd.Series('', index=guide.var_names)).astype(str).str.strip().str.lower()
+    canonical = targeting & ~guide_type.isin(CONTROL_TYPES)
+
+    gene_ids = pd.Index([normalize_gene_id(value) for value in gene.var_names])
+    id_to_position = {value: index for index, value in enumerate(gene_ids)}
+    symbol_to_position = {}
+    symbols = pd.Index(gene_symbols(gene)).astype(str)
+    symbol_counts = pd.Series(symbols).value_counts()
+    for index, symbol in enumerate(symbols):
+        if symbol and symbol_counts.get(symbol, 0) == 1:
+            symbol_to_position[symbol] = index
+
+    guide_positions = []
+    gene_positions = []
+    matched_by_id = matched_by_symbol = 0
+    for guide_position in np.flatnonzero(canonical.to_numpy()):
+        target = normalize_gene_id(guide.var.iloc[guide_position]['intended_target_name'])
+        gene_position = id_to_position.get(target)
+        if gene_position is not None:
+            matched_by_id += 1
+        else:
+            gene_position = symbol_to_position.get(target)
+            if gene_position is not None:
+                matched_by_symbol += 1
+        if gene_position is not None:
+            guide_positions.append(guide_position)
+            gene_positions.append(gene_position)
+
+    support = np.zeros(gene.n_vars, dtype=np.int64)
+    intended = np.zeros(gene.n_vars, dtype=bool)
+    if guide_positions:
+        unique_gene_positions = np.array(sorted(set(gene_positions)), dtype=np.int64)
+        compact = {position: index for index, position in enumerate(unique_gene_positions)}
+        guide_to_target = sp.csr_matrix(
+            (
+                np.ones(len(guide_positions), dtype=np.int32),
+                (guide_positions, [compact[position] for position in gene_positions]),
+            ),
+            shape=(guide.n_vars, len(unique_gene_positions)),
+        )
+        assignment = sp.csr_matrix(guide.layers['guide_assignment'])
+        assignment = assignment.astype(bool).astype(np.int32)
+        cell_by_target = assignment @ guide_to_target
+        compact_support = vector((cell_by_target > 0).sum(axis=0)).astype(np.int64)
+        support[unique_gene_positions] = compact_support
+        intended[unique_gene_positions] = True
+
+    details = {
+        'canonical_targeting_guides': int(canonical.sum()),
+        'matched_guides_by_gene_id': matched_by_id,
+        'matched_guides_by_unique_symbol': matched_by_symbol,
+        'unmatched_canonical_targeting_guides': int(canonical.sum()) - len(guide_positions),
+        'canonical_intended_target_genes': int(intended.sum()),
+    }
+    return intended, support, details
+
+
+def gene_filter_decisions(mdata, gene, global_fraction, rescue_enabled,
+                          rescue_min_assigned_cells, rescue_min_detected_fraction):
+    if not 0 <= global_fraction < 1 or not 0 <= rescue_min_detected_fraction < 1:
+        raise ValueError('Gene-support fractions must be in [0, 1)')
+    if rescue_min_assigned_cells < 1:
+        raise ValueError('Target rescue minimum assigned cells must be positive')
+    support = vector((gene.X > 0).sum(0)).astype(np.int64)
+    detected_fraction = support / gene.n_obs
+    required = max(1, int(np.ceil(gene.n_obs * global_fraction)))
+    global_keep = support >= required
+    intended = np.zeros(gene.n_vars, dtype=bool)
+    assigned_cells = np.zeros(gene.n_vars, dtype=np.int64)
+    target_details = {}
+    rescue_keep = np.zeros(gene.n_vars, dtype=bool)
+    if rescue_enabled:
+        intended, assigned_cells, target_details = target_gene_assignment_support(mdata, gene)
+        rescue_keep = (
+            intended
+            & (assigned_cells >= rescue_min_assigned_cells)
+            & (detected_fraction >= rescue_min_detected_fraction)
+        )
+    keep = global_keep | rescue_keep
+    reason = np.full(gene.n_vars, 'removed', dtype=object)
+    reason[rescue_keep & ~global_keep] = 'target_aware_rescue'
+    reason[global_keep] = 'global_prevalence'
+    table = pd.DataFrame({
+        'gene_id': gene.var_names.astype(str),
+        'gene_symbol': gene_symbols(gene),
+        'detected_cells': support,
+        'detected_fraction': detected_fraction,
+        'canonical_intended_target': intended,
+        'assigned_target_positive_cells': assigned_cells,
+        'passes_global_prevalence': global_keep,
+        'passes_target_aware_rescue': rescue_keep,
+        'keep_gene': keep,
+        'keep_reason': reason,
+    })
+    return keep, required, table, target_details
 
 
 def slug(x):
@@ -327,6 +453,9 @@ def main():
     p.add_argument('--stage', default='before_clone')
     p.add_argument('--pct-mito', type=float, default=25)
     p.add_argument('--min-cells-fraction', type=float, default=0.05)
+    p.add_argument('--target-gene-rescue', action=argparse.BooleanOptionalAction, default=False)
+    p.add_argument('--target-gene-min-assigned-cells', type=int, default=20)
+    p.add_argument('--target-gene-min-detected-fraction', type=float, default=0.001)
     p.add_argument('--n-pcs', type=int, default=50)
     p.add_argument('--n-neighbors', type=int, default=15)
     p.add_argument('--n-top-genes', type=int, default=6000)
@@ -348,8 +477,11 @@ def main():
         args.leiden_resolutions = [float(value) for value in args.leiden_resolutions.split(',') if value.strip()]
     except ValueError as error:
         p.error(f'Invalid Leiden resolution list: {error}')
-    if not 0 <= args.pct_mito <= 100 or not 0 <= args.min_cells_fraction < 1:
+    if (not 0 <= args.pct_mito <= 100 or not 0 <= args.min_cells_fraction < 1
+            or not 0 <= args.target_gene_min_detected_fraction < 1):
         p.error('MT must be in [0,100], gene fraction in [0,1)')
+    if args.target_gene_min_assigned_cells < 1:
+        p.error('Target gene minimum assigned cells must be positive')
     if min(args.n_pcs, args.n_neighbors, args.n_top_genes) < 2 or args.max_dense_gb <= 0:
         p.error('PCA/neighbors/HVG limits must be >=2 and memory limit positive')
     if args.min_cell_cycle_genes < 1 or args.leiden_n_iterations < 1 or not args.leiden_resolutions:
@@ -369,12 +501,25 @@ def main():
         raise ValueError('No cells remain after mitochondrial QC')
     summary = embedding_plots(filtered.mod['gene'], obs.loc[keep], args)
     gene = filtered.mod['gene']
-    support = vector((gene.X > 0).sum(0))
-    required = max(1, int(np.floor(filtered.n_obs * args.min_cells_fraction)) + 1)
+    gene_keep, required, decisions, target_details = gene_filter_decisions(
+        filtered, gene, args.min_cells_fraction, args.target_gene_rescue,
+        args.target_gene_min_assigned_cells, args.target_gene_min_detected_fraction,
+    )
+    decisions.to_csv(args.outdir / 'gene_filter_decisions.tsv.gz', sep='\t', index=False)
+    rescued = decisions['passes_target_aware_rescue'] & ~decisions['passes_global_prevalence']
     summary.update(stage=args.stage, input_cells=mdata.n_obs, retained_cells=filtered.n_obs,
                    mito_cutoff=args.pct_mito, genes_before=gene.n_vars, minimum_gene_cells=required,
-                   genes_after=int((support >= required).sum()), normalized_matrix_saved=False)
-    filtered.mod['gene'] = gene[:, support >= required].copy()
+                   genes_after=int(gene_keep.sum()), normalized_matrix_saved=False,
+                   target_gene_rescue_enabled=args.target_gene_rescue,
+                   target_gene_min_assigned_cells=args.target_gene_min_assigned_cells,
+                   target_gene_min_detected_fraction=args.target_gene_min_detected_fraction,
+                   target_aware_genes_rescued=int(rescued.sum()), **target_details)
+    retained_gene = gene[:, gene_keep].copy()
+    retained_decisions = decisions.loc[gene_keep].reset_index(drop=True)
+    for column in ('detected_cells', 'detected_fraction', 'canonical_intended_target',
+                   'assigned_target_positive_cells', 'keep_reason'):
+        retained_gene.var[column] = retained_decisions[column].to_numpy()
+    filtered.mod['gene'] = retained_gene
     if filtered.mod['gene'].n_vars == 0:
         raise ValueError('No genes remain after fractional gene-support QC')
     from concat_preprocessed_rna import recompute_gene_metrics
@@ -384,7 +529,11 @@ def main():
     flow = [f'{args.stage}: {mdata.n_obs:,} qualified raw-count cells',
             f'MT ≤ {args.pct_mito:g}% → {filtered.n_obs:,} cells',
             f'Temporary median-depth normalization → log1p → PCA → UMAP\n{summary["status"]}; no normalized matrix saved',
-            f'Raw counts: gene support ≥ {required:,} cells\n{gene.n_vars:,} → {filtered.mod["gene"].n_vars:,} genes']
+            (f'Raw counts: global support ≥ {required:,} cells'
+             + (f' OR canonical target support ≥ {args.target_gene_min_assigned_cells:,} assigned cells'
+                f' and RNA detection ≥ {100 * args.target_gene_min_detected_fraction:g}%'
+                f' ({int(rescued.sum()):,} rescued genes)' if args.target_gene_rescue else '')
+             + f'\n{gene.n_vars:,} → {filtered.mod["gene"].n_vars:,} genes')]
     for index, label in enumerate(flow):
         y = 0.9 - index * 0.24
         ax.text(.5, y, label, ha='center', va='center', fontsize=11,

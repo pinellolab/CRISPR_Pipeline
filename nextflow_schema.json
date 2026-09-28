@@ -289,6 +289,25 @@
                     "description": "Minimum cell support required to keep a gene.",
                     "help_text": "Applied once to the concatenated RNA matrix, after mitochondrial cell filtering and before MuData construction. It must be in [0, 1); zero keeps genes detected in at least one cell."
                 },
+                "QC_target_gene_rescue": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Rescue low-prevalence canonical intended-target genes after final cell QC.",
+                    "help_text": "When enabled, keep a gene if it passes QC_min_cells_per_gene OR it is a canonical intended target with at least QC_target_gene_min_assigned_cells unique assigned cells and RNA detection fraction >= QC_target_gene_min_detected_fraction. Controls cannot rescue genes."
+                },
+                "QC_target_gene_min_assigned_cells": {
+                    "type": "integer",
+                    "default": 20,
+                    "minimum": 1,
+                    "description": "Minimum unique guide-positive cells required for target-aware gene rescue."
+                },
+                "QC_target_gene_min_detected_fraction": {
+                    "type": "number",
+                    "default": 0.001,
+                    "minimum": 0,
+                    "exclusiveMaximum": 1,
+                    "description": "Minimum RNA detected-cell fraction required for target-aware gene rescue."
+                },
                 "TAPSEQ_QC_MODE": {
                     "type": "boolean",
                     "default": false,

@@ -102,6 +102,27 @@ def render_snapshot(args: argparse.Namespace, status: str, final: bool) -> int:
     return args.dashboard_html.stat().st_size
 
 
+def upload_allowed(
+    *, size: int, sent_bytes: int, final: bool,
+    max_total_bytes: int, max_final_html_bytes: int,
+) -> tuple[bool, str]:
+    """Keep the live-upload budget separate from the mandatory final update."""
+    if size > max_final_html_bytes:
+        return False, (
+            f"snapshot is {size} bytes, above the per-file limit "
+            f"of {max_final_html_bytes} bytes"
+        )
+    if final:
+        return True, "final snapshot uses its reserved upload allowance"
+    if sent_bytes + size > max_total_bytes:
+        return False, (
+            f"live upload budget reached ({sent_bytes} bytes sent; "
+            f"next snapshot is {size} bytes; budget is {max_total_bytes} bytes); "
+            "reserving the final dashboard upload"
+        )
+    return True, "within live upload budget"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project", default="crispr-pipeline")
@@ -118,8 +139,8 @@ def main() -> int:
     parser.add_argument("--status-file", type=Path, required=True)
     parser.add_argument("--dashboard-html", type=Path, required=True)
     parser.add_argument("--poll-seconds", type=float, default=30)
-    parser.add_argument("--max-total-bytes", type=int, default=20_000_000)
-    parser.add_argument("--max-final-html-bytes", type=int, default=50_000_000)
+    parser.add_argument("--max-total-bytes", type=int, default=400_000_000)
+    parser.add_argument("--max-final-html-bytes", type=int, default=100_000_000)
     parser.add_argument("--max-image-bytes", type=int, default=38_000_000)
     parser.add_argument("--tail-lines", type=int, default=30)
     args = parser.parse_args()
@@ -184,7 +205,13 @@ def main() -> int:
                 try:
                     if final or publish_live_html:
                         size = render_snapshot(args, status, final)
-                        within_budget = size <= args.max_final_html_bytes
+                        within_budget, budget_message = upload_allowed(
+                            size=size,
+                            sent_bytes=sent_bytes,
+                            final=final,
+                            max_total_bytes=args.max_total_bytes,
+                            max_final_html_bytes=args.max_final_html_bytes,
+                        )
                         if within_budget:
                             if replace_run:
                                 # W&B only materializes a visible HTML panel
@@ -225,10 +252,7 @@ def main() -> int:
                             sent_bytes += size
                             step += 1
                         else:
-                            warn(
-                                f"upload limit reached ({sent_bytes} bytes sent); "
-                                f"skipping {size}-byte snapshot"
-                            )
+                            warn(f"{budget_message}; skipping snapshot")
                     previous = signature
                 except Exception as error:
                     warn(f"render/upload failed; pipeline continues: {error}")
