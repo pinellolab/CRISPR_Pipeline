@@ -6,6 +6,7 @@ dependencies:
   - nextflow 
   - aria2
   - numpy  
+  - scipy
   - pandas>=2.1.0,<3
   - pyarrow
   - pip

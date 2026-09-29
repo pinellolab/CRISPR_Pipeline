@@ -13,6 +13,9 @@
 
 # CRISPR Pipeline
 
+Optional guide-barcode clone filtering and 10x-style sequencing-saturation QC
+are documented in [docs/clone_and_saturation_qc.md](docs/clone_and_saturation_qc.md).
+
 A comprehensive pipeline for single-cell Perturb-Seq analysis that enables robust processing and analysis of CRISPR screening data at single-cell resolution.
 
 

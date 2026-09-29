@@ -21,6 +21,7 @@ include { PIPELINE_INITIALISATION } from './subworkflows/local/utils_nfcore_cris
 include { PIPELINE_COMPLETION     } from './subworkflows/local/utils_nfcore_crispr_pipeline'
 include { skipGTFDownload } from './modules/local/skipGTFDownload'
 include { downloadGTF } from './modules/local/downloadGTF'
+include { remove_clonal_cells } from './modules/local/remove_clonal_cells'
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     NAMED WORKFLOWS FOR PIPELINE
@@ -75,8 +76,15 @@ workflow INFERENCE_FROM_MUDATA {
         GTF_Reference = downloadGTF(params.REFERENCE_gtf_download_path)
     }
 
+    if (params.ENABLE_CLONE_REMOVAL) {
+        CloneRemoval = remove_clonal_cells(mudata_input)
+        mudata_for_inference = CloneRemoval.filtered_mudata
+    } else {
+        mudata_for_inference = mudata_input
+    }
+
     Inference = inference_pipeline(
-        mudata_input,
+        mudata_for_inference,
         GTF_Reference.gencode_gtf
     )
 

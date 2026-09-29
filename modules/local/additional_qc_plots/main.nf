@@ -3,6 +3,8 @@ process additional_qc_plots {
 
     input:
         path mudata
+        path clone_qc_input
+        path saturation_qc_input
 
     output:
         path "additional_qc", emit: additional_qc
@@ -13,6 +15,15 @@ process additional_qc_plots {
         mkdir -p \${MPLCONFIGDIR}
 
         mkdir -p additional_qc/gene additional_qc/guide additional_qc/intended_target additional_qc/global_analysis
+
+        if find ${clone_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
+            mkdir -p additional_qc/clones
+            cp -R ${clone_qc_input}/. additional_qc/clones/
+        fi
+        if find ${saturation_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
+            mkdir -p additional_qc/sequencing_saturation
+            cp -R ${saturation_qc_input}/. additional_qc/sequencing_saturation/
+        fi
 
         mapping_gene.py \\
             --input ${mudata} \\

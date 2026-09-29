@@ -52,4 +52,5 @@ workflow mapping_rna_pipeline {
         .collect()
         .map { dirs -> dirs.sort { a, b -> a.getName() <=> b.getName() } }
     concat_anndata_rna = AnndataConcatenate.concat_anndata
+    transcriptome_t2g = DownloadRefResult.t2g_transcriptome_index
 }

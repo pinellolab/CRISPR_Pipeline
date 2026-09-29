@@ -15,6 +15,8 @@ include { preprocessing_pipeline } from '../../subworkflows/local/preprocessing_
 include { guide_assignment_pipeline } from '../../subworkflows/local/guide_assignment_pipeline'
 include { inference_pipeline } from '../../subworkflows/local/inference_pipeline'
 include { additional_qc_plots } from '../../modules/local/additional_qc_plots'
+include { remove_clonal_cells } from '../../modules/local/remove_clonal_cells'
+include { sequencing_saturation } from '../../modules/local/sequencing_saturation'
 
 // Import hashing-specific modules
 include { CreateMuData } from '../../modules/local/CreateMuData'
@@ -134,6 +136,18 @@ workflow CRISPR_PIPELINE {
         mapping_rna_pipeline.out.trans_out_dir
     )
 
+    if (params.ENABLE_SEQUENCING_SATURATION) {
+        SaturationQC = sequencing_saturation(
+            mapping_rna_pipeline.out.ks_transcripts_out_dir_collected,
+            Preprocessing.filtered_anndata_rna,
+            mapping_rna_pipeline.out.transcriptome_t2g,
+            prepare_mapping_pipeline.out.parsed_covariate_file
+        )
+        saturation_qc_dir = SaturationQC.saturation_qc
+    } else {
+        saturation_qc_dir = file("${workflow.projectDir}/assets/saturation_qc_empty")
+    }
+
     if (params.ENABLE_DATA_HASHING) {
         mapping_hashing_pipeline(
             ch_hash,
@@ -174,7 +188,15 @@ workflow CRISPR_PIPELINE {
 
         // Shared processing pipeline
         GuideAssignment = guide_assignment_pipeline(MergeMuData.mudata)
-        Inference = inference_pipeline(GuideAssignment.concat_mudata, Preprocessing.gencode_gtf)
+        if (params.ENABLE_CLONE_REMOVAL) {
+            CloneRemoval = remove_clonal_cells(GuideAssignment.concat_mudata)
+            mudata_for_inference = CloneRemoval.filtered_mudata
+            clone_qc_dir = CloneRemoval.clone_qc
+        } else {
+            mudata_for_inference = GuideAssignment.concat_mudata
+            clone_qc_dir = file("${workflow.projectDir}/assets/clone_qc_empty")
+        }
+        Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
 
         evaluation_pipeline (
             Preprocessing.gencode_gtf,
@@ -182,7 +204,9 @@ workflow CRISPR_PIPELINE {
             )
 
         AdditionalQC = additional_qc_plots(
-            Inference.inference_mudata
+            Inference.inference_mudata,
+            clone_qc_dir,
+            saturation_qc_dir
         )
 
         if (params.ENABLE_BENCHMARK) {
@@ -243,7 +267,15 @@ workflow CRISPR_PIPELINE {
 
         // Shared processing pipeline
         GuideAssignment = guide_assignment_pipeline(mudata_for_processing)
-        Inference = inference_pipeline(GuideAssignment.concat_mudata, Preprocessing.gencode_gtf)
+        if (params.ENABLE_CLONE_REMOVAL) {
+            CloneRemoval = remove_clonal_cells(GuideAssignment.concat_mudata)
+            mudata_for_inference = CloneRemoval.filtered_mudata
+            clone_qc_dir = CloneRemoval.clone_qc
+        } else {
+            mudata_for_inference = GuideAssignment.concat_mudata
+            clone_qc_dir = file("${workflow.projectDir}/assets/clone_qc_empty")
+        }
+        Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
 
         evaluation_pipeline (
             Preprocessing.gencode_gtf,
@@ -251,7 +283,9 @@ workflow CRISPR_PIPELINE {
             )
 
         AdditionalQC = additional_qc_plots(
-            Inference.inference_mudata
+            Inference.inference_mudata,
+            clone_qc_dir,
+            saturation_qc_dir
         )
 
         if (params.ENABLE_BENCHMARK) {

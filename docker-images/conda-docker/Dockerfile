@@ -16,6 +16,11 @@ RUN apt-get update && \
 # (use absolute path so it works regardless of WORKDIR)
 RUN mamba env create -f /app/nextflow.yaml
 
+# Fail the image build early if the scientific stack required by clone
+# filtering and saturation QC cannot be imported together.
+RUN /opt/conda/envs/nfenv/bin/python -c \
+    "import anndata, matplotlib, mudata, numpy, pandas, scipy"
+
 # Put the env on PATH
 # (assuming the env is named "nfenv" inside nextflow.yaml)
 ENV PATH="/opt/conda/envs/nfenv/bin:${PATH}"
