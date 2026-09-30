@@ -17,6 +17,8 @@ include { inference_pipeline } from '../../subworkflows/local/inference_pipeline
 include { additional_qc_plots } from '../../modules/local/additional_qc_plots'
 include { remove_clonal_cells } from '../../modules/local/remove_clonal_cells'
 include { sequencing_saturation } from '../../modules/local/sequencing_saturation'
+include { guide_mapping_qc } from '../../modules/local/guide_mapping_qc'
+include { guide_mapping_qc_gate } from '../../modules/local/guide_mapping_qc_gate'
 include { filter_hto_post_clone } from '../../modules/local/filter_hto_post_clone'
 include { postconcat_embedding_qc as embedding_before_clone } from '../../modules/local/postconcat_embedding_qc'
 include { postconcat_embedding_qc as embedding_after_clone } from '../../modules/local/postconcat_embedding_qc'
@@ -191,8 +193,18 @@ workflow CRISPR_PIPELINE {
             Hashing_Concat.concatenated_hashing_unfiltered_demux
         )
 
+        GuideMappingQC = guide_mapping_qc(
+            Preprocessing.filtered_anndata_rna,
+            mapping_guide_pipeline.out.concat_anndata_guide,
+            MergeMuData.mudata,
+            ch_guide_design,
+            params.reverse_complement_guides,
+            params.spacer_tag
+        )
+        GuideMappingGate = guide_mapping_qc_gate(MergeMuData.mudata, GuideMappingQC.qc_dir)
+
         // Shared processing pipeline
-        GuideAssignment = guide_assignment_pipeline(MergeMuData.mudata)
+        GuideAssignment = guide_assignment_pipeline(GuideMappingGate.mudata)
         // HTO support is assessed on GEX/guide-qualified cells before the parallel branches.
         HTOFilter = filter_hto_post_clone(GuideAssignment.concat_mudata)
         qualified_mudata = HTOFilter.filtered_mudata
@@ -233,7 +245,8 @@ workflow CRISPR_PIPELINE {
             saturation_qc_dir,
             GuideAssignment.guide_assignment_qc,
             HTOFilter.hto_qc,
-            embedding_dirs
+            embedding_dirs,
+            GuideMappingQC.qc_dir
         )
 
         if (params.ENABLE_BENCHMARK) {
@@ -284,9 +297,19 @@ workflow CRISPR_PIPELINE {
             file("${workflow.projectDir}/dummy_hash.txt") // Dummy file for hashing parameter when not using hashing
         )
 
+        GuideMappingQC = guide_mapping_qc(
+            Preprocessing.filtered_anndata_rna,
+            mapping_guide_pipeline.out.concat_anndata_guide,
+            MergeMuData.mudata,
+            ch_guide_design,
+            params.reverse_complement_guides,
+            params.spacer_tag
+        )
+        GuideMappingGate = guide_mapping_qc_gate(MergeMuData.mudata, GuideMappingQC.qc_dir)
+
         // Scrublet now runs independently for each RNA measurement set before
         // concatenation, so the assembled MuData is already doublet-filtered.
-        mudata_for_processing = MergeMuData.mudata
+        mudata_for_processing = GuideMappingGate.mudata
 
         // Shared processing pipeline
         GuideAssignment = guide_assignment_pipeline(mudata_for_processing)
@@ -326,7 +349,8 @@ workflow CRISPR_PIPELINE {
             saturation_qc_dir,
             GuideAssignment.guide_assignment_qc,
             file("${workflow.projectDir}/assets/hto_qc_empty"),
-            embedding_dirs
+            embedding_dirs,
+            GuideMappingQC.qc_dir
         )
 
         if (params.ENABLE_BENCHMARK) {

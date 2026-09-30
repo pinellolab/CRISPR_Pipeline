@@ -103,6 +103,21 @@ METRIC_CATALOG = {
             {"name": "removed_percent", "description": "Percent of entering cells removed.", "unit": "percent"},
         ],
     },
+    "guide_mapping_qc": {
+        "description": "Configured guide-reference orientation and per-measurement-set guide mapping/barcode recovery before assignment.",
+        "source_artifact": "additional_qc/guide_mapping_qc/guide_mapping_qc.tsv",
+        "row_level": "one row per measurement set",
+        "metrics": [
+            {"name": "measurement_set", "description": "Measurement-set identifier.", "unit": None},
+            {"name": "rna_cells", "description": "RNA cells retained before modality intersection.", "unit": "cells"},
+            {"name": "guide_cells", "description": "Cells present in the mapped guide matrix.", "unit": "cells"},
+            {"name": "overlap_cells", "description": "Exact RNA-guide barcode intersection.", "unit": "cells"},
+            {"name": "guide_to_rna_fraction", "description": "Guide-mapped cells divided by retained RNA cells.", "unit": "fraction"},
+            {"name": "overlap_to_guide_fraction", "description": "Exact overlap divided by guide-mapped cells.", "unit": "fraction"},
+            {"name": "status", "description": "PASS or FAIL under the configured recovery thresholds.", "unit": None},
+            {"name": "reason", "description": "Threshold failures for this measurement set.", "unit": None},
+        ],
+    },
     "hto_post_clone_filter": {
         "description": "Per-measurement-set HTO support and singlet filtering after guide and clone QC.",
         "source_artifact": "additional_qc/hto_filter/hto_filter_flow.tsv",
@@ -345,6 +360,7 @@ def collect_additional_qc(additional_qc_dir):
     specs = {
         "gene": ("additional_qc_gene", "gene/gene_metrics.tsv"),
         "guide": ("additional_qc_guide", "guide/guide_metrics.tsv"),
+        "guide_mapping_qc": ("guide_mapping_qc", "guide_mapping_qc/guide_mapping_qc.tsv"),
         "guide_assignment_filter": ("guide_assignment_filter", "guide_assignment_filter/guide_assignment_filter_flow.tsv"),
         "hto_filter": ("hto_post_clone_filter", "hto_filter/hto_filter_flow.tsv"),
         "clones": ("additional_qc_clones", "clones/clone_metrics.tsv"),

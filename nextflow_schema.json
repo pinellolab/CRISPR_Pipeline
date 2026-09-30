@@ -346,7 +346,7 @@
                 },
                 "QC_barcode_filter": {
                     "type": "string",
-                    "default": "knee2",
+                    "default": "knee",
                     "enum": [
                         "none",
                         "knee",
@@ -401,6 +401,39 @@
             "fa_icon": "fas fa-barcode",
             "description": "Guide assignment method and thresholds.",
             "properties": {
+                "GUIDE_MAPPING_QC_action": {
+                    "type": "string",
+                    "default": "error",
+                    "enum": ["error", "warn"],
+                    "description": "Stop or warn when guide mapping and RNA-guide barcode recovery are unusable."
+                },
+                "GUIDE_MAPPING_QC_min_overlap_cells_per_set": {
+                    "type": "integer",
+                    "default": 20,
+                    "minimum": 1,
+                    "description": "Minimum exact RNA-guide barcode overlap required in every measurement set."
+                },
+                "GUIDE_MAPPING_QC_min_guide_to_rna_fraction": {
+                    "type": "number",
+                    "default": 0.001,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Minimum fraction of retained RNA cells represented in the mapped guide matrix."
+                },
+                "GUIDE_MAPPING_QC_min_overlap_to_guide_fraction": {
+                    "type": "number",
+                    "default": 0.5,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Minimum fraction of guide-mapped cells sharing an exact RNA barcode."
+                },
+                "GUIDE_MAPPING_QC_min_recovered_guide_fraction": {
+                    "type": "number",
+                    "default": 0.5,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Minimum fraction of metadata guide IDs with at least one mapped UMI."
+                },
                 "GUIDE_ASSIGNMENT_method": {
                     "type": "string",
                     "default": "sceptre",

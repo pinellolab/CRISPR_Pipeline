@@ -92,6 +92,8 @@ def family_for(process: str) -> str:
         return 'postconcat_qc'
     if "seqspec" in value:
         return "seqspec"
+    if "guide_mapping_qc" in leaf:
+        return "mapping"
     if any(key in leaf for key in (
         "downloadreference", "skipgenomedownload", "skipgtfdownload",
         "createguideref", "createhashingref", "prepare_covariate",
@@ -455,6 +457,8 @@ def image_family(path: Path) -> str:
         return 'postconcat_qc'
     if "seqspec" in value:
         return "seqspec"
+    if "guide_mapping_qc" in parts or "guide_mapping_orientation_qc" in value:
+        return "mapping"
     if any(term in value for term in ("guide_", "guides_", "sgrna", "cells_per_guide", "guides_per_cell", "hto_", "hashing_qc")):
         return "guide_assignment"
     if any(term in value for term in ("intended_target", "global_analysis", "evaluation", "volcano", "sequencing_saturation")):
@@ -600,6 +604,68 @@ def mapping_measurement_set_cards(data: dict[str, Any]) -> str:
         '<span class="eyebrow">Measurement-set hierarchy</span><h3>Mapping by measurement set</h3>'
         '<p>Open a card to inspect RNA and feature-barcode mapping separately.</p></div>'
         f'<span class="measurement-count">{len(cards)} sets</span></div>' + "".join(cards) + '</div>'
+    )
+
+
+def guide_mapping_qc_content(root: Path | None) -> str:
+    """Render configured orientation and post-mapping barcode recovery."""
+    if not root or not root.exists():
+        return ""
+    reports = sorted(root.glob("**/guide_mapping_qc.json"))
+    tables = sorted(root.glob("**/guide_mapping_qc.tsv"))
+    if not reports:
+        return ""
+    try:
+        report = json.loads(reports[-1].read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    overall = report.get("overall", {})
+    orientation = report.get("configured_orientation", {})
+    status = str(report.get("status", "UNKNOWN"))
+    cards = [
+        metric_card("Recovery gate", status, "before guide assignment"),
+        metric_card(
+            "Guide orientation",
+            "reverse complement" if orientation.get("reverse_complement_guides") else "as supplied",
+            "guide reference",
+        ),
+        metric_card("Spacer tag", display_value(orientation.get("spacer_tag")), "guide search anchor"),
+        metric_card("RNA cells", display_value(overall.get("rna_cells")), "after RNA QC"),
+        metric_card("Guide-mapped cells", display_value(overall.get("guide_cells")), "before intersection"),
+        metric_card("RNA-guide overlap", display_value(overall.get("mudata_intersection_cells")), "exact barcodes"),
+        metric_card(
+            "Recovered guide designs",
+            f'{display_value(overall.get("expected_guides_with_nonzero_counts"))} / {display_value(overall.get("expected_guides"))}',
+            "at least one mapped UMI",
+        ),
+    ]
+    rows = []
+    if tables:
+        try:
+            with tables[-1].open(newline="", encoding="utf-8", errors="replace") as handle:
+                rows = list(csv.DictReader(handle, delimiter="\t"))
+        except OSError:
+            rows = []
+    columns = [
+        ("measurement_set", "Measurement set"),
+        ("rna_cells", "RNA cells"),
+        ("guide_cells", "Guide cells"),
+        ("overlap_cells", "Exact overlap"),
+        ("guide_to_rna_fraction", "Guide/RNA fraction"),
+        ("overlap_to_guide_fraction", "Overlap/guide fraction"),
+        ("status", "Status"),
+        ("reason", "Reason"),
+    ]
+    failures = report.get("failures", [])
+    failure_html = ""
+    if failures:
+        failure_html = '<div class="callout warn"><strong>Recovery warning</strong><br>' + html.escape(" | ".join(map(str, failures))) + "</div>"
+    return (
+        '<div class="measurement-section"><div class="measurement-section-head"><div>'
+        '<span class="eyebrow">Pre-assignment validation</span><h3>Guide mapping and orientation QC</h3>'
+        '<p>Confirms the configured reference orientation, mapped guide cells, exact RNA–guide barcode overlap and recovered library designs before assignment.</p>'
+        '</div></div><div class="metrics">' + "".join(cards) + "</div>" + failure_html +
+        data_table(rows, columns, limit=max(1, len(rows))) + "</div>"
     )
 
 
@@ -1050,6 +1116,7 @@ def render(args: argparse.Namespace) -> str:
         extra = category_flow(qc_data, family) + qc_metrics_content(qc_data, family)
         if family == "mapping":
             extra += mapping_measurement_set_cards(qc_data)
+            extra += guide_mapping_qc_content(getattr(args, "artifact_dir", None))
         if family == "preprocessing":
             measurement_cards, used_images = preprocessing_measurement_set_cards(qc_data, family_images)
             extra += measurement_cards

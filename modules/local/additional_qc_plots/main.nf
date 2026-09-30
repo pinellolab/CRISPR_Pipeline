@@ -8,6 +8,7 @@ process additional_qc_plots {
         path guide_assignment_qc_input
         path hto_qc_input
         path embedding_qc_input, stageAs: 'embedding_inputs/part??/*'
+        path guide_mapping_qc_input
 
     output:
         path "additional_qc", emit: additional_qc
@@ -36,6 +37,10 @@ process additional_qc_plots {
         if find -L ${hto_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
             mkdir -p additional_qc/hto_filter
             cp -R ${hto_qc_input}/. additional_qc/hto_filter/
+        fi
+        if find -L ${guide_mapping_qc_input} -mindepth 1 -type f ! -name '.gitkeep' -print -quit | grep -q .; then
+            mkdir -p additional_qc/guide_mapping_qc
+            cp -R ${guide_mapping_qc_input}/. additional_qc/guide_mapping_qc/
         fi
 
         mapping_gene.py \\
