@@ -3,8 +3,9 @@
 import anndata as ad
 import pandas as pd
 import argparse
+import json
 
-def filter_adata_demux(adata_path, demux_report_path, demux_config_path, filtered_output_path, unfiltered_output_path):
+def filter_adata_demux(adata_path, demux_report_path, demux_config_path, filtered_output_path, unfiltered_output_path, demux_qc_path=None):
     # Load the AnnData object
     adata = ad.read_h5ad(adata_path)
     demux_report = pd.read_csv(demux_report_path, index_col=0)
@@ -14,6 +15,7 @@ def filter_adata_demux(adata_path, demux_report_path, demux_config_path, filtere
     demux_config.columns = ['cluster_id', 'hto_type']
     demux_config['hto_type'] = demux_config['hto_type'].str.strip()
     adata.obs['cluster_id'] = demux_report['Cluster_id']
+    adata.obs['gmm_demux_confidence'] = demux_report['Confidence']
     
     # Process multiplets
     demux_config['hto_type_split'] = demux_config['hto_type'].str.split('-').str.join(",")
@@ -28,6 +30,19 @@ def filter_adata_demux(adata_path, demux_report_path, demux_config_path, filtere
         left_on='cluster_id',
         right_on='cluster_id'
     ).set_index(adata.obs.index)
+
+    if demux_qc_path:
+        with open(demux_qc_path) as handle:
+            demux_qc = json.load(handle)
+        # Older AnnData versions in the GMM-Demux image cannot serialize a
+        # list of nested dictionaries in ``uns``.  Keep the full audit as a
+        # canonical JSON string and expose the commonly queried values as
+        # scalar fields.
+        adata.uns['gmm_demux_qc_json'] = json.dumps(
+            demux_qc, sort_keys=True, separators=(',', ':')
+        )
+        adata.uns['gmm_demux_selected_seed'] = int(demux_qc['selected_seed'])
+        adata.uns['gmm_demux_attempt_count'] = int(len(demux_qc['attempts']))
     
     # Filter data
     adata_filtered = adata[
@@ -43,6 +58,11 @@ def main():
     # Set up argparse
     parser = argparse.ArgumentParser(
         description="Update AnnData object with demultiplexing report."
+    )
+    parser.add_argument(
+        '--demux_qc',
+        default=None,
+        help="JSON report from deterministic GMM-Demux seed selection."
     )
     parser.add_argument(
         '--adata', 
@@ -81,7 +101,8 @@ def main():
         args.demux_report, 
         args.demux_config, 
         args.filtered_output,
-        args.unfiltered_output
+        args.unfiltered_output,
+        args.demux_qc
     )
 
 if __name__ == "__main__":

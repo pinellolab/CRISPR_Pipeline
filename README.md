@@ -139,6 +139,9 @@ Demo mode is strictly for pre-runs. The pipeline prints warnings at startup and 
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
 | `ENABLE_DATA_HASHING` | `false` | `true`, `false` | Enables the hashing workflow: hash seqspec checks, hash mapping, hashtag filtering, demultiplexing, hash-aware MuData creation, and hash dashboard sections. |
+| `HTO_GMM_random_seed` | `0` | integer >= 0 | First seed in the deterministic GMM-Demux fit sequence. |
+| `HTO_GMM_max_seed_attempts` | `10` | integer >= 1 | Maximum consecutive deterministic seeds tried when an HTO fit fails the objective quality gate. |
+| `HTO_GMM_reject_nonzero_positive` | `true` | `true`, `false` | Rejects a degenerate HTO mixture fit that labels essentially every nonzero count as positive; the run fails if no acceptable seed is found. |
 | `HTO_min_positive_cells` | `20` | Integer `>= 1` | Calls an HTO within a measurement set only when at least this many positive singlet cells remain **after guide-assignment and optional clone filtering**. |
 | `HTO_keep_singlets_only` | `true` | `true`, `false` | When hashing is enabled, retains only cells assigned to a called single HTO after post-clone support is recalculated. |
 | `ENABLE_SCRUBLET` | `true` | `true`, `false` | Runs Scrublet independently after UMI/MAD filtering in non-hashing workflows. When `ENABLE_DATA_HASHING=true`, HTO singlet filtering replaces Scrublet and this setting is ignored. |

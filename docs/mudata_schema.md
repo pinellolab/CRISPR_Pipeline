@@ -74,6 +74,8 @@ The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62a
 | hashing.obs | cluster_id | integer/string | Hashing after demultiplexing | Demultiplexing cluster assigned from the HTO report. | demultiplex_filter.py |
 | hashing.obs | hto_type | string/categorical | Hashing after demultiplexing | HTO identity or demultiplexing class associated with cluster_id. | demultiplex_filter.py |
 | hashing.obs | hto_type_split | string/categorical | Hashing after demultiplexing | Normalized HTO class; multi-HTO labels are collapsed to multiplets and negatives remain negative. | demultiplex_filter.py |
+| hashing.obs | gmm_demux_confidence | float | Hashing after demultiplexing | GMM-Demux confidence for the selected deterministic fit. This is retained for QC but is not itself used as a cell filter. | demultiplex_filter.py |
+| hashing.uns | gmm_demux_qc_json_by_input | JSON string | Hashing after concatenation | Per-measurement-set audit of attempted seeds, rejected HTO fits, rejection reasons, and selected seed. | demultiplex_filter.py; hashing_concat.py |
 | hashing.obs | hto_positive_cells_post_clone | integer | Hashing after clone filtering | Number of positive singlet cells supporting this cell's HTO within its measurement set, recalculated after guide and clone filtering. | filter_hto_post_clone.py |
 | hashing.obs | hto_called_post_clone | boolean | Hashing after clone filtering | True when the cell is a positive singlet for an HTO meeting HTO_min_positive_cells in its measurement set. | filter_hto_post_clone.py |
 

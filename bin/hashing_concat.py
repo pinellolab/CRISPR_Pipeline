@@ -2,6 +2,7 @@
 
 import anndata as ad
 import argparse
+import json
 import os
 from pathlib import Path
 
@@ -24,10 +25,19 @@ def main():
     
     # Process and save each file
     processed_files = []
+    gmm_demux_qc_by_input = {}
     for idx, file_path in enumerate(sorted_file_paths):
         print(f"Processing {file_path}")
         
         adata = ad.read_h5ad(file_path)
+
+        if 'gmm_demux_qc_json' in adata.uns:
+            # concat_on_disk intentionally does not merge ``uns``. Preserve
+            # every measurement-set audit under its source filename and
+            # restore it after concatenation.
+            gmm_demux_qc_by_input[os.path.basename(file_path)] = str(
+                adata.uns['gmm_demux_qc_json']
+            )
         
         if idx == 0 and adata.var_names.name is not None:
             var_index_name = adata.var_names.name
@@ -46,10 +56,15 @@ def main():
         out_file=Path(args.output)
     )
     
-    if var_index_name:
-        print(f"Restoring var index name: {var_index_name}")
+    if var_index_name or gmm_demux_qc_by_input:
         final_adata = ad.read_h5ad(args.output)
-        final_adata.var_names.name = var_index_name
+        if var_index_name:
+            print(f"Restoring var index name: {var_index_name}")
+            final_adata.var_names.name = var_index_name
+        if gmm_demux_qc_by_input:
+            final_adata.uns['gmm_demux_qc_json_by_input'] = json.dumps(
+                gmm_demux_qc_by_input, sort_keys=True, separators=(',', ':')
+            )
         final_adata.write_h5ad(args.output)
     
     print(f"Combined AnnData saved to {args.output}")
