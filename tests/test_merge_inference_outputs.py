@@ -82,6 +82,9 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
             "guide_id": ["g1", "g2"],
             "log2_fc": [0.5, -0.5],
             "p_value": [0.01, 0.2],
+            # The adapter's per-pair CRT diagnostics ride along for debugging.
+            "perturbo_crt_low_information": [True, False],
+            "perturbo_crt_observed_nonzero": [0, 15],
         }
     )
     perturbo_element = pd.DataFrame(
@@ -93,6 +96,7 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
             "intended_target_end": [150, 250],
             "log2_fc": [0.5, -0.5],
             "p_value": [0.01, 0.2],
+            "perturbo_crt_low_information": [False, True],
         }
     )
 
@@ -121,6 +125,12 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
 
     guide_out = pd.read_csv(tmp_path / "per_guide_output.tsv.gz", sep="\t")
     element_out = pd.read_csv(tmp_path / "per_element_output.tsv.gz", sep="\t")
+
+    assert list(guide_out.sort_values("guide_id")["perturbo_crt_low_information"]) == [True, False]
+    assert list(guide_out.sort_values("guide_id")["perturbo_crt_observed_nonzero"]) == [0, 15]
+    # The element merge reorders through a fixed preferred list; the diagnostics
+    # must survive that too (they were lost here on the first TAP-seq head run).
+    assert list(element_out.sort_values("gene_id")["perturbo_crt_low_information"]) == [False, True]
 
     for observed in (guide_out, element_out):
         assert "sceptre_q_value" in observed.columns
@@ -432,6 +442,9 @@ def test_merge_local_global_results_uses_fast_parquet_path(tmp_path, monkeypatch
             "perturbo_fc_se": np.array([0.1, 0.2], dtype=np.float32),
             "p_value": np.array([0.05, 0.5], dtype=np.float32),
             "perturbo_q_value": [0.1, 0.5],
+            # The adapter's per-pair CRT diagnostics must survive the streaming path.
+            "perturbo_crt_low_information": [True, False],
+            "perturbo_crt_used_chernoff": [False, True],
         }
     )
     global_element = pd.DataFrame(
@@ -481,8 +494,9 @@ def test_merge_local_global_results_uses_fast_parquet_path(tmp_path, monkeypatch
         "guide_start", "guide_end", "guide_strand", "pam",
         "intended_target_name", "intended_target_chr",
         "intended_target_start", "intended_target_end", "gene_name",
-        "nPerturbedCells",
+        "nPerturbedCells", "perturbo_crt_low_information", "perturbo_crt_used_chernoff",
     ]
+    assert list(observed_guide.sort_values("guide_id")["perturbo_crt_used_chernoff"]) == [False, True]
     assert list(observed_element.columns) == [
         "gene_id", "intended_target_name", "intended_target_chr",
         "intended_target_start", "intended_target_end", "perturbo_log2_fc",

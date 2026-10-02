@@ -246,6 +246,14 @@ def enrich_global_parquet(
     else:
         raise ValueError(f"Unknown table kind: {table_kind}")
 
+    # PerTurbo's per-pair CRT diagnostics (perturbo_crt_*) ride along whenever
+    # the adapter wrote them; the fixed output list above predates them.
+    diagnostics = [
+        name for name in lazy_schema(scan).names()
+        if name.startswith("perturbo_crt_") and name not in output_columns
+    ]
+    output_columns = list(output_columns) + diagnostics
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     print(
         f"Streaming {table_kind} enrichment with Polars "

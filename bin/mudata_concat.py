@@ -184,17 +184,33 @@ def preserve_source_guide_metadata(combined_guide_var, source_guide_var):
     return combined
 
 def apply_cell_and_gene_filters(mdata, min_cells_fraction, require_assigned_guide=True):
-    """The cell filter, then the gene filter, in that order.
+    """The cell filter, the per-cell depth totals, then the gene filter, in that order.
 
     Cells first: the gene threshold is a fraction of the *retained* cells, so a
     gene has to be supported among the cells that are actually analysed. On a
     screen with a large unassigned population the two orders disagree, and
     measuring gene support over cells nothing is tested in is the wrong one.
+
+    The inference covariates are derived here because this is the first step
+    that sees the final cell set: the depth totals are pinned before the gene
+    filter (they must cover every gene), and the conditioned columns for both
+    methods are written after it, so everything downstream inherits one set of
+    values.
     """
+    from inference_covariates import (
+        ensure_gene_depth_totals,
+        ensure_guide_umi_totals,
+        materialize_shared_covariates,
+    )
+
     mdata = filter_cells_without_assigned_guide(
         mdata, require_assigned_guide=require_assigned_guide
     )
-    return filter_genes_by_cells(mdata, min_cells_fraction)
+    ensure_guide_umi_totals(mdata)
+    ensure_gene_depth_totals(mdata)
+    mdata = filter_genes_by_cells(mdata, min_cells_fraction)
+    materialize_shared_covariates(mdata)
+    return mdata
 
 
 def concat_mudatas(

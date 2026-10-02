@@ -40,19 +40,48 @@ def resolve_num_workers(num_workers=None):
     return 0
 
 
+# The pipeline runs shared guide effects: every guide targeting an element
+# contributes the same effect, and no per-guide efficacy is fitted. Fitting it
+# needs guide-level inputs, blocks gene chunking, and is refused outright on a
+# screen the size of Gasperini at-scale.
+GUIDE_EFFECT_STRATEGY = "shared"
+
+
+def _parse_bool(value):
+    """argparse's ``type=bool`` maps every non-empty string to True, so
+    ``--fit_guide_efficacy False`` used to mean True."""
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"true", "t", "yes", "y", "1"}:
+        return True
+    if text in {"false", "f", "no", "n", "0", ""}:
+        return False
+    raise argparse.ArgumentTypeError(f"expected a boolean, got {value!r}")
+
+
 def resolve_efficiency_mode(efficiency_mode="scaled"):
-    if efficiency_mode != "scaled":
+    """Translate the PerTurbo v1 efficiency mode onto a v2 guide-effect strategy.
+
+    v1 named the continuous per-guide efficacy "scaled"; v2 calls it "relative"
+    and adds "shared", which fits none. Through PerTurbo 2.0.0rc11 the Python API
+    silently mapped "scaled" onto "shared", so this pipeline has always run shared
+    guide effects; from rc12 it maps onto "relative" instead. This function pins
+    the pipeline to shared explicitly so the upgrade cannot change the model.
+    """
+    if efficiency_mode not in {"scaled", "shared", None}:
         raise ValueError(
-            "PerTurbo only supports efficiency_mode='scaled' in this pipeline"
+            f"This pipeline runs guide_effect_strategy={GUIDE_EFFECT_STRATEGY!r}; "
+            f"efficiency_mode={efficiency_mode!r} is not supported."
         )
-    return "scaled"
+    return GUIDE_EFFECT_STRATEGY
 
 def run_perturbo(
     mdata_input_fp,
     results_tsv_fp,
     mdata_output_fp=None,
-    fit_guide_efficacy=True,  # whether to fit guide efficacy
-    efficiency_mode="scaled",  # PerTurbo efficiency mode; only "scaled" is supported
+    fit_guide_efficacy=False,  # accepted for backward compatibility; see below
+    efficiency_mode="scaled",  # legacy v1 name; resolves to guide_effect_strategy="shared"
     accelerator="gpu",  # can be "auto", "gpu" or "cpu"
     batch_size=4096,  # batch size for training
     early_stopping=False,  # whether to use early stopping
@@ -65,7 +94,14 @@ def run_perturbo(
     inference_type="element",  # can be per-guide or per-element
     num_workers=None,  # number of worker processes for data loading
 ):
-    efficiency_mode = resolve_efficiency_mode(efficiency_mode)
+    guide_effect_strategy = resolve_efficiency_mode(efficiency_mode)
+    if fit_guide_efficacy:
+        raise ValueError(
+            "fit_guide_efficacy=True is not supported: this pipeline runs "
+            f"guide_effect_strategy={GUIDE_EFFECT_STRATEGY!r}. The flag was a no-op "
+            "under PerTurbo v2 even when it was passed, so any run that set it was "
+            "already not fitting guide efficacy."
+        )
     num_workers = resolve_num_workers(num_workers)
     scvi.settings.seed = 0
     if num_workers > 0:
@@ -128,13 +164,6 @@ def run_perturbo(
         - mdata[gene_modality_name].obs["log1p_total_guide_umis"].mean()
     )
 
-    fit_guide_efficacy = True
-    guides_per_element = mdata[guide_modality_name].var[element_key].value_counts()
-
-    if np.all(guides_per_element <= 1) or inference_type == "guide":
-        fit_guide_efficacy = False
-        print("Not fitting guide efficiency -- only one guide per element.")
-
     intended_targets_df = pd.get_dummies(
         mdata[guide_modality_name].var[element_key]
     ).astype(float)
@@ -196,8 +225,7 @@ def run_perturbo(
     model = perturbo.PERTURBO(
         mdata,
         likelihood="nb",
-        efficiency_mode=efficiency_mode,
-        fit_guide_efficacy=fit_guide_efficacy,
+        guide_effect_strategy=guide_effect_strategy,
     )
 
     model.view_anndata_setup(mdata, hide_state_registries=True)
@@ -327,16 +355,22 @@ def main():
     )
     parser.add_argument(
         "--fit_guide_efficacy",
-        type=bool,
-        default=True,
-        help="Whether to fit guide efficacy",
+        type=_parse_bool,
+        default=False,
+        help=(
+            "Deprecated and unsupported: the pipeline runs shared guide effects. "
+            "Passing True is an error rather than a silent no-op."
+        ),
     )
     parser.add_argument(
         "--efficiency_mode",
         type=str,
-        choices=["scaled"],
-        default="scaled",
-        help="Efficiency mode for the model. Only 'scaled' is supported.",
+        choices=["scaled", "shared"],
+        default="shared",
+        help=(
+            "Legacy PerTurbo v1 name. Either value resolves to "
+            "guide_effect_strategy='shared'."
+        ),
     )
 
     parser.add_argument(
