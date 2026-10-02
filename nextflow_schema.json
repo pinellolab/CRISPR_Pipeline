@@ -52,6 +52,25 @@
                     "description": "Enable the hashing branch of the workflow.",
                     "help_text": "When true, the workflow expects hash modality rows in the samplesheet, runs hashing mapping, filtering, demultiplexing, and uses the hashing dashboard path."
                 },
+                "HTO_GMM_random_seed": {
+                    "type": "integer",
+                    "default": 0,
+                    "minimum": 0,
+                    "description": "First deterministic random seed used by GMM-Demux."
+                },
+                "HTO_GMM_max_seed_attempts": {
+                    "type": "integer",
+                    "default": 10,
+                    "minimum": 1,
+                    "description": "Maximum deterministic GMM-Demux fits attempted with consecutive seeds.",
+                    "help_text": "A retry occurs only when the objective HTO fit-quality gate rejects a fit, for example when positive calls simply reproduce count > 0. The pipeline fails if no acceptable fit is found."
+                },
+                "HTO_GMM_reject_nonzero_positive": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Reject degenerate HTO fits that classify essentially every nonzero count as positive.",
+                    "help_text": "The gate rejects an HTO when its minimum positive count is one, at least 99.5% of nonzero cells are positive, and at most 0.5% of zero-count cells are positive. Attempts and rejection reasons are written to gmm_demux_qc.json and stored as canonical JSON in hashing.uns."
+                },
                 "ENABLE_SCRUBLET": {
                     "type": "boolean",
                     "default": false,

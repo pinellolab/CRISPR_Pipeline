@@ -134,6 +134,9 @@ Demo mode is strictly for pre-runs. The pipeline prints warnings at startup and 
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
 | `ENABLE_DATA_HASHING` | `false` | `true`, `false` | Enables the hashing workflow: hash seqspec checks, hash mapping, hashtag filtering, demultiplexing, hash-aware MuData creation, and hash dashboard sections. |
+| `HTO_GMM_random_seed` | `0` | integer >= 0 | First seed in the deterministic GMM-Demux fit sequence. |
+| `HTO_GMM_max_seed_attempts` | `10` | integer >= 1 | Maximum consecutive deterministic seeds tried when an HTO fit fails the objective quality gate. |
+| `HTO_GMM_reject_nonzero_positive` | `true` | `true`, `false` | Rejects a degenerate HTO mixture fit that labels essentially every nonzero count as positive; the run fails if no acceptable seed is found. |
 | `ENABLE_SCRUBLET` | `false` | `true`, `false` | Runs Scrublet doublet detection before guide assignment in the non-hashing workflow. |
 | `is_10x3v3` | `true` | `true`, `false` | Controls 10x Genomics 3' v3 feature-barcode chemistry (`10XV3`, `kite:10xFB`) for guide or hashing mapping depending on `ENABLE_DATA_HASHING`. RNA mapping always uses the RNA seqspec. Case 1: when `ENABLE_DATA_HASHING = false` and `is_10x3v3 = true`, guide mapping uses the 10x v3 feature-barcode kb settings instead of deriving guide chemistry from the guide seqspec. Case 2: when `ENABLE_DATA_HASHING = true` and `is_10x3v3 = true`, guide and RNA mapping use their seqspecs, while hash/HTO mapping uses the 10x v3 feature-barcode kb settings. This second case supports 10x v3 HTO data where barcode replacement/translation may be needed so hash, RNA, and guide barcodes match downstream. |
 | `reverse_complement_guides` | `false` | `true`, `false` | Reverse-complements guide spacer sequences while building the guide reference, preserving the metadata fields. |
