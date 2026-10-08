@@ -191,6 +191,53 @@ def test_convert_guide_effects_restores_control_guide_ids_and_filters_pairs(tmp_
     assert np.isclose(observed.loc[1, "p_value"], 0.9)
 
 
+@pytest.mark.parametrize("kind", ["element", "guide"])
+def test_stream_global_effects_matches_full_table_conversion_across_batches(tmp_path, kind):
+    input_path = tmp_path / "input.h5mu"
+    prepared_path = tmp_path / "prepared.h5mu"
+    _make_mudata().write(input_path)
+    guide_name_map = adapter.prepare_mudata_for_perturbo_v2(input_path, prepared_path)
+    prepared = mu.read_h5mu(prepared_path)
+    if kind == "element":
+        elements = [
+            prepared["guide"].var.loc["gA", "intended_target_key"],
+            prepared["guide"].var.loc["gB", "intended_target_key"],
+            prepared["guide"].var.loc["nt1", "intended_target_key"],
+        ]
+    else:
+        elements = ["gA", "gB", "non-targeting|nt1"]
+    effects = pd.DataFrame(
+        {
+            "element": elements,
+            "gene": ["GENE1", "GENE2", "GENE1"],
+            "posterior_mean": [0.1, -0.2, 0.0],
+            "posterior_scale": [0.02, 0.03, 0.04],
+            "posterior_prob": [0.2, 0.3, 0.4],
+            "crt_saddlepoint_p_value": [0.01, 0.2, np.nan],
+        }
+    )
+    effects["crt_saddlepoint_q_value"] = adapter._bh_adjust(
+        effects["crt_saddlepoint_p_value"]
+    )
+    source = tmp_path / "native.parquet"
+    destination = tmp_path / "converted.parquet"
+    effects.to_parquet(source, index=False)
+
+    adapter._stream_global_effects(
+        source, destination, prepared_path,
+        kind=kind, guide_name_map=guide_name_map, batch_size=2,
+    )
+    expected = (
+        adapter.convert_element_effects(effects, prepared_path, test_all_pairs=True, crt=True)
+        if kind == "element"
+        else adapter.convert_guide_effects(
+            effects, guide_name_map, prepared_path, test_all_pairs=True, crt=True
+        )
+    )
+    actual = pd.read_parquet(destination)
+    pd.testing.assert_frame_equal(actual, expected, check_dtype=False)
+
+
 @pytest.mark.parametrize("with_pairs", [False, True])
 def test_run_perturbo_uses_only_native_pairs_to_test_flag(tmp_path, monkeypatch, with_pairs):
     input_path = tmp_path / "input.h5mu"

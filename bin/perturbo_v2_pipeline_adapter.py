@@ -25,6 +25,8 @@ import time
 import mudata as md
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from scipy import sparse
 from scipy.stats import false_discovery_control
 
@@ -330,6 +332,101 @@ def convert_guide_effects(
     out = out[["gene_id", "guide_id", "log2_fc", "perturbo_fc_se", "p_value", "perturbo_posterior_prob"]]
     out["perturbo_q_value"] = _bh_adjust(out["p_value"])
     return out
+
+
+def _stream_global_effects(
+    source: Path,
+    destination: str | Path,
+    prepared_mudata_path: Path,
+    *,
+    kind: str,
+    guide_name_map: dict[str, str],
+    batch_size: int = 250_000,
+) -> None:
+    """Convert a screen-scale CRT table without materializing all pairs.
+
+    PerTurbo's saddlepoint q-values are BH-adjusted over the complete fit, the
+    same family used by convert_*_effects. The requested-pair tables have their
+    own family and continue through the ordinary in-memory converter.
+    """
+    source_file = pq.ParquetFile(source)
+    required = {
+        "element", "gene", "posterior_mean", "posterior_scale",
+        "posterior_prob", "crt_saddlepoint_p_value", "crt_saddlepoint_q_value",
+    }
+    missing = required.difference(source_file.schema_arrow.names)
+    if missing:
+        raise ValueError(f"Streaming PerTurbo output is missing {sorted(missing)}")
+    if kind == "element":
+        with _open_mudata(prepared_mudata_path, backed="r") as mdata:
+            target_lookup = get_target_lookup(pd.DataFrame(mdata[GUIDE_MODALITY].var).copy())
+        target_lookup = target_lookup.set_index("intended_target_key")
+        if not target_lookup.index.is_unique:
+            raise ValueError("PerTurbo intended-target lookup must have unique keys")
+        columns = [
+            "gene_id", "intended_target_name", "intended_target_chr",
+            "intended_target_start", "intended_target_end", "log2_fc",
+            "perturbo_fc_se", "p_value", "perturbo_posterior_prob",
+            "perturbo_q_value",
+        ]
+    elif kind == "guide":
+        columns = [
+            "gene_id", "guide_id", "log2_fc", "perturbo_fc_se",
+            "p_value", "perturbo_posterior_prob", "perturbo_q_value",
+        ]
+    else:
+        raise ValueError(f"Unknown PerTurbo result kind: {kind}")
+
+    destination = Path(destination)
+    if destination.suffix != ".parquet":
+        raise ValueError("Streaming PerTurbo conversion requires a Parquet output")
+    partial = destination.with_name(destination.name + ".partial")
+    writer = None
+    rows_written = 0
+    try:
+        for record_batch in source_file.iter_batches(
+            batch_size=batch_size, columns=sorted(required)
+        ):
+            block = record_batch.to_pandas()
+            out = pd.DataFrame(index=block.index)
+            out["gene_id"] = block["gene"].astype(str)
+            if kind == "element":
+                metadata = target_lookup.reindex(block["element"].astype(str))
+                if metadata["intended_target_name"].isna().any():
+                    missing_keys = block.loc[
+                        metadata["intended_target_name"].isna().to_numpy(), "element"
+                    ].drop_duplicates().head(20).tolist()
+                    raise ValueError(f"Unmapped PerTurbo elements: {missing_keys}")
+                for name in (
+                    "intended_target_name", "intended_target_chr",
+                    "intended_target_start", "intended_target_end",
+                ):
+                    out[name] = metadata[name].to_numpy()
+            else:
+                element = block["element"].astype(str)
+                out["guide_id"] = element.map(guide_name_map).fillna(element)
+            out["log2_fc"] = pd.to_numeric(block["posterior_mean"], errors="coerce") / math.log(2.0)
+            out["perturbo_fc_se"] = pd.to_numeric(block["posterior_scale"], errors="coerce") / math.log(2.0)
+            out["p_value"] = pd.to_numeric(block["crt_saddlepoint_p_value"], errors="coerce")
+            out["perturbo_posterior_prob"] = pd.to_numeric(block["posterior_prob"], errors="coerce")
+            out["perturbo_q_value"] = pd.to_numeric(block["crt_saddlepoint_q_value"], errors="coerce")
+            table = pa.Table.from_pandas(out[columns], preserve_index=False)
+            if writer is None:
+                writer = pq.ParquetWriter(partial, table.schema, compression="zstd")
+            writer.write_table(table)
+            rows_written += len(out)
+        if writer is None:
+            raise ValueError(f"PerTurbo output has no rows: {source}")
+        writer.close()
+        writer = None
+        if rows_written != source_file.metadata.num_rows:
+            raise ValueError("Streaming PerTurbo row count differs from source")
+        partial.replace(destination)
+        print(f"Streamed {rows_written:,} {kind} pairs to {destination}.", flush=True)
+    finally:
+        if writer is not None:
+            writer.close()
+        partial.unlink(missing_ok=True)
 
 
 def _convert_common_effect_columns(effects: pd.DataFrame, *, crt: bool = False) -> pd.DataFrame:
@@ -705,11 +802,47 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
         )
         _wait_for_fits({"element": element_process, "guide": guide_process} if args.parallel_fits else {"guide": guide_process})
 
-        element_effects = pd.read_parquet(element_dir / "element_effects.parquet")
-        guide_effects = pd.read_parquet(guide_dir / "element_effects.parquet")
-        # Every pair, one Benjamini-Hochberg family: the transcriptome-wide tables.
-        global_element_df = convert_element_effects(element_effects, prepared, test_all_pairs=True, crt=args.crt)
-        global_guide_df = convert_guide_effects(guide_effects, guide_name_map, prepared, test_all_pairs=True, crt=args.crt)
+        element_effects_path = element_dir / "element_effects.parquet"
+        guide_effects_path = guide_dir / "element_effects.parquet"
+        # Full-screen fits can have 100M+ guide-gene rows. Reading both native
+        # tables into pandas exceeded the H9 run's memory after GPU fitting.
+        # Native saddlepoint q-values are BH over the complete fit; preserve
+        # that family while streaming the global outputs one batch at a time.
+        stream_global = (
+            args.crt
+            and args.test_all_pairs
+            and not args.output_mudata
+            and str(args.per_element_output).endswith(".parquet")
+            and str(args.per_guide_output).endswith(".parquet")
+            and max(
+                pq.ParquetFile(element_effects_path).metadata.num_rows,
+                pq.ParquetFile(guide_effects_path).metadata.num_rows,
+            ) >= 2_000_000
+            and all(
+                "crt_saddlepoint_q_value" in pq.ParquetFile(path).schema_arrow.names
+                for path in (element_effects_path, guide_effects_path)
+            )
+            and (not wants_local or all(
+                (directory / "element_effects_requested_pairs.parquet").exists()
+                for directory in (element_dir, guide_dir)
+            ))
+        )
+        element_effects = guide_effects = None
+        global_element_df = global_guide_df = None
+        if stream_global:
+            _stream_global_effects(
+                element_effects_path, args.per_element_output, prepared,
+                kind="element", guide_name_map=guide_name_map,
+            )
+            _stream_global_effects(
+                guide_effects_path, args.per_guide_output, prepared,
+                kind="guide", guide_name_map=guide_name_map,
+            )
+        else:
+            element_effects = pd.read_parquet(element_effects_path)
+            guide_effects = pd.read_parquet(guide_effects_path)
+            global_element_df = convert_element_effects(element_effects, prepared, test_all_pairs=True, crt=args.crt)
+            global_guide_df = convert_guide_effects(guide_effects, guide_name_map, prepared, test_all_pairs=True, crt=args.crt)
         # The requested pairs, corrected within that set alone: the local tables.
         local_element_df = local_guide_df = None
         if wants_local:
@@ -724,8 +857,9 @@ def run_pipeline_adapter(args: argparse.Namespace) -> None:
         # the global ones so a single run serves both.
         primary_element_df = global_element_df if args.test_all_pairs else local_element_df
         primary_guide_df = global_guide_df if args.test_all_pairs else local_guide_df
-        write_result_table(primary_element_df, args.per_element_output)
-        write_result_table(primary_guide_df, args.per_guide_output)
+        if not stream_global:
+            write_result_table(primary_element_df, args.per_element_output)
+            write_result_table(primary_guide_df, args.per_guide_output)
         if args.local_per_element_output:
             write_result_table(local_element_df, args.local_per_element_output)
         if args.local_per_guide_output:
