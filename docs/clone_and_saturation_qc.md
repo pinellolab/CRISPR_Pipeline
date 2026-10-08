@@ -59,7 +59,9 @@ Outputs are published under `clone_removal/` and copied into the dashboard:
 
 ## 10x-style sequencing saturation
 
-Enable RNA saturation curves:
+RNA saturation curves are enabled by default. Disable them for a run with
+`--ENABLE_SEQUENCING_SATURATION false` when the extra BUS scan is unwanted.
+The default configuration is:
 
 ```groovy
 params {

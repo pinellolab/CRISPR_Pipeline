@@ -36,6 +36,8 @@ def test_discovers_incremental_pipeline_artifacts(tmp_path):
 def test_status_file_controls_final_update(tmp_path):
     status = tmp_path / "status.json"
     assert monitor.read_final_status(status) == ("running", False)
+    status.write_text(json.dumps({"status": "running"}), encoding="utf-8")
+    assert monitor.read_final_status(status) == ("running", False)
     status.write_text(json.dumps({"status": "completed", "exit_code": 0}), encoding="utf-8")
     assert monitor.read_final_status(status) == ("completed", True)
 
@@ -69,3 +71,28 @@ def test_wrapper_preserves_nextflow_exit_when_telemetry_is_unavailable(tmp_path)
         "status": "failed", "exit_code": 7,
     }
     assert "pipeline continues without W&B" in completed.stderr
+
+
+def test_wrapper_can_disable_wandb_without_python_or_credentials(tmp_path):
+    fake_nextflow = tmp_path / "nextflow"
+    fake_nextflow.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    fake_nextflow.chmod(0o755)
+    state = tmp_path / "state"
+    env = os.environ.copy()
+    env.pop("WB_IGVF", None)
+    env.update({
+        "WANDB_ENABLED": "false",
+        "WANDB_PYTHON": str(tmp_path / "missing-python"),
+        "WANDB_STATE_DIR": str(state),
+    })
+
+    completed = subprocess.run(
+        [str(BIN / "run_with_wandb.sh"), str(fake_nextflow), "run", "main.nf"],
+        env=env, text=True, capture_output=True, check=False,
+    )
+
+    assert completed.returncode == 0
+    assert json.loads((state / "status.json").read_text(encoding="utf-8")) == {
+        "status": "completed", "exit_code": 0,
+    }
+    assert not (state / "pipeline_execution.html").exists()

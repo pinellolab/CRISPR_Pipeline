@@ -45,13 +45,15 @@ def test_render_builds_clickable_family_dashboard(tmp_path):
     )
 
     assert "Live dependency view" in result
-    assert "selectFamily('seqspec')" in result
+    assert 'for="family-tab-seqspec"' in result
+    assert 'id="family-tab-seqspec"' in result
     assert 'id="family-inference"' in result
+    assert 'id="family-postconcat_qc"' in result
     assert "FAILED" in result
     assert "42" in result
     assert "data:image/png;base64," in result
     assert "No credentials, FASTQs or unbounded task logs embedded" in result
-    assert "location.hash.slice(1)" in result
+    assert 'type="radio" name="pipeline-family"' in result
 
 
 def test_processes_are_mapped_to_expected_families():

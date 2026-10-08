@@ -915,14 +915,15 @@ write a small local handoff consumed by the sidecar. All Axiom HTTP and dashboar
 errors are warnings: the wrapper returns the Nextflow exit code and telemetry
 cannot terminate an otherwise healthy pipeline.
 
-### Interactive W&B execution dashboard prototype
+### Optional live W&B execution dashboard
 
-W&B can render the QC images and self-contained HTML that Axiom only inventories.
-`bin/render_wandb_pipeline_dashboard.py` builds one clickable execution page from
-the live Nextflow trace, grouping tasks into Input QC, SeqSpec, Mapping,
-Preprocessing, MuData, Guide assignment, Inference, Evaluation, and Final
-dashboard families. Selecting a family shows its current state, aggregate task
-metrics, process table, and any family-specific QC that is already available.
+`bin/render_wandb_pipeline_dashboard.py` is the advanced white execution dashboard
+used for the recent Gary Hon and H9 reviews. It groups tasks into Input QC,
+SeqSpec, Mapping, Preprocessing, MuData, Guide assignment, Post-concatenation QC,
+Inference, Evaluation, and Final dashboard. The family tabs work inside W&B's
+HTML viewer without JavaScript. Measurement-set cards, filter flows, live task
+states, mapping/guide QC, and published plots appear as their source artifacts
+become available. The final pipeline dashboard remains a separate local report.
 
 ```bash
 python bin/render_wandb_pipeline_dashboard.py \
@@ -934,15 +935,15 @@ python bin/render_wandb_pipeline_dashboard.py \
   --seqspec-table /path/to/guide_position_table.csv \
   --seqspec-image /path/to/seqSpec_check_plots.png \
   --qc-metrics-json /path/to/pipeline_qc_metrics.json \
-  --artifact-dir /path/to/pipeline_dashboard \
+  --artifact-dir /path/to/results \
   --nextflow-log /path/to/nextflow.log \
   --output /path/to/pipeline_execution.html
 ```
 
 The HTML contains no credentials, FASTQs, command scripts, or unbounded task
-logs. Small QC images are embedded so the page remains portable; duplicate
-images and images larger than 3 MB are omitted. The total HTML is hard-capped at
-20 MB. Failed and aborted trace rows include a short, sanitized tail from
+logs. Available QC images are embedded within the configured size budget;
+duplicates and images beyond the total image budget are omitted. Failed and
+aborted trace rows include a short, sanitized tail from
 `.command.err` and `.command.out`, plus a bounded Nextflow log tail when supplied.
 Tokens and common secret assignments are redacted before HTML escaping.
 
@@ -962,37 +963,52 @@ python bin/wandb_qc_smoke.py \
   --dashboard-html /path/to/pipeline_execution.html
 ```
 
-The renderer is deliberately independent of the scientific processes. A live
-sidecar calls it whenever the trace changes and updates only the
-`pipeline/main_execution` W&B media key. Live updates omit images to preserve
-the upload budget; the final update embeds the available plots. The sidecar
-reserves two thirds of the 20 MB budget for the final page and falls back to a
-metrics-only final page if the image-rich page does not fit.
+W&B is an optional observer around Nextflow, not a scientific Nextflow task.
+The sidecar watches the trace, Nextflow log and published QC artifacts every
+30 seconds, regenerates a self-contained HTML file, and uploads it under
+`pipeline/main_execution`. Live snapshots include plots already published.
+Use a distinct `--outdir` for each new run and reuse that same directory only
+for its `-resume`; otherwise the observer can display QC files left by a
+different run before the current producers finish.
+With `WANDB_REPLACE_RUN=true`, a stable `WANDB_RUN_ID`, and `WANDB_ENTITY`, it
+keeps one visible dashboard run per series by deleting its preceding snapshot
+only after the new snapshot uploads successfully. It does not touch other
+pipeline runs. The final update has a separate size allowance.
 
-Launch it with the wrapper after the dataset-specific provenance `prepare` and
-`check` steps have succeeded:
+Launch it with the wrapper after dataset-specific provenance `prepare` and
+`check` have succeeded. On this server, source `run_support/container_storage.sh`
+immediately before launching and put `run_support/container_storage.config`
+after the dataset resource configs and before generated provenance config.
+Record the storage helper, storage config, W&B config, wrapper, samplesheet,
+params and dataset configs as provenance artifacts. All `-c` options precede
+`run`:
 
 ```bash
-source ~/.bashrc
 export WANDB_OUTDIR=/absolute/path/to/results
 export WANDB_ENTITY=your-wandb-entity
 export WANDB_RUN_NAME=dataset_$(date -u +%Y%m%dT%H%M%SZ)
-# Optional when W&B is installed outside the active Nextflow environment:
+export WANDB_RUN_ID=stable-dashboard-series-id
+export WANDB_STATE_DIR=/absolute/path/to/results/pipeline_info/run_name/wandb
 export WANDB_PYTHON=/absolute/path/to/wandb/environment/bin/python
+source /data/pinello/lucas_logan/run_support/container_storage.sh
 
-bin/run_with_wandb.sh nextflow run main.nf \
+bin/run_with_wandb.sh nextflow \
+  -c /absolute/path/to/dataset_resources.config \
+  -c /data/pinello/lucas_logan/run_support/container_storage.config \
+  -c /absolute/path/to/results/pipeline_info/run_name/provenance.generated.config \
+  run main.nf \
   -profile local \
   -params-file /absolute/path/to/params.json \
   --outdir "$WANDB_OUTDIR" \
   -resume
 ```
 
-`conf/wandb.config` documents the matching project, entity, token environment,
-refresh interval, byte budget, and single-HTML layout. The wrapper always
-returns the Nextflow exit code. Missing credentials, missing W&B dependencies,
-rendering errors, network errors, and publisher failures only produce warnings.
-For multi-hour local runs, start this wrapper in a detached `screen` session so
-closing an IDE or terminal cannot deliver `SIGHUP` to Nextflow.
+Set `WANDB_ENABLED=false` on the same wrapper command to run Nextflow without
+starting W&B or requiring its Python package or credentials. The wrapper
+always returns the Nextflow exit code; W&B import, authentication, rendering,
+network and upload failures only produce warnings. Preserve the local
+`current_dashboard.html` and `wandb.log` in the run's provenance directory.
+Run the wrapper in a detached session for long local runs.
 
 ### Troubleshooting
 If you encounter any issues during testing:

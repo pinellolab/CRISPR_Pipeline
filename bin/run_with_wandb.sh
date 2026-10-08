@@ -1,19 +1,27 @@
 #!/usr/bin/env bash
-# Run Nextflow with a fail-open, single-HTML W&B telemetry sidecar.
+# Run Nextflow with an optional, fail-open advanced W&B telemetry sidecar.
 set -Eeuo pipefail
 
 PIPELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${WANDB_PYTHON:-python}"
 RUN_NAME="${WANDB_RUN_NAME:-crispr_$(date -u +%Y%m%dT%H%M%SZ)}"
-RUN_ID="${WANDB_SOURCE_RUN_ID:-$("$PYTHON_BIN" -c 'import uuid; print(uuid.uuid4())')}"
+RUN_ID="${WANDB_SOURCE_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 STATE_DIR="${WANDB_STATE_DIR:-$PWD/.wandb_telemetry/$RUN_ID}"
-OUTDIR="${WANDB_OUTDIR:?Set WANDB_OUTDIR to the same output directory passed to Nextflow}"
+WANDB_ENABLED="${WANDB_ENABLED:-true}"
+case "${WANDB_ENABLED,,}" in
+  1|true|yes) WANDB_ENABLED=true ;;
+  0|false|no) WANDB_ENABLED=false ;;
+  *) echo "WANDB_ENABLED must be true or false" >&2; exit 2 ;;
+esac
+OUTDIR="${WANDB_OUTDIR:-}"
+WANDB_SERIES_ID="${WANDB_RUN_ID:-$(printf '%s' "$RUN_NAME" | sha256sum | cut -c1-20)}"
 TRACE_FILE="$STATE_DIR/nextflow_trace.tsv"
 NEXTFLOW_LOG="$STATE_DIR/nextflow.log"
 STATUS_FILE="$STATE_DIR/status.json"
 DASHBOARD_HTML="$STATE_DIR/pipeline_execution.html"
 
 mkdir -p "$STATE_DIR"
+printf '{"status":"running"}\n' > "$STATUS_FILE"
 [[ $# -ge 2 && "$(basename "$1")" == "nextflow" ]] || {
   echo "usage: WANDB_OUTDIR=... run_with_wandb.sh nextflow run <pipeline> [options]" >&2
   exit 2
@@ -30,16 +38,25 @@ done
   exit 2
 }
 
-"$PYTHON_BIN" "$PIPELINE_DIR/bin/wandb_html_monitor.py" \
-  --project "${WANDB_PROJECT:-crispr-pipeline}" \
-  --entity "${WANDB_ENTITY:-}" \
-  --token-env "${WANDB_TOKEN_ENV:-WB_IGVF}" \
-  --run-name "$RUN_NAME" --source-run-id "$RUN_ID" \
-  --outdir "$OUTDIR" --trace "$TRACE_FILE" --nextflow-log "$NEXTFLOW_LOG" \
-  --status-file "$STATUS_FILE" --dashboard-html "$DASHBOARD_HTML" \
-  --poll-seconds "${WANDB_POLL_SECONDS:-30}" \
-  --max-total-bytes "${WANDB_MAX_BYTES:-20000000}" &
-MONITOR_PID=$!
+MONITOR_PID=""
+if [[ "$WANDB_ENABLED" == true ]]; then
+  [[ -n "$OUTDIR" ]] || { echo "Set WANDB_OUTDIR to the Nextflow output directory" >&2; exit 2; }
+  "$PYTHON_BIN" "$PIPELINE_DIR/bin/wandb_html_monitor.py" \
+    --project "${WANDB_PROJECT:-crispr-pipeline}" \
+    --entity "${WANDB_ENTITY:-}" \
+    --token-env "${WANDB_TOKEN_ENV:-WB_IGVF}" \
+    --run-name "$RUN_NAME" --source-run-id "$RUN_ID" \
+    --wandb-run-id "$WANDB_SERIES_ID" \
+    --replace-run "${WANDB_REPLACE_RUN:-true}" \
+    --publish-live-html "${WANDB_PUBLISH_LIVE_HTML:-true}" \
+    --outdir "$OUTDIR" --trace "$TRACE_FILE" --nextflow-log "$NEXTFLOW_LOG" \
+    --status-file "$STATUS_FILE" --dashboard-html "$DASHBOARD_HTML" \
+    --poll-seconds "${WANDB_POLL_SECONDS:-30}" \
+    --max-total-bytes "${WANDB_MAX_BYTES:-2000000000}" \
+    --max-final-html-bytes "${WANDB_MAX_FINAL_HTML_BYTES:-100000000}" \
+    --max-image-bytes "${WANDB_MAX_IMAGE_BYTES:-38000000}" &
+  MONITOR_PID=$!
+fi
 
 write_status() {
   local status="$1"
@@ -52,12 +69,18 @@ finish_monitor() {
   if [[ ! -f "$STATUS_FILE" ]]; then
     write_status interrupted "$wrapper_exit"
   fi
-  wait "$MONITOR_PID" || echo "WARN: W&B HTML telemetry stopped; Nextflow exit code is unchanged" >&2
+  if [[ -n "$MONITOR_PID" ]]; then
+    wait "$MONITOR_PID" || echo "WARN: W&B HTML telemetry stopped; Nextflow exit code is unchanged" >&2
+  fi
 }
 trap finish_monitor EXIT
 
+CONFIG_ARGS=()
+if [[ "$WANDB_ENABLED" == true ]]; then
+  CONFIG_ARGS=(-c "$PIPELINE_DIR/conf/wandb.config")
+fi
 set +e
-"$NEXTFLOW_BIN" -log "$NEXTFLOW_LOG" -c "$PIPELINE_DIR/conf/wandb.config" "$@" -with-trace "$TRACE_FILE"
+"$NEXTFLOW_BIN" -log "$NEXTFLOW_LOG" "${CONFIG_ARGS[@]}" "$@" -with-trace "$TRACE_FILE"
 NEXTFLOW_EXIT=$?
 set -e
 
@@ -65,6 +88,8 @@ RUN_STATUS=failed
 [[ "$NEXTFLOW_EXIT" -eq 0 ]] && RUN_STATUS=completed
 write_status "$RUN_STATUS" "$NEXTFLOW_EXIT"
 
-wait "$MONITOR_PID" || true
+if [[ -n "$MONITOR_PID" ]]; then
+  wait "$MONITOR_PID" || true
+fi
 trap - EXIT
 exit "$NEXTFLOW_EXIT"

@@ -23,17 +23,80 @@ FAMILIES = [
     ("preprocessing", "Preprocessing", "Cell and gene filtering"),
     ("mudata", "MuData", "Modalities assembled"),
     ("guide_assignment", "Guide assignment", "Guide-to-cell calls"),
+    ("postconcat_qc", "Post-concatenation QC", "MT, clone filtering and optional embeddings"),
     ("inference", "Inference", "SCEPTRE and Perturbo"),
     ("evaluation", "Evaluation", "Controls and benchmarking"),
     ("final", "Final dashboard", "Published report and artifacts"),
 ]
 
+CATEGORY_FLOWS = {
+    "input": [
+        ("Validate inputs", "Samplesheet paths, modalities, measurement sets, guide metadata and provenance"),
+        ("Prepare references", "Download or reuse genome/GTF resources and build guide/hash references"),
+        ("Resolve covariates", "Prepare the covariates and batch fields requested for inference"),
+    ],
+    "seqspec": [
+        ("Parse read structure", "Resolve barcode, UMI, cDNA and guide regions from each SeqSpec"),
+        ("Inspect capture", "Score candidate configurations and select the winning read structure"),
+        ("Publish QC", "Report hit ratio, positional purity, flank purity and the selected configuration"),
+    ],
+    "mapping": [
+        ("Quantify RNA", "Pseudoalign transcript reads and create an unfiltered RNA count matrix"),
+        ("Quantify guides", "Map feature-barcode reads against the validated guide reference"),
+        ("Assemble matrices", "Concatenate lane-level outputs deterministically within each modality"),
+    ],
+    "preprocessing": [
+        ("Prepare RNA matrices", "Concatenate or filter measurement sets in the order recorded by this execution"),
+        ("Call RNA cells", "Apply the configured barcode caller and RNA count floor"),
+        ("Apply enabled filters", "Show gene support, mitochondrial, MAD and Scrublet settings when available"),
+    ],
+    "mudata": [
+        ("Intersect barcodes", "Align retained RNA and guide cells, plus hashing cells when enabled"),
+        ("Assemble modalities", "Create the shared MuData object and preserve QC/provenance fields"),
+        ("Concatenate batches", "Merge measurement sets while retaining deterministic cell identities"),
+    ],
+    "guide_assignment": [
+        ("Prepare assignment", "Select the configured capture and assignment model"),
+        ("Call guide-positive cells", "Convert guide UMI evidence into guide_assignment values"),
+        ("Audit recovery", "Report assignment rate, multiplicity, cells per guide and recovered guides"),
+    ],
+    "postconcat_qc": [
+        ("Qualified cell intersection", "Use retained RNA and guide cells, plus HTO singlets when enabled"),
+        ("Clonal-cell QC", "Call and optionally remove clones when enabled"),
+        ("Optional embeddings", "Show normalization, PCA and UMAP only if this run published those outputs"),
+    ],
+    "inference": [
+        ("Define tests", "Build intended/local guide–gene pairs and global tests from validated metadata"),
+        ("Fit methods", "Run configured SCEPTRE and/or PerTurbo local and global analyses"),
+        ("Merge chunks", "Combine chunked results, preserve method-native statistics and build catalogs"),
+    ],
+    "evaluation": [
+        ("Sequencing saturation", "Estimate 10x-style RNA library saturation when enabled"),
+        ("Evaluate controls", "Compare intended effects, non-targeting controls and benchmark truth sets"),
+    ],
+    "final": [
+        ("Collect outputs", "Gather QC, inference, evaluation and provenance artifacts"),
+        ("Build report", "Create the complete local pipeline dashboard"),
+        ("Publish current state", "Refresh the single visible advanced W&B execution dashboard"),
+    ],
+}
+
 
 def family_for(process: str) -> str:
     value = process.lower()
     leaf = value.split(":")[-1]
+    if any(key in leaf for key in ('embedding_before_clone', 'embedding_after_clone',
+                                   'postconcat_embedding_qc', 'remove_clonal_cells', 'filter_hto_post_clone')):
+        return 'postconcat_qc'
     if "seqspec" in value:
         return "seqspec"
+    if "guide_mapping_qc" in leaf:
+        return "mapping"
+    if any(key in leaf for key in (
+        "downloadreference", "skipgenomedownload", "skipgtfdownload",
+        "createguideref", "createhashingref", "prepare_covariate",
+    )):
+        return "input"
     if any(key in value for key in ("mapping_rna_pipeline", "mapping_guide_pipeline", "mapping_hashing_pipeline")):
         if any(key in leaf for key in ("downloadreference", "seqspecparser", "createguideref", "createhashingref")):
             return "input"
@@ -46,7 +109,10 @@ def family_for(process: str) -> str:
         return "guide_assignment"
     if any(key in value for key in ("inference", "sceptre_chunk", "perturbo", "mergedresults", "catalog", "mergemudata")):
         return "inference"
-    if any(key in value for key in ("evaluation", "additional_qc", "benchmark")):
+    if any(key in value for key in (
+        "evaluation", "additional_qc", "benchmark", "sequencing_saturation",
+        "remove_clonal_cells", "clone_removal",
+    )):
         return "evaluation"
     if "dashboard" in value or "publishfiles" in value:
         return "final"
@@ -58,6 +124,57 @@ def read_trace(path: Path) -> list[dict[str, str]]:
         return []
     with path.open(newline="", encoding="utf-8", errors="replace") as handle:
         return list(csv.DictReader(handle, delimiter="\t"))
+
+
+TASK_HANDLER_RE = re.compile(
+    r"TaskHandler\[id:\s*(?P<task_id>\d+);\s*name:\s*(?P<name>.*?);\s*"
+    r"status:\s*(?P<status>[A-Z]+);\s*exit:\s*(?P<exit>.*?);\s*"
+    r"error:\s*.*?;\s*workDir:\s*(?P<workdir>[^\]]+)\]"
+)
+SUBMITTED_PROCESS_RE = re.compile(r"(?m)Submitted process > (?P<name>.+)$")
+
+
+def merge_live_tasks(rows: list[dict[str, str]], nextflow_log: Path | None) -> list[dict[str, str]]:
+    """Add the latest still-running TaskHandlers omitted from Nextflow trace.tsv."""
+    if not nextflow_log or not nextflow_log.exists():
+        return rows
+    text = nextflow_log.read_bytes()[-2_000_000:].decode("utf-8", "replace")
+    latest: dict[str, dict[str, str]] = {}
+    for match in TASK_HANDLER_RE.finditer(text):
+        item = match.groupdict()
+        item["process"] = item["name"]
+        item["duration"] = "in progress"
+        item["realtime"] = "in progress"
+        item["peak_rss"] = "—"
+        latest[item["task_id"]] = item
+    recorded = {row.get("task_id", "") for row in rows}
+    recorded_names = {row.get("name", "") for row in rows}
+    live = [
+        item for task_id, item in latest.items()
+        if task_id not in recorded
+        and item["name"] not in recorded_names
+        and item["status"] in {"NEW", "SUBMITTED", "RUNNING"}
+    ]
+    live_names = {item["name"] for item in live}
+    submitted = {}
+    for match in SUBMITTED_PROCESS_RE.finditer(text):
+        name = match.group("name").strip()
+        submitted[name] = {
+            "task_id": f"submitted:{name}",
+            "name": name,
+            "process": name,
+            "status": "SUBMITTED",
+            "exit": "-",
+            "workdir": "",
+            "duration": "in progress",
+            "realtime": "in progress",
+            "peak_rss": "—",
+        }
+    live.extend(
+        item for name, item in submitted.items()
+        if name not in recorded_names and name not in live_names
+    )
+    return rows + live
 
 
 def number(value: Any) -> float | None:
@@ -79,6 +196,8 @@ def family_state(rows: list[dict[str, str]], family: str, run_status: str) -> di
     failed = statuses["FAILED"] + statuses["ABORTED"]
     if failed:
         status = "failed"
+    elif statuses["RUNNING"] + statuses["SUBMITTED"] + statuses["NEW"]:
+        status = "running"
     elif selected:
         status = "completed"
     else:
@@ -92,6 +211,7 @@ def family_state(rows: list[dict[str, str]], family: str, run_status: str) -> di
         "rows": selected,
         "completed": statuses["COMPLETED"] + statuses["CACHED"],
         "failed": failed,
+        "running": statuses["RUNNING"] + statuses["SUBMITTED"] + statuses["NEW"],
         "cached": statuses["CACHED"],
         "runtime": sum(duration_seconds(row.get("realtime") or row.get("duration", "")) for row in selected),
     }
@@ -156,6 +276,39 @@ def searchable_table(
 def overall_row(section: dict[str, Any]) -> dict[str, Any]:
     rows = section.get("rows", []) if isinstance(section, dict) else []
     return next((row for row in rows if row.get("batch") == "all"), rows[0] if rows else {})
+
+
+def category_flow(data: dict[str, Any], family: str) -> str:
+    steps = CATEGORY_FLOWS.get(family, [])
+    if not steps:
+        return ""
+    nodes = "".join(
+        '<div class="flow-step"><strong>' + html.escape(title) + '</strong>'
+        '<span>' + html.escape(description) + '</span></div>'
+        for title, description in steps
+    )
+    resolved = ""
+    if family == "preprocessing" and data:
+        params = data.get("parameters", {}).get("selected_qc_and_inference_params", {})
+        fields = [
+            ("Barcode caller", params.get("QC_barcode_filter")),
+            ("Minimum RNA UMI", params.get("QC_min_counts_per_cell")),
+            ("RNA UMI MAD", params.get("QC_MAD_total_counts")),
+            ("Detected-gene MAD", params.get("QC_MAD_n_genes")),
+            ("Scrublet", params.get("ENABLE_SCRUBLET")),
+            ("Scrublet profile", params.get("SCRUBLET_assay_type")),
+            ("Scrublet rate override", params.get("SCRUBLET_expected_doublet_rate")),
+            ("Scrublet PCA components", params.get("SCRUBLET_n_prin_comps")),
+            ("Scrublet adaptive PCA fallback", params.get("SCRUBLET_adaptive_pca_fallback")),
+            ("Post-concat maximum mito %", params.get("QC_pct_mito")),
+            ("Minimum gene cell fraction", params.get("QC_min_cells_per_gene")),
+        ]
+        resolved = '<h4>Resolved filter values</h4><div class="filter-chips">' + "".join(
+            '<span><b>' + html.escape(label) + ':</b> ' + html.escape(display_value(value)) + '</span>'
+            for label, value in fields if value is not None
+        ) + '</div><p class="flow-note">The values above are the recorded run settings. '
+        'Filter order and per-measurement-set cell counts are shown only when the run publishes those QC artifacts.</p>'
+    return '<div class="process-flow"><h3>Processing and filter flow</h3><div class="flow-steps">' + nodes + '</div>' + resolved + '</div>'
 
 
 def qc_metrics_content(data: dict[str, Any], family: str) -> str:
@@ -289,37 +442,73 @@ def qc_metrics_content(data: dict[str, Any], family: str) -> str:
 
 
 def image_family(path: Path) -> str:
-    value = str(path).lower()
+    # The output directory itself may contain "embedding_qc".  Classifying
+    # the entire absolute path would therefore route every image to post-QC.
+    value = path.as_posix().lower()
+    parts = {part.lower() for part in path.parts}
+    if any(term in parts for term in (
+        'postconcat_embedding_qc', 'embedding_qc', 'embeddings', 'before_clone',
+        'after_clone', 'clone_qc', 'clone_removal', 'clones', 'clone_filter',
+        'hto_filter', 'hashing_qc',
+    )):
+        return 'postconcat_qc'
     if "seqspec" in value:
         return "seqspec"
-    if any(term in value for term in ("guide_", "guides_", "sgrna", "cells_per_guide", "guides_per_cell")):
+    if "guide_mapping_qc" in parts or "guide_mapping_orientation_qc" in value:
+        return "mapping"
+    if any(term in value for term in ("guide_", "guides_", "sgrna", "cells_per_guide", "guides_per_cell", "hto_", "hashing_qc")):
         return "guide_assignment"
-    if any(term in value for term in ("intended_target", "global_analysis", "evaluation", "volcano")):
+    if any(term in value for term in ("intended_target", "global_analysis", "evaluation", "volcano", "sequencing_saturation")):
         return "evaluation"
-    if any(term in value for term in ("scrna", "gene_", "knee_plot")):
+    if any(term in value for term in ("scrna", "rna_qc", "gene_", "knee_plot")):
         return "preprocessing"
     if any(term in value for term in ("loss_curve", "perturbo", "sceptre")):
         return "inference"
     return "final"
 
 
-def collect_images(root: Path | None, max_bytes: int = 10_000_000) -> dict[str, list[tuple[Path, str]]]:
+def embedding_stage(path: Path) -> str:
+    for part in path.parts:
+        if part in ('before_clone', 'after_clone'):
+            return part
+    metrics = path.parent / 'embedding_qc_metrics.json'
+    if metrics.is_file():
+        try:
+            return str(json.loads(metrics.read_text()).get('stage', ''))
+        except (OSError, ValueError):
+            pass
+    return ''
+
+
+def collect_images(root: Path | None, max_bytes: int = 38_000_000,
+                   omitted: list | None = None) -> dict[str, list[tuple[Path, str]]]:
     selected: dict[str, list[tuple[Path, str]]] = defaultdict(list)
     if not root or not root.exists():
         return selected
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     used = 0
-    for path in sorted(root.rglob("*.png")):
+    # Reserve the first slots for the central post-concatenation diagnostics.
+    priorities = {'normalization_check.png', 'pca_variance_ratio.png', 'pca_qc_panel.png',
+                  'pca_measurement_sets_colored.png', 'pca_by_measurement_set.png', 'umap_qc_panel.png',
+                  'leiden_resolution_sweep.png', 'leiden_sweep_umap.png',
+                  'cell_cycle_by_measurement_set.png', 'postconcat_qc_flow.png'}
+    for path in sorted(root.rglob("*.png"), key=lambda p: (p.name not in priorities, str(p))):
         size = path.stat().st_size
-        if size > 3_000_000 or used + size > max_bytes:
-            continue
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        content = path.read_bytes()
+        # Preserve identical pre/post-clone images as distinct scientific views,
+        # while collapsing duplicate published copies within the same stage.
+        digest = (hashlib.sha256(content).hexdigest(), embedding_stage(path))
         if digest in seen:
             continue
         seen.add(digest)
+        if used + size > max_bytes:
+            if omitted is not None:
+                omitted.append({'plot': str(path.relative_to(root)), 'bytes': size,
+                                'reason': 'image byte budget'})
+            continue
         used += size
-        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-        selected[image_family(path)].append((path, encoded))
+        encoded = base64.b64encode(content).decode("ascii")
+        selected[image_family(path.relative_to(root))].append((path, encoded))
     return selected
 
 
@@ -327,11 +516,402 @@ def image_gallery(images: list[tuple[Path, str]]) -> str:
     if not images:
         return ""
     figures = "".join(
-        f'<figure><img loading="lazy" src="data:image/png;base64,{encoded}" alt="{html.escape(path.stem)}">'
-        f'<figcaption>{html.escape(path.stem.replace("_", " "))}</figcaption></figure>'
+        f'<figure><img loading="lazy" src="data:image/png;base64,{encoded}" alt="{html.escape((embedding_stage(path) + " " + path.stem).strip())}">'
+        f'<figcaption>{html.escape((embedding_stage(path) + " · " + path.stem.replace("_", " ")).strip(" ·"))}</figcaption></figure>'
         for path, encoded in images
     )
     return f'<h3>QC visualizations</h3><div class="gallery">{figures}</div>'
+
+
+def measurement_set_names(data: dict[str, Any]) -> list[str]:
+    observed = data.get("observed_metrics", {}) if data else {}
+    names = {
+        str(row.get("measurement_set"))
+        for row in observed.get("mapping_json", [])
+        if row.get("measurement_set")
+    }
+    names.update(
+        str(row.get("measurement_set"))
+        for row in observed.get("measurement_set_rna_qc", {}).get("rows", [])
+        if row.get("measurement_set")
+    )
+    return sorted(names)
+
+
+def _percent_bar(value: Any, label: str) -> str:
+    numeric = number(value)
+    width = max(0.0, min(100.0, numeric if numeric is not None else 0.0))
+    shown = display_value(value)
+    return (
+        '<div class="mini-bar"><div class="mini-bar-label"><span>' + html.escape(label) +
+        '</span><strong>' + html.escape(shown) + '%</strong></div>'
+        f'<div class="mini-bar-track"><i style="width:{width:.2f}%"></i></div></div>'
+    )
+
+
+def mapping_measurement_set_cards(data: dict[str, Any]) -> str:
+    observed = data.get("observed_metrics", {}) if data else {}
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in observed.get("mapping_json", []):
+        if row.get("measurement_set"):
+            grouped[str(row["measurement_set"])].append(row)
+    if not grouped:
+        return ""
+    cards = []
+    for measurement_set, rows in sorted(grouped.items()):
+        rows = sorted(rows, key=lambda row: str(row.get("modality", "")))
+        total_reads = sum(number(row.get("metrics", {}).get("n_processed")) or 0 for row in rows)
+        modality_chips = "".join(
+            '<span>' + html.escape(str(row.get("modality", "unknown"))) + '</span>' for row in rows
+        )
+        modality_sections = []
+        for row in rows:
+            metrics = row.get("metrics", {})
+            modality = str(row.get("modality", "unknown"))
+            facts = [
+                ("Reads processed", metrics.get("n_processed")),
+                ("Pseudoaligned", f'{display_value(metrics.get("p_pseudoaligned"))}%'),
+                ("Unique", f'{display_value(metrics.get("p_unique"))}%'),
+                ("Reads on-list", f'{display_value(metrics.get("percentageReadsOnOnlist"))}%'),
+                ("Barcodes on-list", f'{display_value(metrics.get("percentageBarcodesOnOnlist"))}%'),
+                ("Median UMI/barcode", metrics.get("medianUMIsPerBarcode")),
+            ]
+            fact_html = "".join(
+                '<div class="measurement-fact"><span>' + html.escape(label) + '</span><strong>' +
+                html.escape(display_value(value)) + '</strong></div>' for label, value in facts
+            )
+            bars = _percent_bar(metrics.get("p_pseudoaligned"), "Pseudoaligned")
+            if metrics.get("percentageReadsOnOnlist") is not None:
+                bars += _percent_bar(metrics.get("percentageReadsOnOnlist"), "Reads on-list")
+            modality_sections.append(
+                '<section class="modality-block"><h4>' + html.escape(modality) + '</h4>' +
+                '<div class="measurement-facts">' + fact_html + '</div>' + bars + '</section>'
+            )
+        cards.append(
+            '<details class="measurement-card"><summary><div><span class="measurement-name">' +
+            html.escape(measurement_set) + '</span><span class="measurement-subtitle">' +
+            html.escape(", ".join(str(row.get("modality", "unknown")) for row in rows)) +
+            '</span></div><div class="measurement-summary"><strong>' +
+            html.escape(display_value(int(total_reads))) + '</strong><span>processed reads</span></div>' +
+            '<div class="modality-chips">' + modality_chips + '</div></summary>' +
+            '<div class="measurement-body">' + "".join(modality_sections) + '</div></details>'
+        )
+    return (
+        '<div class="measurement-section"><div class="measurement-section-head"><div>'
+        '<span class="eyebrow">Measurement-set hierarchy</span><h3>Mapping by measurement set</h3>'
+        '<p>Open a card to inspect RNA and feature-barcode mapping separately.</p></div>'
+        f'<span class="measurement-count">{len(cards)} sets</span></div>' + "".join(cards) + '</div>'
+    )
+
+
+def guide_mapping_qc_content(root: Path | None) -> str:
+    """Render configured orientation and post-mapping barcode recovery."""
+    if not root or not root.exists():
+        return ""
+    reports = sorted(root.glob("**/guide_mapping_qc.json"))
+    tables = sorted(root.glob("**/guide_mapping_qc.tsv"))
+    if not reports:
+        return ""
+    try:
+        report = json.loads(reports[-1].read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    overall = report.get("overall", {})
+    orientation = report.get("configured_orientation", {})
+    status = str(report.get("status", "UNKNOWN"))
+    cards = [
+        metric_card("Recovery gate", status, "before guide assignment"),
+        metric_card(
+            "Guide orientation",
+            "reverse complement" if orientation.get("reverse_complement_guides") else "as supplied",
+            "guide reference",
+        ),
+        metric_card("Spacer tag", display_value(orientation.get("spacer_tag")), "guide search anchor"),
+        metric_card("RNA cells", display_value(overall.get("rna_cells")), "after RNA QC"),
+        metric_card("Guide-mapped cells", display_value(overall.get("guide_cells")), "before intersection"),
+        metric_card("RNA-guide overlap", display_value(overall.get("mudata_intersection_cells")), "exact barcodes"),
+        metric_card(
+            "Recovered guide designs",
+            f'{display_value(overall.get("expected_guides_with_nonzero_counts"))} / {display_value(overall.get("expected_guides"))}',
+            "at least one mapped UMI",
+        ),
+    ]
+    rows = []
+    if tables:
+        try:
+            with tables[-1].open(newline="", encoding="utf-8", errors="replace") as handle:
+                rows = list(csv.DictReader(handle, delimiter="\t"))
+        except OSError:
+            rows = []
+    columns = [
+        ("measurement_set", "Measurement set"),
+        ("rna_cells", "RNA cells"),
+        ("guide_cells", "Guide cells"),
+        ("overlap_cells", "Exact overlap"),
+        ("guide_to_rna_fraction", "Guide/RNA fraction"),
+        ("overlap_to_guide_fraction", "Overlap/guide fraction"),
+        ("status", "Status"),
+        ("reason", "Reason"),
+    ]
+    failures = report.get("failures", [])
+    failure_html = ""
+    if failures:
+        failure_html = '<div class="callout warn"><strong>Recovery warning</strong><br>' + html.escape(" | ".join(map(str, failures))) + "</div>"
+    return (
+        '<div class="measurement-section"><div class="measurement-section-head"><div>'
+        '<span class="eyebrow">Pre-assignment validation</span><h3>Guide mapping and orientation QC</h3>'
+        '<p>Confirms the configured reference orientation, mapped guide cells, exact RNA–guide barcode overlap and recovered library designs before assignment.</p>'
+        '</div></div><div class="metrics">' + "".join(cards) + "</div>" + failure_html +
+        data_table(rows, columns, limit=max(1, len(rows))) + "</div>"
+    )
+
+
+def preprocessing_measurement_set_cards(
+    data: dict[str, Any], images: list[tuple[Path, str]]
+) -> tuple[str, set[Path]]:
+    observed = data.get("observed_metrics", {}) if data else {}
+    rows = observed.get("measurement_set_rna_qc", {}).get("rows", [])
+    if not rows:
+        return "", set()
+    used: set[Path] = set()
+    cards = []
+    plot_priority = ("knee_plot", "rna_qc_filter_flow", "rna_qc_filter_steps", "qc_distributions", "scrublet_scores")
+    for row in sorted(rows, key=lambda item: str(item.get("measurement_set", ""))):
+        measurement_set = str(row.get("measurement_set", "unknown"))
+        matching = [(path, encoded) for path, encoded in images if measurement_set.lower() in path.name.lower()]
+        matching.sort(key=lambda item: next(
+            (index for index, prefix in enumerate(plot_priority) if prefix in item[0].name.lower()),
+            len(plot_priority),
+        ))
+        used.update(path for path, _ in matching)
+        input_cells = number(row.get("input_barcodes")) or 0
+        retained = number(row.get("retained_cells")) or 0
+        retained_pct = (100.0 * retained / input_cells) if input_cells else 0.0
+        stages = [
+            ("Input barcodes", row.get("input_barcodes")),
+            ("Automatic knee", row.get("post_knee_cells")),
+            (f'RNA UMI ≥ {display_value(row.get("fixed_min_counts"))}', row.get("post_min_counts_cells")),
+            (f'{display_value(row.get("mad_total_counts_n"))} MAD counts + genes', row.get("post_mad_cells")),
+            ("After Scrublet" if row.get("scrublet_enabled") else "Scrublet skipped", row.get("retained_cells")),
+        ]
+        stage_html = "".join(
+            '<div class="filter-stage"><span>' + html.escape(label) + '</span><strong>' +
+            html.escape(display_value(value)) + '</strong></div>' for label, value in stages
+        )
+        plots = "".join(
+            f'<figure><img loading="lazy" src="data:image/png;base64,{encoded}" alt="{html.escape(path.stem)}">'
+            f'<figcaption>{html.escape(path.stem.replace("_", " "))}</figcaption></figure>'
+            for path, encoded in matching
+        )
+        facts = [
+            ("Knee UMI", row.get("knee_umi_threshold")),
+            ("Knee rank", row.get("knee_rank")),
+            ("Retained", row.get("retained_cells")),
+            ("Retained %", f"{retained_pct:.2f}%"),
+            ("Scrublet removed", row.get("removed_by_scrublet")),
+            ("PCA components", row.get("scrublet_n_prin_comps_used")),
+        ]
+        fact_html = "".join(
+            '<div class="measurement-fact"><span>' + html.escape(label) + '</span><strong>' +
+            html.escape(display_value(value)) + '</strong></div>' for label, value in facts
+        )
+        cards.append(
+            '<details class="measurement-card preprocessing-card"><summary><div><span class="measurement-name">' +
+            html.escape(measurement_set) + '</span><span class="measurement-subtitle">automatic knee → UMI → MAD → doublet policy</span></div>'
+            '<div class="measurement-summary"><strong>' + html.escape(display_value(int(retained))) +
+            f'</strong><span>retained · {retained_pct:.2f}%</span></div></summary>'
+            '<div class="measurement-body"><h4>Cell-filter sequence</h4><div class="filter-stages">' +
+            stage_html + '</div><div class="measurement-facts">' + fact_html + '</div>' +
+            ('<div class="measurement-plots">' + plots + '</div>' if plots else '<p class="empty">Plots have not been published for this set yet.</p>') +
+            '</div></details>'
+        )
+    return (
+        '<div class="measurement-section"><div class="measurement-section-head"><div>'
+        '<span class="eyebrow">Measurement-set hierarchy</span><h3>Preprocessing by measurement set</h3>'
+        '<p>Open a card to inspect the ordered filters, retained cells and associated QC plots.</p></div>'
+        f'<span class="measurement-count">{len(cards)} sets</span></div>' + "".join(cards) + '</div>', used
+    )
+
+
+def figure_measurement_set_cards(
+    images: list[tuple[Path, str]],
+    measurement_sets: list[str],
+    title: str,
+    description: str,
+    card_subtitle: str,
+) -> tuple[str, set[Path]]:
+    cards = []
+    used: set[Path] = set()
+    for measurement_set in measurement_sets:
+        matching = [
+            (path, encoded)
+            for path, encoded in images
+            if measurement_set.lower() in path.name.lower()
+        ]
+        if not matching:
+            continue
+        used.update(path for path, _ in matching)
+        plots = "".join(
+            f'<figure><img loading="lazy" src="data:image/png;base64,{encoded}" alt="{html.escape(path.stem)}">'
+            f'<figcaption>{html.escape(path.stem.replace("_", " "))}</figcaption></figure>'
+            for path, encoded in matching
+        )
+        cards.append(
+            '<details class="measurement-card figure-card"><summary><div><span class="measurement-name">' +
+            html.escape(measurement_set) + '</span><span class="measurement-subtitle">' +
+            html.escape(card_subtitle) + '</span></div><div class="measurement-summary"><strong>' +
+            str(len(matching)) + '</strong><span>QC plot' + ('s' if len(matching) != 1 else '') +
+            '</span></div></summary><div class="measurement-body"><div class="measurement-plots">' +
+            plots + '</div></div></details>'
+        )
+    if not cards:
+        return "", set()
+    return (
+        '<div class="measurement-section"><div class="measurement-section-head"><div>'
+        '<span class="eyebrow">Measurement-set hierarchy</span><h3>' + html.escape(title) + '</h3><p>' +
+        html.escape(description) + '</p></div><span class="measurement-count">' +
+        str(len(cards)) + ' sets</span></div>' + "".join(cards) + '</div>',
+        used,
+    )
+
+
+def measurement_set_filter_flow_content(root: Path | None) -> str:
+    if not root or not root.exists():
+        return ""
+    candidates = sorted(root.glob("**/measurement_set_qc_filter_flow.tsv"))
+    if not candidates:
+        return ""
+    with candidates[-1].open(newline="", encoding="utf-8", errors="replace") as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    columns = [
+        ("measurement_set", "Measurement set"),
+        ("step_order", "Order"),
+        ("filter_label", "Filter parameter"),
+        ("threshold", "Resolved rule"),
+        ("applied", "Applied"),
+        ("cells_before", "Cells before"),
+        ("cells_after", "Cells after"),
+        ("cells_removed", "Removed"),
+        ("removed_percent", "Removed %"),
+        ("retained_percent_of_input", "Input retained %"),
+    ]
+    return (
+        '<h3>Sequential per-measurement-set RNA filters</h3>'
+        '<p>Rows follow the exact execution order; disabled or inapplicable filters remain visible.</p>'
+        + data_table(rows, columns)
+    )
+
+
+def assignment_filter_flow_content(root: Path | None) -> str:
+    """Show guide and post-clone HTO filters in pipeline execution order."""
+    if not root or not root.exists():
+        return ""
+    specifications = [
+        (
+            "**/guide_assignment_filter_flow.tsv",
+            "Guide-assignment cell filter",
+            "This filter runs after guide calls and before clone removal.",
+        ),
+        (
+            "**/hto_filter_flow.tsv",
+            "HTO intersection filters",
+            "In the embedding workflow HTO support and singlet retention are calculated after guide QC, before the parallel clone/embedding branches.",
+        ),
+    ]
+    columns = [
+        ("measurement_set", "Measurement set"), ("step_order", "Order"),
+        ("filter_label", "Filter parameter"), ("threshold", "Resolved rule"),
+        ("applied", "Applied"), ("cells_before", "Cells before"),
+        ("cells_after", "Cells after"), ("cells_removed", "Removed"),
+        ("removed_percent", "Removed %"),
+        ("retained_percent_of_input", "Input retained %"),
+    ]
+    sections = []
+    for pattern, title, note in specifications:
+        candidates = sorted(root.glob(pattern))
+        if not candidates:
+            continue
+        rows = []
+        seen_tables = set()
+        for candidate in candidates:
+            digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+            if digest in seen_tables:
+                continue
+            seen_tables.add(digest)
+            with candidate.open(newline="", encoding="utf-8", errors="replace") as handle:
+                rows.extend(csv.DictReader(handle, delimiter="\t"))
+        sections.append(f"<h3>{html.escape(title)}</h3><p>{html.escape(note)}</p>" + data_table(rows, columns))
+    return "".join(sections)
+
+
+def postconcat_qc_content(root: Path | None) -> str:
+    if not root or not root.exists():
+        return '<p>Post-concatenation QC artifacts have not been published yet.</p>'
+    stages = {}
+    for path in sorted(root.rglob('embedding_qc_metrics.json')):
+        try:
+            row = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        stages[row.get('stage', str(path))] = (row, path.parent)
+    if not stages:
+        clone_paths = sorted(root.rglob('clone_metrics.tsv'))
+        if clone_paths:
+            with clone_paths[-1].open() as handle:
+                clone_rows = list(csv.DictReader(handle, delimiter='\t'))
+            if clone_rows:
+                content = '<h3>Clone calling/removal</h3>' + data_table(
+                    clone_rows, [(key, key.replace('_', ' ')) for key in clone_rows[0]]
+                )
+                content += '<p>Embedding QC was not produced by this run.</p>'
+                return content
+        return '<p>Post-concatenation QC artifacts have not been published yet.</p>'
+    rows = []
+    for _, (source, _) in sorted(stages.items(), reverse=True):
+        row = source.copy()
+        cell_cycle = source.get('cell_cycle', {})
+        leiden = source.get('leiden', {})
+        row.update(cell_cycle_status=cell_cycle.get('status', '—'),
+                   cell_cycle_overlap=(f"S {cell_cycle.get('s_markers_present', '—')} / "
+                                       f"G2M {cell_cycle.get('g2m_markers_present', '—')}"),
+                   leiden_status=leiden.get('status', '—'),
+                   leiden_diagnostic_clusters=leiden.get('diagnostic_clusters', '—'))
+        rows.append(row)
+    content = '<h3>Actual normalization and embedding settings</h3>' + data_table(rows, [
+        ('stage', 'Stage'), ('status', 'Status'), ('input_cells', 'Input cells'),
+        ('retained_cells', 'After MT'), ('cells', 'Cells embedded'), ('mito_cutoff', 'MT cutoff %'),
+        ('normalization_target_sum', 'Median-depth target'), ('feature_selection', 'Feature selection'), ('genes', 'Expressed genes'),
+        ('pca_features', 'PCA features'), ('requested_pcs', 'Requested PCs'), ('effective_pcs', 'Used PCs'),
+        ('effective_neighbors', 'Neighbors'), ('genes_after', 'Delivered genes'),
+        ('cell_cycle_status', 'Cell cycle'), ('cell_cycle_overlap', 'CC markers represented'),
+        ('leiden_status', 'Leiden sweep'), ('leiden_diagnostic_clusters', 'Diagnostic clusters'),
+        ('normalized_matrix_saved', 'Normalized matrix saved'), ('omitted_covariates', 'Unavailable covariates')])
+    content += '<p>No batch correction. Independent pre/post-clone UMAPs can rotate; compare covariate patterns, not absolute positions. TAP-seq measures a targeted panel, not the entire transcriptome.</p>'
+    for stage, (row, directory) in sorted(stages.items(), reverse=True):
+        flow = directory / 'measurement_filter_flow.tsv'
+        if flow.exists():
+            with flow.open() as handle:
+                flow_rows = list(csv.DictReader(handle, delimiter='\t'))
+            content += f'<h3>{html.escape(stage)}: mitochondrial filtering by measurement set</h3>' + data_table(flow_rows, [
+                ('measurement_set', 'Measurement set'), ('cells_before', 'Before'), ('cells_after', 'After'),
+                ('cells_removed', 'Removed'), ('threshold', 'MT cutoff %')])
+    clone_paths = sorted(root.rglob('clone_metrics.tsv'))
+    if clone_paths:
+        with clone_paths[-1].open() as handle:
+            clone_rows = list(csv.DictReader(handle, delimiter='\t'))
+        if clone_rows:
+            content += '<h3>Clone calling/removal</h3>' + data_table(clone_rows, [(k, k.replace('_', ' ')) for k in clone_rows[0]])
+            for row in clone_rows:
+                if row.get('applicability') == 'low_power_warning':
+                    content += '<p class="empty"><strong>Clone-calling applicability warning:</strong> ' + html.escape(row.get('applicability_note', '')) + '</p>'
+    content += ('<h3>Scope relative to the reference QC scripts</h3>'
+                '<p>Implemented: median-depth normalization, log1p, HVG/all-panel feature selection, '
+                'scale clipping at 10, PCA variance, PCA/UMAP covariate panels, PCA measurement-set facets, '
+                'cell-cycle scoring for eligible whole-transcriptome assays, native-igraph Leiden sweeps and '
+                'measurement-set composition views. Cell-cycle scoring is skipped automatically for targeted '
+                'TAP-seq panels unless explicitly forced. These are descriptive QC views; no transformed matrix, '
+                'embedding or cluster assignment is saved into the inference MuData.</p>')
+    return content
 
 
 def clean_html_cell(value: str) -> str:
@@ -387,6 +967,8 @@ def evaluation_artifact_content(root: Path | None) -> str:
         return ""
     evaluation = root / "evaluation_output"
     if not evaluation.is_dir():
+        evaluation = root / "pipeline_dashboard" / "evaluation_output"
+    if not evaluation.is_dir():
         return '<h3>Evaluation outputs</h3><div class="empty">Evaluation artifacts are not available yet.</div>'
     rows = []
     skip_notes = []
@@ -420,7 +1002,12 @@ def sanitized_tail(path: Path, lines: int) -> str:
 def failure_content(rows: list[dict[str, str]], nextflow_log: Path | None, tail_lines: int) -> str:
     failed = [row for row in rows if row.get("status", "").upper() in {"FAILED", "ABORTED"}]
     log_tail = sanitized_tail(nextflow_log, max(tail_lines * 2, 40)) if nextflow_log else ""
-    if not failed and not any(marker in log_tail for marker in ("ERROR", "Exception", "Error executing")):
+    has_pipeline_error = bool(re.search(
+        r"(?im)^(?:ERROR\s*~|.*Error executing process|.*Execution cancelled|"
+        r".*terminated with an error|.*Session aborted\s*--\s*Cause)",
+        log_tail,
+    ))
+    if not failed and not has_pipeline_error:
         return ""
     blocks = []
     for row in failed:
@@ -487,7 +1074,9 @@ def seqspec_content(table_path: Path, image_path: Path | None) -> str:
 
 
 def render(args: argparse.Namespace) -> str:
-    trace_rows = read_trace(args.trace)
+    trace_rows = merge_live_tasks(
+        read_trace(args.trace), getattr(args, "nextflow_log", None)
+    )
     family_states = {family: family_state(trace_rows, family, args.status) for family, _, _ in FAMILIES}
     counts = Counter(row.get("status", "UNKNOWN").upper() for row in trace_rows)
     total_runtime = sum(duration_seconds(row.get("realtime") or row.get("duration", "")) for row in trace_rows)
@@ -498,18 +1087,26 @@ def render(args: argparse.Namespace) -> str:
     qc_metrics_json = getattr(args, "qc_metrics_json", None)
     if qc_metrics_json and qc_metrics_json.exists():
         qc_data = json.loads(qc_metrics_json.read_text(encoding="utf-8"))
+    omitted_images = []
     artifact_images = collect_images(
-        getattr(args, "artifact_dir", None), getattr(args, "max_image_bytes", 10_000_000)
+        getattr(args, "artifact_dir", None), getattr(args, "max_image_bytes", 32_000_000), omitted_images
     )
+
+    if args.status.lower() == "completed" and measurement_set_names(qc_data):
+        current = "preprocessing"
+    else:
+        current = next((family for family, _, _ in reversed(FAMILIES)
+                        if family_states[family]["status"] in {"failed", "running", "completed"}),
+                       "input")
 
     graph_nodes = []
     for index, (family, title, subtitle) in enumerate(FAMILIES, start=1):
         state = family_states[family]
         graph_nodes.append(
-            f'<button class="node {state["status"]}" data-family="{family}" onclick="selectFamily(\'{family}\')">'
+            f'<label for="family-tab-{family}" class="node {state["status"]}" data-family="{family}" tabindex="0" role="tab">'
             f'<span class="node-index">{index:02d}</span><span class="node-status"></span>'
             f'<strong>{html.escape(title)}</strong><small>{html.escape(subtitle)}</small>'
-            f'<span class="node-count">{state["completed"]} complete · {state["failed"]} failed</span></button>'
+            f'<span class="node-count">{state["completed"]} complete · {state["running"]} running · {state["failed"]} failed</span></label>'
         )
 
     sections = []
@@ -517,11 +1114,46 @@ def render(args: argparse.Namespace) -> str:
         state = family_states[family]
         cards = [
             metric_card("Completed", state["completed"], "processes"),
+            metric_card("Running", state["running"], "processes"),
             metric_card("Failed", state["failed"], "processes"),
             metric_card("Cached", state["cached"], "processes"),
             metric_card("Task runtime", fmt_seconds(state["runtime"]), "aggregate"),
         ]
-        extra = qc_metrics_content(qc_data, family)
+        family_images = artifact_images.get(family, [])
+        extra = category_flow(qc_data, family) + qc_metrics_content(qc_data, family)
+        if family == "mapping":
+            extra += mapping_measurement_set_cards(qc_data)
+            extra += guide_mapping_qc_content(getattr(args, "artifact_dir", None))
+        if family == "preprocessing":
+            measurement_cards, used_images = preprocessing_measurement_set_cards(qc_data, family_images)
+            extra += measurement_cards
+            family_images = [(path, encoded) for path, encoded in family_images if path not in used_images]
+            extra += measurement_set_filter_flow_content(getattr(args, "artifact_dir", None))
+        if family == "guide_assignment":
+            assignment_cards, used_images = figure_measurement_set_cards(
+                family_images, measurement_set_names(qc_data),
+                "Guide assignment by measurement set",
+                "Open a card to inspect guide-cell calling and assignment filtering for that set.",
+                "guide calling and assignment filters",
+            )
+            extra += assignment_cards
+            family_images = [(path, encoded) for path, encoded in family_images if path not in used_images]
+            extra += assignment_filter_flow_content(getattr(args, "artifact_dir", None))
+        if family == 'postconcat_qc':
+            postconcat_cards, used_images = figure_measurement_set_cards(
+                family_images, measurement_set_names(qc_data),
+                "Post-concatenation views by measurement set",
+                "Open a card to inspect how each set occupies normalized PCA and UMAP space.",
+                "normalized embedding views",
+            )
+            extra += postconcat_cards
+            family_images = [(path, encoded) for path, encoded in family_images if path not in used_images]
+            extra += postconcat_qc_content(getattr(args, 'artifact_dir', None))
+        if family == 'final':
+            included = sum(len(items) for items in artifact_images.values())
+            extra += f'<h3>QC image coverage</h3><p data-images-included="{included}" data-images-omitted="{len(omitted_images)}">{included} unique stage-specific QC images embedded; {len(omitted_images)} omitted by the configured size budget.</p>'
+            if omitted_images:
+                extra += data_table(omitted_images, [('plot', 'Omitted plot'), ('bytes', 'Bytes'), ('reason', 'Reason')], limit=len(omitted_images))
         if family == "input" and guide:
             cards.extend([
                 metric_card("Guides", guide.get("row_count", "—"), "validated"),
@@ -535,7 +1167,7 @@ def render(args: argparse.Namespace) -> str:
             extra += final_inference_content(getattr(args, "final_dashboard_html", None))
         if family == "evaluation":
             extra += evaluation_artifact_content(getattr(args, "artifact_dir", None))
-        extra += image_gallery(artifact_images.get(family, []))
+        extra += image_gallery(family_images)
         sections.append(
             f'<section id="family-{family}" class="family-panel"><div class="family-heading">'
             f'<div><span class="eyebrow">Pipeline family</span><h2>{html.escape(title)}</h2>'
@@ -543,8 +1175,24 @@ def render(args: argparse.Namespace) -> str:
             f'<div class="metrics">{"".join(cards)}</div>{extra}<h3>Processes</h3>{process_table(state["rows"])}</section>'
         )
 
-    current = next((family for family, _, _ in reversed(FAMILIES) if family_states[family]["status"] in {"failed", "running", "completed"}), "input")
+    if args.status.lower() == "completed" and measurement_set_names(qc_data):
+        current = "preprocessing"
+    else:
+        current = next((family for family, _, _ in reversed(FAMILIES)
+                        if family_states[family]["status"] in {"failed", "running", "completed"}),
+                       "input")
     generated = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    family_tabs = "".join(
+        f'<input class="family-tab" type="radio" name="pipeline-family" id="family-tab-{family}"'
+        f'{" checked" if family == current else ""}>'
+        for family, _, _ in FAMILIES
+    )
+    family_tab_css = "".join(
+        f'#family-tab-{family}:checked~.graph-card .node[data-family="{family}"]'
+        f'{{transform:translateY(-3px);border-color:var(--cyan);box-shadow:0 0 0 2px #0f8fc522}}'
+        f'#family-tab-{family}:checked~.family-panels #family-{family}{{display:block}}'
+        for family, _, _ in FAMILIES
+    )
     failures = failure_content(
         trace_rows, getattr(args, "nextflow_log", None), getattr(args, "tail_lines", 30)
     )
@@ -552,22 +1200,29 @@ def render(args: argparse.Namespace) -> str:
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CRISPR Pipeline · {html.escape(args.run_name)}</title>
 <style>
-:root{{--bg:#07111f;--panel:#0d1b2d;--panel2:#11243a;--line:#29405d;--text:#edf5ff;--muted:#91a7c0;--cyan:#46d9ff;--green:#36d399;--red:#ff647c;--amber:#ffbd59;--grey:#63758a}}
-*{{box-sizing:border-box}} body{{margin:0;background:radial-gradient(circle at 20% 0,#12304b 0,transparent 38%),var(--bg);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,sans-serif}}
+:root{{--bg:#f6f8fb;--panel:#ffffff;--panel2:#ffffff;--line:#d8e1ec;--text:#0f172a;--muted:#64748b;--cyan:#0f8fc5;--green:#16a36a;--red:#d1435b;--amber:#d68a00;--grey:#94a3b8}}
+*{{box-sizing:border-box}} body{{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,sans-serif}}
 .shell{{max-width:1500px;margin:auto;padding:28px}} header{{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;margin-bottom:20px}} h1{{font-size:27px;margin:4px 0}} h2{{margin:3px 0 0;font-size:24px}} h3{{margin-top:28px}} p{{color:var(--muted);margin:4px 0}} .eyebrow{{color:var(--cyan);font:600 11px ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase}}
-.run-id{{font-family:ui-monospace,monospace;color:var(--muted)}} .live{{display:flex;align-items:center;gap:8px;background:#102840;border:1px solid #28587a;border-radius:99px;padding:8px 12px}} .live i{{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 12px var(--amber)}} .live.completed i{{background:var(--green);box-shadow:0 0 12px var(--green)}} .live.failed i,.live.interrupted i{{background:var(--red);box-shadow:0 0 12px var(--red)}} .live.running i{{background:var(--cyan);box-shadow:0 0 12px var(--cyan)}}
-.summary,.metrics{{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:18px 0}} .metric{{background:linear-gradient(145deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:14px}} .metric-label{{color:var(--muted);font-size:12px}} .metric-value{{font-size:24px;font-weight:750;margin-top:4px}} .metric-detail{{color:#66809d;font-size:11px}}
-.graph-card,.family-panel{{background:rgba(13,27,45,.92);border:1px solid var(--line);border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 18px 55px #0004}} .graph-head{{display:flex;justify-content:space-between;align-items:center}} .graph{{display:flex;align-items:stretch;overflow-x:auto;padding:20px 2px 10px}} .node{{position:relative;flex:0 0 145px;min-height:132px;text-align:left;color:var(--text);background:#102036;border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:.18s}} .node:hover,.node.active{{transform:translateY(-3px);border-color:var(--cyan);box-shadow:0 0 0 2px #46d9ff22}} .node:not(:last-child){{margin-right:29px}} .node:not(:last-child):after{{content:'→';position:absolute;right:-23px;top:49px;color:#55708d;font-size:22px}} .node strong,.node small,.node-count{{display:block}} .node strong{{margin-top:18px}} .node small{{color:var(--muted);font-size:11px;min-height:34px}} .node-count{{font-size:10px;color:#7890aa;margin-top:7px}} .node-index{{font:600 10px ui-monospace,monospace;color:#6c86a1}} .node-status{{position:absolute;right:12px;top:12px;width:10px;height:10px;border-radius:50%;background:var(--grey)}}
-.node.completed .node-status,.completed.status-badge{{background:var(--green)}} .node.running .node-status,.running.status-badge{{background:var(--cyan);box-shadow:0 0 12px var(--cyan)}} .node.failed .node-status,.failed.status-badge{{background:var(--red)}} .node.pending{{opacity:.65}} .family-panel{{display:none}} .family-panel.active{{display:block}} .family-heading{{display:flex;justify-content:space-between;align-items:flex-start}} .status-badge{{border-radius:99px;padding:5px 10px;text-transform:uppercase;font-size:10px;font-weight:800;color:#06121e;background:var(--grey)}}
-.table-wrap{{overflow:auto;border:1px solid var(--line);border-radius:10px}} table{{border-collapse:collapse;width:100%;min-width:700px}} th,td{{text-align:left;padding:10px 12px;border-bottom:1px solid #20364f}} th{{color:#8fa9c3;background:#0b1828;font-size:11px;text-transform:uppercase;letter-spacing:.06em}} td{{font-family:ui-monospace,monospace;font-size:12px}} .pill{{padding:3px 7px;border-radius:99px;background:#31445a;font-size:10px}} .pill.completed,.pill.cached{{background:#123f37;color:#7ff0c1}} .pill.failed,.pill.aborted{{background:#4d1f2b;color:#ff93a4}} figure{{margin:18px 0;background:#fff;border-radius:12px;padding:10px}} figure img{{display:block;max-width:100%;margin:auto}} figcaption{{color:#50647b;padding:8px 4px 2px}} .empty{{color:var(--muted);border:1px dashed var(--line);border-radius:10px;padding:20px}} footer{{color:#607994;font-size:11px;margin:20px 2px}}
-.gallery{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}} .gallery figure{{margin:0;min-width:0}} .failure-evidence{{background:#24131c;border:1px solid #733044;border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 18px 55px #0004}} details{{background:#120f18;border:1px solid #4c2936;border-radius:10px;margin-top:10px;padding:10px 12px}} summary{{cursor:pointer;font-weight:700;color:#ff9bab}} pre{{white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;background:#080d16;border-radius:8px;padding:12px;color:#d8e5f5;font:11px/1.45 ui-monospace,monospace}} .evidence-note{{color:var(--amber)}} .table-search{{width:min(520px,100%);background:#081523;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin:0 0 10px}} .result-block{{border-top:1px solid var(--line);margin-top:22px;padding-top:2px}} .qc-callout{{border:1px solid #6e5524;background:#211b10;border-radius:10px;padding:12px;margin:10px 0}}
-@media(max-width:700px){{.shell{{padding:15px}}header{{display:block}}.live{{margin-top:12px;width:max-content}}}}
+.run-id{{font-family:ui-monospace,monospace;color:var(--muted)}} .live{{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:99px;padding:8px 12px}} .live i{{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 12px var(--amber)}} .live.completed i{{background:var(--green);box-shadow:0 0 12px var(--green)}} .live.failed i,.live.interrupted i{{background:var(--red);box-shadow:0 0 12px var(--red)}} .live.running i{{background:var(--cyan);box-shadow:0 0 12px var(--cyan)}}
+.summary,.metrics{{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:18px 0}} .metric{{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 5px 18px #0f172a0d}} .metric-label{{color:var(--muted);font-size:12px}} .metric-value{{font-size:24px;font-weight:750;margin-top:4px}} .metric-detail{{color:#66809d;font-size:11px}}
+.graph-card,.family-panel{{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 12px 30px #0f172a12}} .graph-head{{display:flex;justify-content:space-between;align-items:center}} .graph{{display:flex;align-items:stretch;overflow-x:auto;padding:20px 2px 10px}} .node{{position:relative;text-decoration:none;flex:0 0 145px;min-height:132px;text-align:left;color:var(--text);background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:.18s}} .node:hover,.node.active{{transform:translateY(-3px);border-color:var(--cyan);box-shadow:0 0 0 2px #0f8fc522}} .node:not(:last-child){{margin-right:29px}} .node:not(:last-child):after{{content:'→';position:absolute;right:-23px;top:49px;color:#94a3b8;font-size:22px}} .node strong,.node small,.node-count{{display:block}} .node strong{{margin-top:18px}} .node small{{color:var(--muted);font-size:11px;min-height:34px}} .node-count{{font-size:10px;color:#7890aa;margin-top:7px}} .node-index{{font:600 10px ui-monospace,monospace;color:#6c86a1}} .node-status{{position:absolute;right:12px;top:12px;width:10px;height:10px;border-radius:50%;background:var(--grey)}}
+.node.completed .node-status,.completed.status-badge{{background:var(--green)}} .node.running .node-status,.running.status-badge{{background:var(--cyan);box-shadow:0 0 12px var(--cyan)}} .node.failed .node-status,.failed.status-badge{{background:var(--red)}} .node.pending{{opacity:.65}} .family-tab{{position:absolute;inline-size:1px;block-size:1px;opacity:0;pointer-events:none}} .family-panel{{display:none;scroll-margin-top:12px}} {family_tab_css} .family-heading{{display:flex;justify-content:space-between;align-items:flex-start}} .status-badge{{border-radius:99px;padding:5px 10px;text-transform:uppercase;font-size:10px;font-weight:800;color:#06121e;background:var(--grey)}}
+.table-wrap{{overflow:auto;border:1px solid var(--line);border-radius:10px}} table{{border-collapse:collapse;width:100%;min-width:700px}} th,td{{text-align:left;padding:10px 12px;border-bottom:1px solid #e2e8f0}} th{{color:#475569;background:#f1f5f9;font-size:11px;text-transform:uppercase;letter-spacing:.06em}} td{{font-family:ui-monospace,monospace;font-size:12px}} .pill{{padding:3px 7px;border-radius:99px;background:#e2e8f0;font-size:10px}} .pill.completed,.pill.cached{{background:#dcfce7;color:#166534}} .pill.running,.pill.submitted,.pill.new{{background:#e0f2fe;color:#075985}} .pill.failed,.pill.aborted{{background:#ffe4e6;color:#be123c}} figure{{margin:18px 0;background:#fff;border-radius:12px;padding:10px}} figure img{{display:block;max-width:100%;margin:auto}} figcaption{{color:#50647b;padding:8px 4px 2px}} .empty{{color:var(--muted);border:1px dashed var(--line);border-radius:10px;padding:20px}} footer{{color:#607994;font-size:11px;margin:20px 2px}}
+.gallery{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}} .gallery figure{{margin:0;min-width:0}} .failure-evidence{{background:#fff1f2;border:1px solid #fecdd3;border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 12px 30px #0f172a12}} details{{background:#fff;border:1px solid #fecdd3;border-radius:10px;margin-top:10px;padding:10px 12px}} summary{{cursor:pointer;font-weight:700;color:#be123c}} pre{{white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;background:#f8fafc;border-radius:8px;padding:12px;color:#334155;font:11px/1.45 ui-monospace,monospace}} .evidence-note{{color:var(--amber)}} .table-search{{width:min(520px,100%);background:#fff;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin:0 0 10px}} .result-block{{border-top:1px solid var(--line);margin-top:22px;padding-top:2px}} .qc-callout{{border:1px solid #fde68a;background:#fffbeb;border-radius:10px;padding:12px;margin:10px 0}}
+.measurement-section{{margin:24px 0;padding:16px;border:1px solid var(--line);border-radius:14px;background:#f8fafc}} .measurement-section-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:10px}} .measurement-section-head h3{{margin:3px 0}} .measurement-count{{white-space:nowrap;background:#dff3fb;color:#075985;border-radius:99px;padding:6px 10px;font-size:11px;font-weight:800}}
+details.measurement-card{{border-color:var(--line);border-radius:12px;padding:0;overflow:hidden;box-shadow:0 4px 14px #0f172a0a}} details.measurement-card[open]{{border-color:#7dd3fc;box-shadow:0 0 0 2px #0ea5e91a}} details.measurement-card>summary{{list-style:none;color:var(--text);display:grid;grid-template-columns:auto minmax(240px,1fr) auto auto;align-items:center;gap:18px;padding:14px 16px;background:#fff}} details.measurement-card>summary::-webkit-details-marker{{display:none}} details.measurement-card>summary:before{{content:'›';font-size:22px;color:var(--cyan);transition:.15s}} details.measurement-card[open]>summary:before{{transform:rotate(90deg)}}
+.measurement-name,.measurement-subtitle,.measurement-summary span{{display:block}} .measurement-name{{font:700 13px ui-monospace,monospace}} .measurement-subtitle{{color:var(--muted);font-size:11px;font-weight:500;margin-top:2px}} .measurement-summary{{text-align:right}} .measurement-summary strong{{font-size:18px}} .measurement-summary span{{color:var(--muted);font-size:10px}} .modality-chips{{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}} .modality-chips span{{background:#e0f2fe;color:#075985;border-radius:99px;padding:4px 7px;font-size:10px;text-transform:uppercase}}
+.measurement-body{{border-top:1px solid var(--line);padding:16px;background:#fbfdff}} .measurement-body h4{{margin:4px 0 10px;text-transform:capitalize}} .modality-block{{border:1px solid var(--line);border-radius:10px;background:#fff;padding:14px;margin-bottom:12px}} .measurement-facts{{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:8px;margin:10px 0}} .measurement-fact{{background:#f1f5f9;border-radius:8px;padding:9px}} .measurement-fact span,.measurement-fact strong{{display:block}} .measurement-fact span{{color:var(--muted);font-size:10px}} .measurement-fact strong{{font-size:13px;margin-top:3px}}
+.mini-bar{{margin:10px 0}} .mini-bar-label{{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}} .mini-bar-track{{height:7px;border-radius:99px;background:#e2e8f0;overflow:hidden;margin-top:4px}} .mini-bar-track i{{display:block;height:100%;background:linear-gradient(90deg,#22d3ee,#0f8fc5);border-radius:99px}} .filter-stages{{display:flex;gap:22px;overflow-x:auto;padding:3px 2px 12px}} .filter-stage{{position:relative;flex:1 0 145px;border:1px solid var(--line);border-radius:9px;background:#fff;padding:10px}} .filter-stage:not(:last-child):after{{content:'→';position:absolute;right:-17px;top:31%;color:#94a3b8}} .filter-stage span,.filter-stage strong{{display:block}} .filter-stage span{{font-size:10px;color:var(--muted)}} .filter-stage strong{{font-size:16px;margin-top:3px}}
+.measurement-plots{{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px;margin-top:14px}} .measurement-plots figure{{margin:0;border:1px solid var(--line)}}
+.process-flow{{border:1px solid var(--line);background:#f8fafc;border-radius:12px;padding:14px;margin:18px 0}} .flow-steps{{display:flex;align-items:stretch;overflow-x:auto;gap:24px;padding:4px 2px}} .flow-step{{position:relative;flex:1 0 180px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px}} .flow-step:not(:last-child):after{{content:'→';position:absolute;right:-18px;top:38%;color:#94a3b8;font-size:20px}} .flow-step strong,.flow-step span{{display:block}} .flow-step span{{color:var(--muted);font-size:11px;margin-top:5px}} .filter-chips{{display:flex;flex-wrap:wrap;gap:7px}} .filter-chips span{{background:#e0f2fe;color:#0c4a6e;border-radius:99px;padding:5px 9px;font-size:11px}} .flow-note{{margin-top:9px;font-size:12px}}
+@media(max-width:700px){{.shell{{padding:15px}}header{{display:block}}.live{{margin-top:12px;width:max-content}}details.measurement-card>summary{{grid-template-columns:auto 1fr}}.measurement-summary,.modality-chips{{grid-column:2;text-align:left;justify-content:flex-start}}.measurement-plots{{grid-template-columns:1fr}}}}
 </style></head><body><div class="shell">
 <header><div><span class="eyebrow">CRISPR Pipeline · execution dashboard</span><h1>{html.escape(args.run_name)}</h1><div class="run-id">{html.escape(args.run_id)}</div></div><div class="live {html.escape(args.status.lower())}"><i></i><span>{html.escape(args.status.upper())}</span></div></header>
-<div class="summary">{metric_card("Completed", counts["COMPLETED"] + counts["CACHED"], "tasks")}{metric_card("Failed", counts["FAILED"] + counts["ABORTED"], "tasks")}{metric_card("Cached", counts["CACHED"], "tasks")}{metric_card("Task runtime", fmt_seconds(total_runtime), "aggregate")}{metric_card("Guides", guide.get("row_count", "—"), "validated")}</div>
+{family_tabs}
+<div class="summary">{metric_card("Completed", counts["COMPLETED"] + counts["CACHED"], "tasks")}{metric_card("Running", counts["RUNNING"] + counts["SUBMITTED"] + counts["NEW"], "tasks")}{metric_card("Failed", counts["FAILED"] + counts["ABORTED"], "tasks")}{metric_card("Cached", counts["CACHED"], "tasks")}{metric_card("Task runtime", fmt_seconds(total_runtime), "aggregate")}{metric_card("Guides", guide.get("row_count", "—"), "validated")}</div>
 <div class="graph-card"><div class="graph-head"><div><span class="eyebrow">Live dependency view</span><h2>Pipeline execution</h2></div><p>Click a family to inspect its QC and tasks</p></div><nav class="graph">{"".join(graph_nodes)}</nav></div>
-{failures}{"".join(sections)}<footer>Generated {generated} · Self-contained W&amp;B HTML media · No credentials, FASTQs or unbounded task logs embedded</footer></div>
-<script>function selectFamily(id){{const node=document.querySelector('[data-family="'+id+'"]'),panel=document.getElementById('family-'+id);if(!node||!panel)return;document.querySelectorAll('.node,.family-panel').forEach(x=>x.classList.remove('active'));node.classList.add('active');panel.classList.add('active');if(location.hash!=='#'+id)history.replaceState(null,'','#'+id);}}function filterTable(id,q){{q=q.toLowerCase();document.querySelectorAll('#'+id+' tbody tr').forEach(r=>r.style.display=r.textContent.toLowerCase().includes(q)?'':'none');}}selectFamily(location.hash.slice(1)||'{current}');window.addEventListener('hashchange',()=>selectFamily(location.hash.slice(1)));</script>
+{failures}<div class="family-panels">{"".join(sections)}</div><footer>Generated {generated} · Self-contained W&amp;B HTML media · No credentials, FASTQs or unbounded task logs embedded</footer></div>
 </body></html>'''
 
 
@@ -585,8 +1240,8 @@ def main() -> int:
     parser.add_argument("--final-dashboard-html", type=Path)
     parser.add_argument("--nextflow-log", type=Path)
     parser.add_argument("--tail-lines", type=int, default=30)
-    parser.add_argument("--max-image-bytes", type=int, default=10_000_000)
-    parser.add_argument("--max-html-bytes", type=int, default=20_000_000)
+    parser.add_argument("--max-image-bytes", type=int, default=38_000_000)
+    parser.add_argument("--max-html-bytes", type=int, default=100_000_000)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     document = render(args)
