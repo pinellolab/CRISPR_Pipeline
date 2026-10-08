@@ -1,7 +1,9 @@
 process sequencing_saturation {
     tag "RNA BUS rarefaction"
     cache 'lenient'
-    publishDir "${params.outdir}/sequencing_saturation", mode: params.publish_dir_mode, pattern: "saturation_qc/*", overwrite: true
+    // Publish the emitted directory itself. A nested `saturation_qc/*` pattern
+    // does not match a directory output, leaving the published folder empty.
+    publishDir "${params.outdir}", mode: params.publish_dir_mode, overwrite: true
 
     input:
         path mapping_dirs
@@ -10,7 +12,7 @@ process sequencing_saturation {
         path parsed_covariates
 
     output:
-        path "saturation_qc", emit: saturation_qc
+        path "sequencing_saturation", emit: saturation_qc
 
     script:
         def mapping_args = mapping_dirs.collect { it.toString() }.sort().join(' ')
@@ -24,14 +26,14 @@ process sequencing_saturation {
             --t2g ${transcriptome_t2g} \
             --covariates ${parsed_covariates} \
             --fractions '${params.SATURATION_downsample_fractions}' \
-            --outdir saturation_qc
+            --outdir sequencing_saturation
         """
 
     stub:
         """
-        mkdir -p saturation_qc
-        touch saturation_qc/sequencing_saturation_curve.tsv \
-              saturation_qc/sequencing_saturation_metrics.tsv \
-              saturation_qc/sequencing_saturation_curve.png
+        mkdir -p sequencing_saturation
+        touch sequencing_saturation/sequencing_saturation_curve.tsv \
+              sequencing_saturation/sequencing_saturation_metrics.tsv \
+              sequencing_saturation/sequencing_saturation_curve.png
         """
 }
