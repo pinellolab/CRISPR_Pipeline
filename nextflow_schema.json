@@ -15,6 +15,23 @@
                 "input"
             ],
             "properties": {
+                "ENABLE_POSTCONCAT_EMBEDDING_QC": {
+                    "type": "boolean", "default": true,
+                    "description": "Defer pooled MT/gene QC until guide/HTO intersection; visualize temporary normalization before and after optional clone removal."
+                },
+                "QC_EMBEDDING_n_pcs": {"type": "integer", "default": 50, "minimum": 2, "description": "Requested PCs; capped to cells/variable genes minus one and recorded in QC."},
+                "QC_EMBEDDING_n_neighbors": {"type": "integer", "default": 15, "minimum": 2, "description": "UMAP neighbor count."},
+                "QC_EMBEDDING_n_top_genes": {"type": "integer", "default": 6000, "minimum": 2, "description": "Maximum HVGs for temporary PCA; smaller panels use all expressed nonconstant genes."},
+                "QC_EMBEDDING_hvg_batch_key": {"type": "string", "default": "", "description": "Optional observed biological covariate for HVG selection only; never batch correction."},
+                "QC_EMBEDDING_seed": {"type": "integer", "default": 0, "minimum": 0, "description": "PCA/UMAP random seed."},
+                "QC_EMBEDDING_max_dense_gb": {"type": "number", "default": 16, "exclusiveMinimum": 0, "description": "Maximum estimated scaled-HVG array GB; exceedance fails with a resource message, never silent subsampling."},
+                "QC_EMBEDDING_cell_cycle": {"type": "string", "default": "auto", "enum": ["auto", "on", "off"], "description": "Cell-cycle scoring mode. auto scores non-TAP-seq human/mouse RNA and skips targeted TAP-seq panels."},
+                "QC_EMBEDDING_min_cell_cycle_genes": {"type": "integer", "default": 10, "minimum": 1, "description": "Minimum represented S and G2M markers required per phase before scoring."},
+                "QC_EMBEDDING_enable_leiden": {"type": "boolean", "default": true, "description": "Run a visualization-only Leiden resolution sweep on the temporary post-concatenation neighbor graph."},
+                "QC_EMBEDDING_leiden_resolutions": {"type": "string", "default": "0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2", "description": "Comma-separated nonnegative Leiden resolutions."},
+                "QC_EMBEDDING_leiden_diagnostic_resolution": {"type": "number", "default": 0.5, "minimum": 0, "description": "Requested resolution for the diagnostic measurement-set composition view; nearest sweep value is used."},
+                "QC_EMBEDDING_leiden_n_iterations": {"type": "integer", "default": 2, "minimum": 1, "description": "Native igraph Leiden iterations per resolution."},
+                "GUIDE_ASSIGNMENT_min_guides_per_cell": {"type": "integer", "default": 1, "minimum": 0, "description": "Minimum positive assigned guides; 1 excludes guide-negative cells, including before clone calling."},
                 "input": {
                     "type": [
                         "string",
@@ -69,12 +86,60 @@
                     "type": "boolean",
                     "default": true,
                     "description": "Reject degenerate HTO fits that classify essentially every nonzero count as positive.",
-                    "help_text": "The gate rejects an HTO when its minimum positive count is one, at least 99.5% of nonzero cells are positive, and at most 0.5% of zero-count cells are positive. Attempts and rejection reasons are written to gmm_demux_qc.json and stored as canonical JSON in hashing.uns."
+                    "help_text": "Reject a split when its minimum positive count is one and essentially all nonzero cells are called positive. Attempts and rejection reasons are written to gmm_demux_qc.json and stored as canonical JSON in hashing.uns."
+                },
+                "HTO_min_positive_cells": {
+                    "type": "integer",
+                    "default": 20,
+                    "minimum": 1,
+                    "description": "Minimum positive singlet cells required to call an HTO within a measurement set.",
+                    "help_text": "Calculated after guide-assignment QC and optional clone removal, so HTO support reflects only cells eligible for inference. Cells assigned to an HTO below this support are removed."
+                },
+                "HTO_keep_singlets_only": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Retain only positive HTO singlets after post-clone HTO support filtering.",
+                    "help_text": "When enabled, HTO-negative and HTO-multiplet cells are removed after under-supported HTO calls are excluded."
                 },
                 "ENABLE_SCRUBLET": {
                     "type": "boolean",
-                    "default": false,
-                    "description": "Run Scrublet doublet detection before guide assignment in non-hashing workflows."
+                    "default": true,
+                    "description": "Run Scrublet independently on every RNA measurement set after UMI and MAD filtering when hashing/HTO is disabled.",
+                    "help_text": "When ENABLE_DATA_HASHING=true, HTO singlet filtering replaces Scrublet and this option is ignored."
+                },
+                "SCRUBLET_assay_type": {
+                    "type": "string",
+                    "default": "droplet",
+                    "enum": ["droplet", "cc-perturb-seq"],
+                    "description": "Assay profile used to resolve the automatic Scrublet expected-doublet rate.",
+                    "help_text": "droplet resolves to 0.08; cc-perturb-seq resolves to 0.025. SCRUBLET_expected_doublet_rate overrides either profile when supplied."
+                },
+                "SCRUBLET_expected_doublet_rate": {
+                    "type": ["number", "null"],
+                    "default": null,
+                    "exclusiveMinimum": 0,
+                    "exclusiveMaximum": 1,
+                    "description": "Optional explicit Scrublet expected-doublet rate.",
+                    "help_text": "Leave null to resolve the rate from SCRUBLET_assay_type."
+                },
+                "SCRUBLET_n_prin_comps": {
+                    "type": "integer",
+                    "default": 30,
+                    "minimum": 1,
+                    "description": "Requested number of principal components for Scrublet."
+                },
+                "SCRUBLET_adaptive_pca_fallback": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Retry Scrublet with a smaller valid PCA dimension when the requested count exceeds the usable matrix dimension.",
+                    "help_text": "This catches only Scrublet's explicit n_components dimensionality error. Requested and actual dimensions and whether fallback occurred are recorded in measurement_set_qc_metrics.tsv. Other failures remain fatal."
+                },
+                "SCRUBLET_failure_policy": {
+                    "type": "string",
+                    "default": "error",
+                    "enum": ["error", "skip"],
+                    "description": "Behavior when Scrublet still fails after any adaptive PCA retry.",
+                    "help_text": "error stops the workflow. skip retains cells passing the preceding knee, UMI, and MAD filters, marks Scrublet as not applied for that measurement set, and records the exception in QC outputs and the dashboard."
                 },
                 "is_10x3v3": {
                     "type": "boolean",
@@ -223,17 +288,17 @@
             "properties": {
                 "QC_min_genes_per_cell": {
                     "type": "integer",
-                    "default": 800,
+                    "default": 0,
                     "minimum": 0,
-                    "description": "Minimum detected genes required to keep a cell when QC_barcode_filter is none.",
-                    "help_text": "A gene is considered present in a cell when its count is greater than zero in the RNA AnnData matrix. This parameter is passed to scanpy.pp.filter_cells(min_genes=...) and is only active when QC_barcode_filter = 'none'. When knee or knee2 filtering is enabled, total RNA UMI depth selects cells first and the min-genes cell filter is skipped."
+                    "description": "Deprecated compatibility parameter; fixed detected-gene cell filtering is no longer applied.",
+                    "help_text": "Use QC_MAD_n_genes for two-sided robust filtering of log1p_n_genes_by_counts."
                 },
                 "QC_min_counts_per_cell": {
                     "type": "integer",
-                    "default": 0,
+                    "default": 500,
                     "minimum": 0,
                     "description": "Minimum total RNA UMI count required to keep a cell after barcode calling.",
-                    "help_text": "This library-size filter is applied after none, knee, or knee2 barcode selection and therefore remains active when QC_min_genes_per_cell is skipped. Set to 0 to disable it."
+                    "help_text": "Applied independently to each measurement set immediately after knee-based barcode calling. Set to 0 to disable it."
                 },
                 "QC_min_cells_per_gene": {
                     "type": "number",
@@ -241,7 +306,26 @@
                     "minimum": 0,
                     "exclusiveMaximum": 1,
                     "description": "Minimum cell support required to keep a gene.",
-                    "help_text": "Fraction of retained cells required to keep a gene, passed to preprocessing and MuData guide-assignment aggregation. It must be in [0, 1); zero keeps genes detected in at least one cell."
+                    "help_text": "Applied once to the concatenated RNA matrix, after mitochondrial cell filtering and before MuData construction. It must be in [0, 1); zero keeps genes detected in at least one cell."
+                },
+                "QC_target_gene_rescue": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Rescue low-prevalence canonical intended-target genes after final cell QC.",
+                    "help_text": "When enabled, keep a gene if it passes QC_min_cells_per_gene OR it is a canonical intended target with at least QC_target_gene_min_assigned_cells unique assigned cells and RNA detection fraction >= QC_target_gene_min_detected_fraction. Controls cannot rescue genes."
+                },
+                "QC_target_gene_min_assigned_cells": {
+                    "type": "integer",
+                    "default": 20,
+                    "minimum": 1,
+                    "description": "Minimum unique guide-positive cells required for target-aware gene rescue."
+                },
+                "QC_target_gene_min_detected_fraction": {
+                    "type": "number",
+                    "default": 0.001,
+                    "minimum": 0,
+                    "exclusiveMaximum": 1,
+                    "description": "Minimum RNA detected-cell fraction required for target-aware gene rescue."
                 },
                 "QC_require_assigned_guide": {
                     "type": "boolean",
@@ -253,15 +337,33 @@
                 "TAPSEQ_QC_MODE": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Use TAP-seq gene-retention QC.",
-                    "help_text": "When enabled, preprocessing removes only genes undetected in every retained cell rather than applying the standard 10-cell prefilter. Set QC_min_cells_per_gene to a small fraction (for example 0.000001) to retain all observed TAP-seq genes after MuData aggregation."
+                    "description": "Deprecated compatibility parameter; gene retention is controlled by QC_min_cells_per_gene.",
+                    "help_text": "No absolute 10-cell preprocessing floor remains. Use a small QC_min_cells_per_gene fraction when a targeted assay should retain every observed panel gene."
                 },
                 "QC_pct_mito": {
                     "type": "number",
-                    "default": 15,
+                    "default": 25,
                     "minimum": 0,
                     "maximum": 100,
-                    "description": "Maximum mitochondrial read percentage allowed per cell."
+                    "description": "Maximum mitochondrial read percentage applied after RNA measurement-set concatenation."
+                },
+                "QC_MAD_total_counts": {
+                    "type": "number",
+                    "default": 5,
+                    "minimum": 0,
+                    "description": "Per-measurement-set two-sided MAD cutoff for log1p total RNA UMIs; zero disables it."
+                },
+                "QC_MAD_n_genes": {
+                    "type": "number",
+                    "default": 5,
+                    "minimum": 0,
+                    "description": "Per-measurement-set two-sided MAD cutoff for log1p detected genes; zero disables it."
+                },
+                "QC_MAD_pct_mito": {
+                    "type": "number",
+                    "default": 0,
+                    "minimum": 0,
+                    "description": "Deprecated compatibility parameter; mitochondrial MAD filtering is no longer applied."
                 },
                 "QC_batch_col": {
                     "type": "string",
@@ -270,14 +372,14 @@
                 },
                 "QC_barcode_filter": {
                     "type": "string",
-                    "default": "knee2",
+                    "default": "knee",
                     "enum": [
                         "none",
                         "knee",
                         "knee2"
                     ],
-                    "description": "RNA barcode filtering strategy based on total cell RNA UMI depth.",
-                    "help_text": "The preprocessing script sums RNA UMIs per cell, sorts barcodes from highest to lowest total_gene_umis, plots log1p(total_gene_umis) versus barcode rank, and estimates up to two knees. 'knee' uses the first/basic knee: the barcode-rank point with maximum distance from the line joining the highest-UMI and lowest-UMI barcodes. This is more permissive and keeps cells with total_gene_umis greater than or equal to the UMI count at that first knee. 'knee2' first restricts the curve to the high-UMI segment before knee1 and then finds a second/advanced knee using spline curvature; this is stricter and is intended to remove additional low-quality or background barcodes inside the initially retained population. 'none' disables UMI-knee filtering and instead applies QC_min_genes_per_cell. If the requested knee cannot be determined, barcode filtering is skipped with a log message; preprocessing then continues, and because QC_barcode_filter is not 'none', the min-genes cell filter is also skipped. Cells tied at the selected UMI threshold are retained."
+                    "description": "Per-measurement-set RNA barcode filtering based on total cell RNA UMI depth.",
+                    "help_text": "Each measurement set is processed before concatenation and gets its own barcode-rank plot and thresholds. 'knee' uses the first/basic knee; 'knee2' searches the high-UMI segment for a stricter second knee. The fixed RNA-UMI minimum and two-sided MAD rules follow cell calling. 'none' remains available for compatibility but does not activate a fixed detected-gene filter."
                 },
                 "ENABLE_CLONE_REMOVAL": {
                     "type": "boolean",
@@ -325,6 +427,39 @@
             "fa_icon": "fas fa-barcode",
             "description": "Guide assignment method and thresholds.",
             "properties": {
+                "GUIDE_MAPPING_QC_action": {
+                    "type": "string",
+                    "default": "error",
+                    "enum": ["error", "warn"],
+                    "description": "Stop or warn when guide mapping and RNA-guide barcode recovery are unusable."
+                },
+                "GUIDE_MAPPING_QC_min_overlap_cells_per_set": {
+                    "type": "integer",
+                    "default": 20,
+                    "minimum": 1,
+                    "description": "Minimum exact RNA-guide barcode overlap required in every measurement set."
+                },
+                "GUIDE_MAPPING_QC_min_guide_to_rna_fraction": {
+                    "type": "number",
+                    "default": 0.001,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Minimum fraction of retained RNA cells represented in the mapped guide matrix."
+                },
+                "GUIDE_MAPPING_QC_min_overlap_to_guide_fraction": {
+                    "type": "number",
+                    "default": 0.5,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Minimum fraction of guide-mapped cells sharing an exact RNA barcode."
+                },
+                "GUIDE_MAPPING_QC_min_recovered_guide_fraction": {
+                    "type": "number",
+                    "default": 0.5,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Minimum fraction of metadata guide IDs with at least one mapped UMI."
+                },
                 "GUIDE_ASSIGNMENT_method": {
                     "type": "string",
                     "default": "sceptre",
@@ -363,6 +498,13 @@
                     "default": 5,
                     "minimum": 1,
                     "description": "Number of EM initializations passed to SCEPTRE guide assignment."
+                },
+                "GUIDE_ASSIGNMENT_max_guides_per_cell": {
+                    "type": "integer",
+                    "default": 15,
+                    "minimum": 0,
+                    "description": "Maximum number of assigned gRNAs allowed in a retained cell after guide assignment.",
+                    "help_text": "Cells with more assigned guides are removed before clone detection and inference. The count comes from guide.layers['guide_assignment'], not raw guide UMIs. Set 0 to disable."
                 }
             }
         },

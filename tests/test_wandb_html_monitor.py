@@ -52,6 +52,69 @@ def test_signature_changes_when_trace_changes(tmp_path):
     assert monitor.input_signature(paths, trace, status) != first
 
 
+def test_nested_publication_triggers_refresh_without_trace_change(tmp_path):
+    root = tmp_path/'outputs'
+    nested = root/'postconcat_embedding_qc'/'after_clone'
+    nested.mkdir(parents=True)
+    paths = {'artifact_dir':root}
+    trace, status = tmp_path/'trace.tsv', tmp_path/'status.json'
+    first = monitor.input_signature(paths, trace, status)
+    (nested/'pca.png').write_bytes(b'new-plot')
+    assert monitor.input_signature(paths, trace, status) != first
+
+
+def test_signature_changes_when_nextflow_log_reports_live_progress(tmp_path):
+    trace = tmp_path / "trace.tsv"
+    status = tmp_path / "status.json"
+    log = tmp_path / "nextflow.log"
+    trace.write_text("status\n", encoding="utf-8")
+    log.write_text("submitted\n", encoding="utf-8")
+    paths = {"missing": tmp_path / "missing"}
+    first = monitor.input_signature(paths, trace, status, log)
+    log.write_text("submitted\nrunning\n", encoding="utf-8")
+    assert monitor.input_signature(paths, trace, status, log) != first
+
+
+def test_final_update_keeps_advanced_execution_dashboard(tmp_path):
+    dashboard_dir = tmp_path / "pipeline_dashboard"
+    figures = dashboard_dir / "figures"
+    svg = dashboard_dir / "svg"
+    figures.mkdir(parents=True)
+    svg.mkdir()
+    # A minimal valid PNG is not required by the renderer; it embeds bytes.
+    (figures / "qc.png").write_bytes(b"png-bytes")
+    (svg / "plot.svg").write_text("<svg></svg>", encoding="utf-8")
+    dashboard = dashboard_dir / "dashboard.html"
+    dashboard.write_text(
+        '<html><body><img src="svg/plot.svg">'
+        '<button data-imgsrc="figures/qc.png">QC</button></body></html>',
+        encoding="utf-8",
+    )
+
+    trace = tmp_path / "trace.tsv"
+    trace.write_text("task_id\tprocess\tstatus\n1\tinputCheck\tCOMPLETED\n", encoding="utf-8")
+    output = tmp_path / "telemetry" / "pipeline_execution.html"
+    args = type("Args", (), {
+        "outdir": tmp_path,
+        "run_name": "run-a",
+        "trace": trace,
+        "source_run_id": "source-a",
+        "dashboard_html": output,
+        "nextflow_log": tmp_path / "nextflow.log",
+        "tail_lines": 30,
+        "max_image_bytes": 1_000_000,
+    })()
+
+    monitor.render_snapshot(args, "completed", True)
+    result = output.read_text(encoding="utf-8")
+
+    assert "Live dependency view" in result
+    assert "Pipeline execution" in result
+    assert "Pipeline family" in result
+    assert "data:image/png;base64," in result
+    assert result != dashboard.read_text(encoding="utf-8")
+
+
 def test_wrapper_preserves_nextflow_exit_when_telemetry_is_unavailable(tmp_path):
     fake_nextflow = tmp_path / "nextflow"
     fake_nextflow.write_text("#!/usr/bin/env bash\nexit 7\n", encoding="utf-8")
@@ -96,3 +159,32 @@ def test_wrapper_can_disable_wandb_without_python_or_credentials(tmp_path):
         "status": "completed", "exit_code": 0,
     }
     assert not (state / "pipeline_execution.html").exists()
+def test_wrapper_defaults_to_live_visible_replacement():
+    wrapper = (BIN / "run_with_wandb.sh").read_text(encoding="utf-8")
+    assert '${WANDB_PUBLISH_LIVE_HTML:-true}' in wrapper
+    assert '${WANDB_REPLACE_RUN:-true}' in wrapper
+
+
+def test_live_budget_does_not_consume_reserved_final_upload():
+    allowed, message = monitor.upload_allowed(
+        size=60, sent_bytes=95, final=False,
+        max_total_bytes=100, max_final_html_bytes=75,
+    )
+    assert not allowed
+    assert "reserving the final dashboard" in message
+
+    allowed, message = monitor.upload_allowed(
+        size=60, sent_bytes=95, final=True,
+        max_total_bytes=100, max_final_html_bytes=75,
+    )
+    assert allowed
+    assert "reserved upload allowance" in message
+
+
+def test_per_file_limit_still_protects_final_upload():
+    allowed, message = monitor.upload_allowed(
+        size=76, sent_bytes=0, final=True,
+        max_total_bytes=100, max_final_html_bytes=75,
+    )
+    assert not allowed
+    assert "above the per-file limit" in message

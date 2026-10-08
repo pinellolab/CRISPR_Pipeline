@@ -3,6 +3,7 @@
 import json
 import math
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -93,6 +94,49 @@ METRIC_CATALOG = {
             *_stat_metrics("cells_per_guide", "of assigned cells per guide.", "cells_per_guide"),
         ],
     },
+    "guide_assignment_filter": {
+        "description": "Per-measurement-set cell filtering based on the number of binary guide assignments.",
+        "source_artifact": "additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv",
+        "row_level": "aggregate row plus one row per measurement set",
+        "metrics": [
+            {"name": "measurement_set", "description": "Measurement-set label, or all for the aggregate.", "unit": None},
+            {"name": "threshold", "description": "Configured maximum assigned-guide rule.", "unit": None},
+            {"name": "cells_before", "description": "Cells entering the assigned-guide filter.", "unit": "cells"},
+            {"name": "cells_after", "description": "Cells retained by the assigned-guide filter.", "unit": "cells"},
+            {"name": "cells_removed", "description": "Cells above the assigned-guide ceiling.", "unit": "cells"},
+            {"name": "removed_percent", "description": "Percent of entering cells removed.", "unit": "percent"},
+        ],
+    },
+    "guide_mapping_qc": {
+        "description": "Configured guide-reference orientation and per-measurement-set guide mapping/barcode recovery before assignment.",
+        "source_artifact": "additional_qc/guide_mapping_qc/guide_mapping_qc.tsv",
+        "row_level": "one row per measurement set",
+        "metrics": [
+            {"name": "measurement_set", "description": "Measurement-set identifier.", "unit": None},
+            {"name": "rna_cells", "description": "RNA cells retained before modality intersection.", "unit": "cells"},
+            {"name": "guide_cells", "description": "Cells present in the mapped guide matrix.", "unit": "cells"},
+            {"name": "overlap_cells", "description": "Exact RNA-guide barcode intersection.", "unit": "cells"},
+            {"name": "guide_to_rna_fraction", "description": "Guide-mapped cells divided by retained RNA cells.", "unit": "fraction"},
+            {"name": "overlap_to_guide_fraction", "description": "Exact overlap divided by guide-mapped cells.", "unit": "fraction"},
+            {"name": "status", "description": "PASS or FAIL under the configured recovery thresholds.", "unit": None},
+            {"name": "reason", "description": "Threshold failures for this measurement set.", "unit": None},
+        ],
+    },
+    "hto_post_clone_filter": {
+        "description": "Per-measurement-set HTO support and singlet filtering after guide and clone QC.",
+        "source_artifact": "additional_qc/hto_filter/hto_filter_flow.tsv",
+        "row_level": "one row per filter step and measurement set",
+        "metrics": [
+            {"name": "measurement_set", "description": "Measurement set on which HTO support was recalculated.", "unit": None},
+            {"name": "step_order", "description": "Sequential post-clone HTO filter step.", "unit": None},
+            {"name": "filter_label", "description": "HTO support or singlet filter name.", "unit": None},
+            {"name": "threshold", "description": "Configured HTO retention rule.", "unit": None},
+            {"name": "cells_before", "description": "Cells entering this HTO filter step.", "unit": "cells"},
+            {"name": "cells_after", "description": "Cells retained after this HTO filter step.", "unit": "cells"},
+            {"name": "cells_removed", "description": "Cells removed at this HTO filter step.", "unit": "cells"},
+            {"name": "removed_percent", "description": "Percent of entering cells removed at this step.", "unit": "percent"},
+        ],
+    },
     "additional_qc_clones": {
         "description": "Optional guide-barcode clone detection/removal metrics using the Wang et al. hypergeometric method.",
         "source_artifact": "additional_qc/clones/clone_metrics.tsv",
@@ -166,6 +210,36 @@ METRIC_CATALOG = {
             {"name": "n_validated_links", "description": "Validated trans links available for evaluation.", "unit": "links"},
             {"name": "n_eval_positives", "description": "Positive examples used for validated-link evaluation.", "unit": "examples"},
             {"name": "n_eval_negatives", "description": "Negative examples used for validated-link evaluation.", "unit": "examples"},
+        ],
+    },
+    "measurement_set_rna_qc": {
+        "description": "Cell calling and RNA QC calculated independently before measurement-set concatenation.",
+        "source_artifact": "figures/measurement_set_qc_metrics.tsv",
+        "row_level": "one row per measurement set",
+        "metrics": [
+            {"name": "measurement_set", "description": "Samplesheet measurement-set identifier.", "unit": None},
+            {"name": "input_barcodes", "description": "Raw mapped RNA barcodes entering this measurement-set QC task.", "unit": "barcodes"},
+            {"name": "post_knee_cells", "description": "Cells after this measurement set's knee selection.", "unit": "cells"},
+            {"name": "post_min_counts_cells", "description": "Cells passing the fixed RNA UMI minimum after knee calling.", "unit": "cells"},
+            {"name": "post_mad_cells", "description": "Cells passing the sequential two-sided total-count and detected-gene MAD filters.", "unit": "cells"},
+            {"name": "retained_cells", "description": "Cells retained after per-measurement-set knee, UMI, MAD, and Scrublet filtering.", "unit": "cells"},
+            {"name": "retained_fraction", "description": "Retained cells divided by input barcodes.", "unit": "fraction"},
+            {"name": "removed_by_scrublet", "description": "Cells called as doublets and removed by Scrublet.", "unit": "cells"},
+            {"name": "barcode_filter", "description": "Configured knee-cell-calling method for this measurement set.", "unit": None},
+            {"name": "knee_rank", "description": "Selected barcode rank for knee cell calling.", "unit": "rank"},
+            {"name": "knee_umi_threshold", "description": "Measurement-set-specific RNA UMI threshold selected by the knee method.", "unit": "UMIs"},
+            {"name": "fixed_min_counts", "description": "Configured fixed RNA UMI minimum applied after cell calling.", "unit": "UMIs"},
+            {"name": "mad_total_counts_n", "description": "Configured two-sided MAD multiplier for log1p total RNA UMIs.", "unit": "MADs"},
+            {"name": "mad_n_genes_n", "description": "Configured two-sided MAD multiplier for log1p detected genes.", "unit": "MADs"},
+            {"name": "scrublet_enabled", "description": "Whether Scrublet doublet calling was enabled for this measurement set.", "unit": None},
+            {"name": "scrublet_expected_doublet_rate", "description": "Expected doublet rate supplied to Scrublet.", "unit": "fraction"},
+            {"name": "scrublet_n_prin_comps_requested", "description": "Principal components initially requested for Scrublet.", "unit": "components"},
+            {"name": "scrublet_n_prin_comps_used", "description": "Principal components actually used by Scrublet after any adaptive fallback.", "unit": "components"},
+            {"name": "scrublet_pca_fallback_enabled", "description": "Whether the narrow PCA-dimension fallback was enabled.", "unit": None},
+            {"name": "scrublet_pca_fallback_used", "description": "Whether this measurement set required the adaptive PCA fallback.", "unit": None},
+            {"name": "scrublet_failure_policy", "description": "Configured behavior when Scrublet cannot fit: error or skip.", "unit": None},
+            {"name": "scrublet_status", "description": "Whether Scrublet was applied, disabled, or skipped after an error.", "unit": None},
+            {"name": "scrublet_skip_reason", "description": "Recorded exception when Scrublet was skipped under the explicit skip policy.", "unit": None},
         ],
     },
     "dashboard_derived": {
@@ -290,6 +364,9 @@ def collect_additional_qc(additional_qc_dir):
     specs = {
         "gene": ("additional_qc_gene", "gene/gene_metrics.tsv"),
         "guide": ("additional_qc_guide", "guide/guide_metrics.tsv"),
+        "guide_mapping_qc": ("guide_mapping_qc", "guide_mapping_qc/guide_mapping_qc.tsv"),
+        "guide_assignment_filter": ("guide_assignment_filter", "guide_assignment_filter/guide_assignment_filter_flow.tsv"),
+        "hto_filter": ("hto_post_clone_filter", "hto_filter/hto_filter_flow.tsv"),
         "clones": ("additional_qc_clones", "clones/clone_metrics.tsv"),
         "sequencing_saturation": ("additional_qc_sequencing_saturation", "sequencing_saturation/sequencing_saturation_metrics.tsv"),
         "intended_target": ("additional_qc_intended_target", "intended_target/intended_target_metrics.tsv"),
@@ -304,6 +381,12 @@ def collect_additional_qc(additional_qc_dir):
             "available": bool(path and os.path.exists(path)),
             "rows": _json_safe(_table_records(path)),
         }
+    if additional_qc_dir:
+        embeddings = []
+        for path in sorted((Path(additional_qc_dir) / 'embeddings').rglob('embedding_qc_metrics.json')):
+            with path.open() as handle:
+                embeddings.append(json.load(handle))
+        results['postconcat_embeddings'] = {'available': bool(embeddings), 'rows': embeddings}
     return results
 
 
@@ -404,7 +487,14 @@ def _selected_params(params):
         "QC_require_assigned_guide",
         "QC_pct_mito",
         "QC_batch_col",
+        "QC_MAD_total_counts",
+        "QC_MAD_n_genes",
+        "QC_MAD_pct_mito",
         "ENABLE_SCRUBLET",
+        "SCRUBLET_assay_type",
+        "SCRUBLET_expected_doublet_rate",
+        "SCRUBLET_n_prin_comps",
+        "SCRUBLET_adaptive_pca_fallback",
         "ENABLE_DATA_HASHING",
         "ENABLE_CLONE_REMOVAL",
         "CLONE_REMOVAL_action",
@@ -440,6 +530,7 @@ def build_pipeline_qc_metrics_payload(
     additional_qc_dir=None,
     hashing_counts=None,
     use_default=False,
+    measurement_set_qc_path=None,
 ):
     params = params or {}
     gene_mod = mudata.mod["gene"]
@@ -461,6 +552,10 @@ def build_pipeline_qc_metrics_payload(
         "barcode_filter": {
             "method": qc_params.get("barcode_filter"),
             "params_source": qc_params.get("barcode_filter_source"),
+            "per_measurement_set": bool((filter_info or {}).get("per_measurement_set")),
+            "measurement_sets": (filter_info or {}).get("measurement_sets"),
+            "total_gene_umis_thresholds": (filter_info or {}).get("thresholds", []),
+            "knee_ranks": (filter_info or {}).get("knee_ranks", []),
             "total_gene_umis_min": None if not filter_info else filter_info.get("threshold"),
             "knee_rank": None if not filter_info else filter_info.get("knee_rank"),
             "cells_after_filter": int(filter_count) if filter_count is not None else None,
@@ -521,11 +616,18 @@ def build_pipeline_qc_metrics_payload(
             "observed_metrics": {
                 "mapping_json": collect_mapping_json(json_dir),
                 "additional_qc": collect_additional_qc(additional_qc_dir),
+                "measurement_set_rna_qc": {
+                    "catalog_key": "measurement_set_rna_qc",
+                    "source_artifact": "figures/measurement_set_qc_metrics.tsv",
+                    "available": bool(measurement_set_qc_path and os.path.exists(measurement_set_qc_path)),
+                    "rows": _json_safe(_table_records(measurement_set_qc_path)),
+                },
             },
             "sources": {
                 "dashboard_builder": "create_dashboard_df_HASHING.py" if hashing_counts else "create_dashboard_df.py",
                 "mapping_json_dir": json_dir,
                 "additional_qc_dir": additional_qc_dir,
+                "measurement_set_qc_path": measurement_set_qc_path,
                 "gene_ann_cells": int(gene_ann.n_obs),
                 "gene_filtered_ann_cells": int(gene_filtered_ann.n_obs),
                 "guide_ann_cells": int(guide_ann.n_obs),

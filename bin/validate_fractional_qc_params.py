@@ -21,6 +21,30 @@ def validate_fractional_qc_params(params):
     tapseq_mode = params.get("TAPSEQ_QC_MODE", False)
     if not isinstance(tapseq_mode, bool):
         raise ValueError("TAPSEQ_QC_MODE must be true or false.")
+
+    for key, default in (
+        ("QC_min_counts_per_cell", 500),
+        ("QC_MAD_total_counts", 5),
+        ("QC_MAD_n_genes", 5),
+    ):
+        try:
+            numeric = float(params.get(key, default))
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"{key} must be numeric.") from error
+        if numeric < 0:
+            raise ValueError(f"{key} must be non-negative.")
+    pct_mito = float(params.get("QC_pct_mito", 15))
+    if not 0 <= pct_mito <= 100:
+        raise ValueError("QC_pct_mito must be in [0, 100].")
+    scrublet_profile = params.get("SCRUBLET_assay_type", "droplet")
+    if scrublet_profile not in {"droplet", "cc-perturb-seq"}:
+        raise ValueError("SCRUBLET_assay_type must be droplet or cc-perturb-seq.")
+    scrublet_rate = params.get("SCRUBLET_expected_doublet_rate")
+    if scrublet_rate is not None and not 0 < float(scrublet_rate) < 1:
+        raise ValueError("SCRUBLET_expected_doublet_rate must be null or in (0, 1).")
+    scrublet_n_prin_comps = int(params.get("SCRUBLET_n_prin_comps", 30))
+    if scrublet_n_prin_comps < 1:
+        raise ValueError("SCRUBLET_n_prin_comps must be at least 1.")
     return value, tapseq_mode
 
 

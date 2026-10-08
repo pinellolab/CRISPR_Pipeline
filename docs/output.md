@@ -58,6 +58,12 @@ Both catalog schemas are reconstructible from the regular analysis TSVs without 
 - `pipeline_dashboard/`
   - `dashboard.html`: Interactive dashboard.
   - `figures/`: QC and inference figures used by the dashboard.
+    - `knee_plot_scRNA_<measurement_set>.png`: independent RNA barcode-rank knee plot for each measurement set.
+    - `qc_distributions_scRNA_<measurement_set>.png`: RNA UMI, detected-gene, and mitochondrial distributions with enabled MAD bounds.
+    - `rna_qc_filter_flow_<measurement_set>.png`: ordered cells → filter → cells audit diagram with resolved thresholds.
+    - `rna_qc_filter_steps_<measurement_set>.png`: before/after metric distributions for every sequential cell filter.
+    - `measurement_set_qc_filter_flow.tsv`: exact per-step cell counts, removals, thresholds, and enabled/skipped state.
+    - `measurement_set_qc_metrics.tsv`: per-measurement-set cell-retention and QC-threshold audit table.
   - `evaluation_output/`: Evaluation plots and genome browser files.
   - `guide_seqSpec_plots/`: Guide seqSpec plots.
   - `hashing_seqSpec_plots/`: Hashing seqSpec plots, when hashing is enabled.

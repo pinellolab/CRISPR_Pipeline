@@ -5,6 +5,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## v2.0.0 - unreleased
 
+### Quality control and dashboards
+
+- Integrate per-measurement-set knee calling, RNA UMI floors, two-sided MAD filtering, and optional Scrublet with the current inference workflow.
+- Restore guide-mapping/orientation audits, assigned-guide and HTO support filters, temporary pooled PCA/UMAP, cell-cycle and Leiden diagnostics, and measurement-set dashboard cards.
+- Defer the global gene-prevalence filter until final pooled cell QC when the embedding workflow is enabled, retaining the canonical intended-target rescue rule and the shared assigned-guide cell population.
+- Preserve the rc12 PerTurbo image, current control-group logic, streaming Parquet conversion, optional live W&B observer, and saturation publication.
+
 ### Inference
 
 - Pin PerTurbo to `v2.0.0rc12` (`sha256:0c7d3e31…e9df4f`) for new runs. This supersedes the rc10 pin below; rc11–rc12 include propensity-tail safeguards and guide-efficacy fixes. Completed rc10 outputs are not relabeled as rc12 results.

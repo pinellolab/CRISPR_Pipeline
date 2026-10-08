@@ -23,7 +23,7 @@ FAMILIES = [
     ("preprocessing", "Preprocessing", "Cell and gene filtering"),
     ("mudata", "MuData", "Modalities assembled"),
     ("guide_assignment", "Guide assignment", "Guide-to-cell calls"),
-    ("postconcat_qc", "Post-concatenation QC", "MT, clone filtering and optional embeddings"),
+    ("postconcat_qc", "Post-concatenation QC", "MT, clone filtering, normalization, PCA and UMAP"),
     ("inference", "Inference", "SCEPTRE and Perturbo"),
     ("evaluation", "Evaluation", "Controls and benchmarking"),
     ("final", "Final dashboard", "Published report and artifacts"),
@@ -46,9 +46,10 @@ CATEGORY_FLOWS = {
         ("Assemble matrices", "Concatenate lane-level outputs deterministically within each modality"),
     ],
     "preprocessing": [
-        ("Prepare RNA matrices", "Concatenate or filter measurement sets in the order recorded by this execution"),
-        ("Call RNA cells", "Apply the configured barcode caller and RNA count floor"),
-        ("Apply enabled filters", "Show gene support, mitochondrial, MAD and Scrublet settings when available"),
+        ("Call cells per measurement set", "Calculate an independent barcode-rank knee for every measurement set"),
+        ("Apply per-set cell filters", "Apply the RNA UMI floor, two-sided RNA-complexity MAD bounds and Scrublet"),
+        ("Concatenate retained cells", "Combine independently filtered measurement-set matrices"),
+        ("Retain raw counts", "Pooled MT and gene-support QC are shown in Post-concatenation QC when the embedding workflow is enabled"),
     ],
     "mudata": [
         ("Intersect barcodes", "Align retained RNA and guide cells, plus hashing cells when enabled"),
@@ -61,9 +62,10 @@ CATEGORY_FLOWS = {
         ("Audit recovery", "Report assignment rate, multiplicity, cells per guide and recovered guides"),
     ],
     "postconcat_qc": [
-        ("Qualified cell intersection", "Use retained RNA and guide cells, plus HTO singlets when enabled"),
-        ("Clonal-cell QC", "Call and optionally remove clones when enabled"),
-        ("Optional embeddings", "Show normalization, PCA and UMAP only if this run published those outputs"),
+        ("Qualified cell intersection", "Start with GEX-qualified cells, assigned guides, and filtered HTO singlets when enabled"),
+        ("Parallel raw-count branches", "Apply MT → temporary normalization/PCA/UMAP; independently call/remove clones from the same qualified raw counts"),
+        ("Recompute after clone removal", "Apply MT and independently normalize/PCA/UMAP on the surviving original counts, not on the earlier normalized matrix"),
+        ("Deliver raw counts", "Apply fractional gene-support filtering; no normalized matrix, PCA/UMAP arrays or neighbors are added to the delivered MuData"),
     ],
     "inference": [
         ("Define tests", "Build intended/local guide–gene pairs and global tests from validated metadata"),
@@ -306,8 +308,9 @@ def category_flow(data: dict[str, Any], family: str) -> str:
         resolved = '<h4>Resolved filter values</h4><div class="filter-chips">' + "".join(
             '<span><b>' + html.escape(label) + ':</b> ' + html.escape(display_value(value)) + '</span>'
             for label, value in fields if value is not None
-        ) + '</div><p class="flow-note">The values above are the recorded run settings. '
-        'Filter order and per-measurement-set cell counts are shown only when the run publishes those QC artifacts.</p>'
+        ) + '</div><p class="flow-note">The RNA-count and detected-gene MAD filters are two-sided. '
+        'Knee calling, the 500-UMI floor, MAD filtering and Scrublet run independently per measurement set. '
+        'The mitochondrial and fractional gene-support filters run after concatenation.</p>'
     return '<div class="process-flow"><h3>Processing and filter flow</h3><div class="flow-steps">' + nodes + '</div>' + resolved + '</div>'
 
 

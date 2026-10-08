@@ -13,10 +13,15 @@
 
 # CRISPR Pipeline
 
-Optional guide-barcode clone filtering and 10x-style sequencing-saturation QC
-are documented in [docs/clone_and_saturation_qc.md](docs/clone_and_saturation_qc.md).
+Temporary normalization, PCA/UMAP and pre/post-clone measurement-set QC are
+documented in [Post-concatenation embedding QC](docs/postconcat_embedding_qc.md).
 
 A comprehensive pipeline for single-cell Perturb-Seq analysis that enables robust processing and analysis of CRISPR screening data at single-cell resolution.
+
+Optional guide-barcode clone filtering and 10x-style sequencing-saturation QC
+are documented in [docs/clone_and_saturation_qc.md](docs/clone_and_saturation_qc.md).
+RNA cell calling, per-measurement-set QC, and optional MAD filters are documented
+in [docs/per_measurement_set_rna_qc.md](docs/per_measurement_set_rna_qc.md).
 
 
 ## Documentation Links
@@ -137,7 +142,13 @@ Demo mode is strictly for pre-runs. The pipeline prints warnings at startup and 
 | `HTO_GMM_random_seed` | `0` | integer >= 0 | First seed in the deterministic GMM-Demux fit sequence. |
 | `HTO_GMM_max_seed_attempts` | `10` | integer >= 1 | Maximum consecutive deterministic seeds tried when an HTO fit fails the objective quality gate. |
 | `HTO_GMM_reject_nonzero_positive` | `true` | `true`, `false` | Rejects a degenerate HTO mixture fit that labels essentially every nonzero count as positive; the run fails if no acceptable seed is found. |
-| `ENABLE_SCRUBLET` | `false` | `true`, `false` | Runs Scrublet doublet detection before guide assignment in the non-hashing workflow. |
+| `HTO_min_positive_cells` | `20` | Integer `>= 1` | Calls an HTO within a measurement set only when at least this many positive singlet cells remain **after guide-assignment and optional clone filtering**. |
+| `HTO_keep_singlets_only` | `true` | `true`, `false` | When hashing is enabled, retains only cells assigned to a called single HTO after post-clone support is recalculated. |
+| `ENABLE_SCRUBLET` | `true` | `true`, `false` | Runs Scrublet independently after UMI/MAD filtering in non-hashing workflows. When `ENABLE_DATA_HASHING=true`, HTO singlet filtering replaces Scrublet and this setting is ignored. |
+| `SCRUBLET_assay_type` | `droplet` | `droplet`, `cc-perturb-seq` | Resolves the automatic expected-doublet rate: `0.08` for droplet data and `0.025` for CC-Perturb-seq. |
+| `SCRUBLET_expected_doublet_rate` | `null` | `null` or fraction in `(0,1)` | Optional explicit expected-doublet rate overriding the assay profile. |
+| `SCRUBLET_n_prin_comps` | `30` | Positive integer | Principal components initially requested for Scrublet. |
+| `SCRUBLET_adaptive_pca_fallback` | `true` | `true`, `false` | Retry only an explicit Scrublet PCA-dimension failure using one fewer component than the reported usable dimension; requested and used values are recorded. |
 | `is_10x3v3` | `true` | `true`, `false` | Controls 10x Genomics 3' v3 feature-barcode chemistry (`10XV3`, `kite:10xFB`) for guide or hashing mapping depending on `ENABLE_DATA_HASHING`. RNA mapping always uses the RNA seqspec. Case 1: when `ENABLE_DATA_HASHING = false` and `is_10x3v3 = true`, guide mapping uses the 10x v3 feature-barcode kb settings instead of deriving guide chemistry from the guide seqspec. Case 2: when `ENABLE_DATA_HASHING = true` and `is_10x3v3 = true`, guide and RNA mapping use their seqspecs, while hash/HTO mapping uses the 10x v3 feature-barcode kb settings. This second case supports 10x v3 HTO data where barcode replacement/translation may be needed so hash, RNA, and guide barcodes match downstream. |
 | `reverse_complement_guides` | `false` | `true`, `false` | Reverse-complements guide spacer sequences while building the guide reference, preserving the metadata fields. |
 | `spacer_tag` | `GAGTACATGGGG` | DNA sequence, empty string, or `null` | Recommended 12 bp sequence immediately upstream of the guide spacer. When provided, guide mapping searches the whole guide read around this tag instead of relying only on fixed seqspec feature coordinates. |
@@ -173,14 +184,16 @@ The complete machine-readable QC output catalog is available as
 
 | Parameter | Default | Options | Pipeline context |
 |---|---:|---|---|
-| `QC_min_genes_per_cell` | `800` | Integer | Minimum detected genes required to keep a cell when `QC_barcode_filter = 'none'`. A gene is counted as present in a cell when its RNA count is greater than zero. |
-| `QC_min_counts_per_cell` | `0` | Non-negative integer | Minimum total RNA UMI count required after barcode calling. It is active with `none`, `knee`, and `knee2`; `0` disables the filter. |
-| `QC_min_cells_per_gene` | `0.05` | Fraction in `[0, 1)` | Minimum retained-cell fraction required to keep a gene during guide-assignment aggregation. `0` retains every gene detected in at least one cell. |
-| `QC_require_assigned_guide` | `true` | `true`, `false` | Keep only cells with at least one assigned guide. Applied in `mudata_concat` right after guide assignment, from `guide.layers['guide_assignment']` binarized, so both inference methods, every derived per-cell covariate and both CRT pools analyse the same cells; the all-cells CRT pool therefore means all cells carrying an assigned guide. The pre-filter counts are recorded in the MuData's `.uns` and reported in `additional_qc/guide/guide_metrics.tsv`, the QC metrics JSON and the dashboard, so the guide-assignment rate stays reportable. Set `false` to analyse unassigned cells too. |
-| `TAPSEQ_QC_MODE` | `false` | `true`, `false` | TAP-seq gene-retention mode. It removes the standard 10-cell preprocessing floor, retaining every observed gene before the final fractional support filter. Use a small fraction such as `0.000001` when all observed TAP-seq genes should be retained. |
-| `QC_pct_mito` | `15` | `0` to `100` | Maximum mitochondrial read percentage allowed per cell during preprocessing. |
+| `QC_min_genes_per_cell` | `0` | Integer | Deprecated compatibility setting; fixed detected-gene cell filtering is inactive. |
+| `QC_min_counts_per_cell` | `500` | Non-negative integer | Minimum total RNA UMI count applied per measurement set immediately after barcode calling. |
+| `QC_min_cells_per_gene` | `0.05` | Fraction in `[0, 1)` | Minimum cell fraction required to keep a gene after RNA measurement-set concatenation and mitochondrial filtering. |
+| `TAPSEQ_QC_MODE` | `false` | `true`, `false` | Deprecated compatibility setting; gene retention is controlled directly by `QC_min_cells_per_gene`. |
+| `QC_pct_mito` | `15` | `0` to `100` | Maximum mitochondrial percentage applied to cells after RNA measurement-set concatenation. |
+| `QC_MAD_total_counts` | `5` | Non-negative number | Two-sided per-measurement-set MAD cutoff on `log1p(total RNA UMIs)`; `0` disables it. |
+| `QC_MAD_n_genes` | `5` | Non-negative number | Two-sided per-measurement-set MAD cutoff on `log1p(detected genes)`; `0` disables it. |
+| `QC_MAD_pct_mito` | `0` | Non-negative number | Deprecated compatibility setting; mitochondrial MAD filtering is inactive. |
 | `QC_batch_col` | `batch` | Observation column name | Batch column used in additional QC plots. |
-| `QC_barcode_filter` | `knee2` | `none`, `knee`, `knee2` | RNA barcode filtering strategy based on total cell RNA UMIs. `knee` uses the first barcode-rank knee and is more permissive; `knee2` searches the high-UMI segment before knee1 for a second, stricter knee; `none` skips UMI-knee filtering and applies `QC_min_genes_per_cell`. If the requested knee cannot be found, barcode filtering is skipped and the min-gene filter is not applied. |
+| `QC_barcode_filter` | `knee` | `none`, `knee`, `knee2` | Per-measurement-set RNA barcode filtering based on total RNA UMIs. `none` skips knee calling but does not activate a fixed detected-gene filter. |
 
 ##### Guide assignment options
 
@@ -191,6 +204,7 @@ The complete machine-readable QC output catalog is available as
 | `GUIDE_ASSIGNMENT_cleanser_probability_threshold` | `1` | `0` to `1` | Probability threshold used by Cleanser guide assignment. |
 | `GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold` | `0.8` | `0` to `1` | Posterior probability threshold for SCEPTRE mixture-based guide assignment. |
 | `GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep` | `5` | Integer `>= 1` | Number of EM initializations used by SCEPTRE guide assignment. |
+| `GUIDE_ASSIGNMENT_max_guides_per_cell` | `15` | Integer `>= 0` | Removes cells with more than this many nonzero assignments in `guide.layers['guide_assignment']`; `0` disables the filter. This runs before optional clone removal. |
 
 ##### Inference options
 
@@ -940,10 +954,9 @@ python bin/render_wandb_pipeline_dashboard.py \
   --output /path/to/pipeline_execution.html
 ```
 
-The HTML contains no credentials, FASTQs, command scripts, or unbounded task
-logs. Available QC images are embedded within the configured size budget;
-duplicates and images beyond the total image budget are omitted. Failed and
-aborted trace rows include a short, sanitized tail from
+The live HTML contains no credentials, FASTQs, command scripts, or unbounded task
+logs. Small QC images are embedded so the page remains portable; duplicate
+images and images larger than 3 MB are omitted. Failed and aborted trace rows include a short, sanitized tail from
 `.command.err` and `.command.out`, plus a bounded Nextflow log tail when supplied.
 Tokens and common secret assignments are redacted before HTML escaping.
 
@@ -963,32 +976,44 @@ python bin/wandb_qc_smoke.py \
   --dashboard-html /path/to/pipeline_execution.html
 ```
 
-W&B is an optional observer around Nextflow, not a scientific Nextflow task.
-The sidecar watches the trace, Nextflow log and published QC artifacts every
-30 seconds, regenerates a self-contained HTML file, and uploads it under
-`pipeline/main_execution`. Live snapshots include plots already published.
-Use a distinct `--outdir` for each new run and reuse that same directory only
-for its `-resume`; otherwise the observer can display QC files left by a
-different run before the current producers finish.
-With `WANDB_REPLACE_RUN=true`, a stable `WANDB_RUN_ID`, and `WANDB_ENTITY`, it
-keeps one visible dashboard run per series by deleting its preceding snapshot
-only after the new snapshot uploads successfully. It does not touch other
-pipeline runs. The final update has a separate size allowance.
+The advanced execution dashboard is the single W&B interface throughout the
+run. After a task reaches a terminal state, the sidecar rebuilds that interface
+from the trace and all QC artifacts published so far. Because W&B only creates
+a visible HTML panel from run history, the sidecar publishes one history point
+in a fresh dashboard run and deletes the preceding dashboard run only after the
+replacement succeeds. The project therefore has one visible current dashboard
+instead of a Step selector containing stale copies. The
+interface retains its dependency graph, process-family panels, searchable task
+tables, bounded failure evidence, QC metrics, and image galleries while it is
+running and after it finishes. Live refreshes use the cumulative
+`WANDB_MAX_BYTES` budget (400 MB by default), while the completed dashboard has
+a separate reserved upload allowance.
 
-Launch it with the wrapper after dataset-specific provenance `prepare` and
-`check` have succeeded. On this server, source `run_support/container_storage.sh`
-immediately before launching and put `run_support/container_storage.config`
-after the dataset resource configs and before generated provenance config.
-Record the storage helper, storage config, W&B config, wrapper, samplesheet,
-params and dataset configs as provenance artifacts. All `-c` options precede
-`run`:
+The pipeline's ordinary `pipeline_dashboard/dashboard.html` is used only as a
+bounded source of final inference rows and evaluation artifacts. It never
+replaces the advanced execution dashboard. `WANDB_MAX_FINAL_HTML_BYTES`
+controls the per-file HTML limit and defaults to 100 MB. The final snapshot is
+attempted independently of the live-refresh byte budget. Live replacement is
+enabled by default; set `WANDB_PUBLISH_LIVE_HTML=false` only to suppress
+intermediate dashboard updates.
+
+The required live-update lifecycle, process-category flowcharts, process
+routing, and exact cell/gene filter order are documented in
+[`docs/live_wandb_execution_dashboard.md`](docs/live_wandb_execution_dashboard.md).
+
+Launch it with the wrapper after the dataset-specific provenance `prepare` and
+`check` steps have succeeded:
 
 ```bash
 export WANDB_OUTDIR=/absolute/path/to/results
 export WANDB_ENTITY=your-wandb-entity
 export WANDB_RUN_NAME=dataset_$(date -u +%Y%m%dT%H%M%SZ)
-export WANDB_RUN_ID=stable-dashboard-series-id
-export WANDB_STATE_DIR=/absolute/path/to/results/pipeline_info/run_name/wandb
+# Recommended: keep one stable dashboard-series ID per dataset.
+export WANDB_RUN_ID=dataset_current
+# Each successful refresh receives a unique run ID and removes the preceding
+# series member, leaving exactly one visible HTML panel.
+export WANDB_REPLACE_RUN=true
+# Optional when W&B is installed outside the active Nextflow environment:
 export WANDB_PYTHON=/absolute/path/to/wandb/environment/bin/python
 source /data/pinello/lucas_logan/run_support/container_storage.sh
 

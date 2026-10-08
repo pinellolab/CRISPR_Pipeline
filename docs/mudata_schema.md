@@ -60,14 +60,15 @@ The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62a
 | gene.obs | total_counts_ribo | integer | Always | Total RNA UMIs assigned to ribosomal genes. | Scanpy QC |
 | gene.obs | log1p_total_counts_ribo | float | Always | Natural log of one plus ribosomal RNA UMIs. | Scanpy QC |
 | gene.obs | pct_counts_ribo | float percent | Always | Percent of RNA counts from ribosomal genes. | Scanpy QC |
-| gene.obs | doublet_scores | float | When ENABLE_SCRUBLET=true | Scrublet doublet score before predicted doublets are removed. | doublets.py |
-| gene.obs | predicted_doublets | boolean | When ENABLE_SCRUBLET=true | Scrublet binary doublet prediction used for filtering. | doublets.py |
-| gene.obs | doublet_info | string | When ENABLE_SCRUBLET=true | String representation of the Scrublet prediction retained for reporting. | doublets.py |
+| gene.obs | doublet_scores | float | When ENABLE_SCRUBLET=true | Per-measurement-set Scrublet score retained on cells that pass doublet removal. | preprocess_adata.py |
+| gene.obs | predicted_doublets | boolean | When ENABLE_SCRUBLET=true | Per-measurement-set Scrublet call used before concatenation; retained cells are false because predicted doublets were removed. | preprocess_adata.py |
+| gene.obs | doublet_info | string | When ENABLE_SCRUBLET=true | String representation of the per-measurement-set Scrublet call retained for reporting. | preprocess_adata.py |
 | guide.obs | batch | categorical | Always | Input or mapping batch label for each guide-count row. | Guide mapping |
 | guide.obs | concat_batch | categorical | After concatenation | Measurement-set/source label added during concatenation. | concatenation |
 | guide.obs | batch_number | integer | Hashing workflows | One-based guide batch encoding added when hashing data are present. | create_mdata.py |
 | guide.obs | num_expressed_guides | integer | Always | Number of guides with at least one raw guide UMI in the cell; this is not the number of assigned guides. | create_mdata.py |
 | guide.obs | total_guide_umis | integer | Always | Sum of raw guide UMIs in the cell; this is not derived from guide_assignment. | create_mdata.py |
+| MuData.obs and modality obs | assigned_guides_before_qc | integer | After guide assignment | Number of nonzero calls in guide.layers['guide_assignment'] before applying GUIDE_ASSIGNMENT_max_guides_per_cell. | filter_guide_assignment_qc.py |
 | hashing.obs | batch | categorical | Hashing only | Input batch label for each hashtag-count row. | Hash mapping |
 | hashing.obs | concat_batch | categorical | Hashing after concatenation | Measurement-set/source label added during concatenation. | hashing_concat.py |
 | hashing.obs | cluster_id | integer/string | Hashing after demultiplexing | Demultiplexing cluster assigned from the HTO report. | demultiplex_filter.py |
@@ -75,6 +76,8 @@ The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62a
 | hashing.obs | hto_type_split | string/categorical | Hashing after demultiplexing | Normalized HTO class; multi-HTO labels are collapsed to multiplets and negatives remain negative. | demultiplex_filter.py |
 | hashing.obs | gmm_demux_confidence | float | Hashing after demultiplexing | GMM-Demux confidence for the selected deterministic fit. This is retained for QC but is not itself used as a cell filter. | demultiplex_filter.py |
 | hashing.uns | gmm_demux_qc_json_by_input | JSON string | Hashing after concatenation | Per-measurement-set audit of attempted seeds, rejected HTO fits, rejection reasons, and selected seed. | demultiplex_filter.py; hashing_concat.py |
+| hashing.obs | hto_positive_cells_post_clone | integer | Hashing after clone filtering | Number of positive singlet cells supporting this cell's HTO within its measurement set, recalculated after guide and clone filtering. | filter_hto_post_clone.py |
+| hashing.obs | hto_called_post_clone | boolean | Hashing after clone filtering | True when the cell is a positive singlet for an HTO meeting HTO_min_positive_cells in its measurement set. | filter_hto_post_clone.py |
 
 ## Gene fields
 
@@ -186,6 +189,8 @@ The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62a
 | guide.uns | capture_method | one-element string array | Always | Guide capture design, for example crop-seq or direct-capture. | create_mdata.py |
 | guide.uns | moi | one-element string array | Always | Recorded or inferred multiplicity-of-infection class: high or low. | create_mdata.py |
 | MuData.uns | pairs_to_test | DataFrame | Inference preparation only | Requested guide-gene pairs with guide_id and gene_id; used by SCEPTRE and native PerTurbo local/cis inference. | prepare_inference.py |
+| MuData.uns | guide_assignment_cell_filter | dictionary | After guide-assignment QC | Threshold and aggregate before/after cell counts for the maximum-assigned-guide filter. | filter_guide_assignment_qc.py |
+| MuData.uns | hto_post_clone_filter | dictionary | Hashing after clone filtering | Post-clone HTO support threshold, singlet policy, and aggregate before/after cell counts. | filter_hto_post_clone.py |
 | MuData.uns | local_analysis_per_guide_results | DataFrame | Current final default inference | Merged local/cis guide-gene results and annotations. | merge_local_global_results.py |
 | MuData.uns | local_analysis_per_element_results | DataFrame | Current final default inference | Merged local/cis target-element-gene results aggregated across guides. | merge_local_global_results.py |
 | MuData.uns | global_analysis_per_guide_results | DataFrame | Current final default inference | Global/trans all-by-all PerTurbo guide-gene results and annotations. | merge_local_global_results.py |

@@ -2,31 +2,47 @@
 process PreprocessAnnData {
 
     cache 'lenient'
+    tag { mapping_dir.getBaseName().replaceFirst(/_ks_transcripts_out$/, '') }
 
     input:
-    path adata_rna
-    path gname_rna
-    val min_genes
+    path mapping_dir
+    path parsed_covariates
     val min_counts
-    val min_cells
-    val pct_mito
     val reference
     val barcode_filter
-    val tapseq_qc_mode
+    val mad_total_counts
+    val mad_n_genes
+    val enable_scrublet
+    val scrublet_expected_doublet_rate
+    val scrublet_n_prin_comps
+    val scrublet_adaptive_pca_fallback
+    val scrublet_failure_policy
 
     output:
-    path "filtered_anndata.h5ad" , emit: filtered_anndata_rna
-    path "rna_concatenated_adata.h5ad", emit: adata_rna
-    path "figures", emit: figures_dir
+    path "*_filtered.h5ad", emit: filtered_measurement_set
+    path "*_qc", emit: measurement_set_qc
 
     script:
+        def batch = mapping_dir.getBaseName().replaceFirst(/_ks_transcripts_out$/, '')
+        def safeBatch = batch.replaceAll(/[^A-Za-z0-9_.-]+/, '_')
+        def bcArg = params.replace_barcodes ? '--bc-replacement' : ''
+        def mmArg = params.use_multimapping ? '--use-multimapping' : ''
+        def scrubletArg = enable_scrublet ? '--enable-scrublet' : ''
+        def scrubletFallbackArg = scrublet_adaptive_pca_fallback ? '--scrublet-adaptive-pca-fallback' : ''
         """
-        TAPSEQ_ARG=""
-        if [ "${tapseq_qc_mode}" = "true" ]; then
-            TAPSEQ_ARG="--tapseq-mode"
-        fi
-        preprocess_adata.py ${adata_rna} ${gname_rna} --min_genes ${min_genes} --min_counts ${min_counts} --min_cells ${min_cells} --pct_mito ${pct_mito} --reference ${reference} --barcode-filter ${barcode_filter} --bc_replacement ${params.replace_barcodes} \${TAPSEQ_ARG}
-        mv concatenated_adata.h5ad rna_concatenated_adata.h5ad
+        export MPLCONFIGDIR="./tmp/mplconfigdir"
+        mkdir -p \${MPLCONFIGDIR}
+        preprocess_adata.py \
+            ${mapping_dir} ${parsed_covariates} \
+            --qc-dir ${safeBatch}_qc \
+            --min-counts ${min_counts} \
+            --reference ${reference} \
+            --barcode-filter ${barcode_filter} \
+            --mad-total-counts ${mad_total_counts} \
+            --mad-n-genes ${mad_n_genes} \
+            --scrublet-expected-doublet-rate ${scrublet_expected_doublet_rate} \
+            --scrublet-n-prin-comps ${scrublet_n_prin_comps} \
+            --scrublet-failure-policy ${scrublet_failure_policy} \
+            ${scrubletArg} ${scrubletFallbackArg} ${bcArg} ${mmArg}
         """
-
 }

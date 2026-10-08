@@ -1,5 +1,11 @@
 # Filtering and MuData assembly order
 
+> Historical lineage below describes the pre-embedding implementation. The
+> default workflow is now documented in [Post-concatenation QC](postconcat_embedding_qc.md):
+> GEX/guide/HTO intersection → parallel clone calling and MT/embedding QC →
+> fresh MT/embedding QC after clones → raw-count gene-support filter → inference.
+> Do not use the older diagrams below to infer the current MT/HTO order.
+
 The Gary Hon samplesheet contains three measurement-set batches:
 `IGVFDS6244NAXC`, `IGVFDS8721BKRO`, and `IGVFDS9613DDRB`. Its `lane` column is
 empty, so `measurement_sets` is the key that pairs RNA, guide, and hashing data.
@@ -31,23 +37,17 @@ flowchart TD
         R1["Map RNA 6244"]
         R2["Map RNA 8721"]
         R3["Map RNA 9613"]
-        RC["Concatenate RNA AnnData<br/>barcodes qualified by measurement set"]
-        RK{"QC_barcode_filter"}
-        RUMI["Knee or knee2 barcode filter<br/>keep cells above total RNA UMI threshold"]
-        RGENE["Minimum genes per cell<br/>QC_min_genes_per_cell"]
-        RGB["Standard gene prefilter<br/>gene detected in at least 10 cells"]
-        RMITO["Mitochondrial filter<br/>percent_mito less than QC_pct_mito"]
+        RQ1["QC RNA 6244<br/>own knee, fixed + MAD filters"]
+        RQ2["QC RNA 8721<br/>own knee, fixed + MAD filters"]
+        RQ3["QC RNA 9613<br/>own knee, fixed + MAD filters"]
+        RC["Concatenate retained RNA AnnData<br/>barcodes qualified by measurement set"]
+        RGB["Global gene-support prefilter<br/>10 cells, or 1 in TAP-seq mode"]
         RF["filtered_anndata.h5ad"]
 
-        R1 --> RC
-        R2 --> RC
-        R3 --> RC
-        RC --> RK
-        RK -- "knee / knee2" --> RUMI
-        RK -- "none" --> RGENE
-        RUMI --> RGB
-        RGENE --> RGB
-        RGB --> RMITO --> RF
+        R1 --> RQ1 --> RC
+        R2 --> RQ2 --> RC
+        R3 --> RQ3 --> RC
+        RC --> RGB --> RF
     end
 
     subgraph GUIDE["Guide-count processing"]
@@ -68,8 +68,8 @@ flowchart TD
         HC["Concatenate hashing AnnData<br/>barcodes qualified by measurement set"]
         HI["Intersect qualified hashing keys<br/>with RNA-QC-surviving keys"]
         HS["Split hashing data by batch"]
-        HD["GMM-demux each batch<br/>retain filtered demultiplexed cells"]
-        HCAT["Concatenate demultiplexed hashing AnnData"]
+        HD["GMM-demux each batch<br/>annotate HTO identity/class"]
+        HCAT["Concatenate annotated hashing AnnData<br/>without early cell removal"]
 
         H1 --> HC
         H2 --> HC
@@ -106,7 +106,11 @@ flowchart TD
     GF["Global gene prevalence filter<br/>expression in more than<br/>QC_min_cells_per_gene x retained cells"]
     DUAL{"DUAL_GUIDE?"}
     COLLAPSE["Collapse assigned guides<br/>to intended-target elements"]
-    FINAL["concat_mudata.h5mu<br/>input to inference"]
+    GUIDEMAX["Assigned-guide ceiling per cell<br/>default: ≤15"]
+    CLONE["Optional clone removal"]
+    HTOSUPPORT["Recalculate positive HTO support<br/>per measurement set; default ≥20"]
+    HTOSINGLET["Retain called HTO singlets only"]
+    FINAL["filtered MuData<br/>input to inference"]
 
     FIRST --> BSPLIT
     BSPLIT --> A1
@@ -115,9 +119,10 @@ flowchart TD
     A1 --> ACAT
     A2 --> ACAT
     A3 --> ACAT
-    ACAT --> AGF --> GF --> DUAL
-    DUAL -- "false" --> FINAL
-    DUAL -- "true" --> COLLAPSE --> FINAL
+    ACAT --> GF --> DUAL
+    DUAL -- "false" --> GUIDEMAX
+    DUAL -- "true" --> COLLAPSE --> GUIDEMAX
+    GUIDEMAX --> CLONE --> HTOSUPPORT --> HTOSINGLET --> FINAL
 ```
 
 ## Verified Nextflow channel lineage
@@ -142,7 +147,7 @@ flowchart TD
     PRE --> FH["filter_hashing"]
     HC --> FH
     FH --> DM["three files -> demultiplex x3"]
-    DM --> HCC["collect/sort -> hashing_concat"]
+    DM --> HCC["collect/sort annotations -> hashing_concat"]
 
     PRE --> CMD["CreateMuData"]
     GC --> CMD
@@ -151,8 +156,11 @@ flowchart TD
     M1 --> PA["prepare_assignment -> three batch MuData files"]
     PA --> CL["CLEANSER x3"]
     CL --> MC["collect/sort -> mudata_concat"]
-    MC --> M2["concat_mudata.h5mu: 69,123 cells"]
-    M2 --> INF["inference_pipeline"]
+    MC --> M2["concat_mudata.h5mu"]
+    M2 --> GQ["assigned-guide ceiling"]
+    GQ --> CQ["optional clone removal"]
+    CQ --> HQ["post-clone HTO support + singlets"]
+    HQ --> INF["inference_pipeline"]
 ```
 
 ### Evidence from the completed May 14, 2026 run
@@ -182,37 +190,40 @@ and task objects under `gs://igvf-pertub-seq-pipeline-data/work`.
   Its intersections remained same-batch because all three modality
   concatenations used the same sorted measurement-set order. The updated code
   removes that ordering dependency by using the measurement-set ID directly.
-- With `QC_barcode_filter = 'knee'` or `'knee2'`, total RNA UMI depth selects
-  cells and `QC_min_genes_per_cell` is skipped. With
-  `QC_barcode_filter = 'none'`, the minimum-gene filter is used instead.
+- RNA cell calling, the `QC_min_counts_per_cell` floor, two-sided RNA-count and
+  detected-gene MAD filters, and Scrublet run independently per
+  `measurement_sets` value before RNA concatenation. Each measurement set gets
+  its own barcode-rank, sequential-filter, boxplot, and Scrublet plots.
+- `QC_min_genes_per_cell` and mitochondrial MAD filtering are retired from the
+  active path. `QC_barcode_filter = 'none'` skips knee calling but does not
+  enable a fixed detected-gene threshold.
+- After RNA concatenation, `QC_pct_mito` filters cells and then
+  `QC_min_cells_per_gene` filters genes using the retained concatenated cells.
 - The guide count matrix is not filtered by a fixed UMI cutoff before MuData
   creation. SCEPTRE or CLEANSER assigns guides from the per-cell guide counts
   after the modalities have been intersected.
 - When hashing is enabled, hashing is first restricted to cells that survived
-  RNA QC. `CreateMuData` then performs the final barcode intersection across
-  the gene, guide, and demultiplexed hashing modalities.
+  RNA QC. Early demultiplexing annotates HTO identities but does not make the
+  final cell-retention decision. `CreateMuData` intersects gene, guide, and
+  annotated hashing modalities.
 - When hashing is disabled, the final intersection uses only gene and guide
-  barcodes. Optional Scrublet doublet removal runs on the resulting MuData
-  before guide assignment.
+  barcodes. Scrublet has already run per RNA measurement set.
 - `mudata.h5mu` is one combined multimodal object containing all three batches.
   It is temporarily split by `batch` (`measurement_sets`) so guide assignment
   runs independently, then recombined as `concat_mudata.h5mu`.
-- `QC_require_assigned_guide` (default `true`) is the pipeline's only cell
-  filter after this point. It drops cells with no assigned guide, counted from
-  `guide.layers['guide_assignment']` binarized, and runs in `mudata_concat`
-  immediately after batch concatenation -- so both inference methods, every
-  derived per-cell covariate and both CRT pools inherit one cell population.
-  The counts as they stood before the filter are recorded in the MuData's
-  `.uns` and reported by the QC path, so the guide-assignment rate does not
-  become 100% by construction. Under `DUAL_GUIDE = true` the later
-  `collapse_guides` step keeps only cells with exactly two guides on one
-  element, which is stricter than this filter and subsumes it.
-- `QC_min_cells_per_gene` is a fraction in `[0, 1)` and is applied after guide
-  assignment, batch concatenation and the assigned-guide cell filter. A gene
-  must be detected in strictly more than
-  `QC_min_cells_per_gene * retained_cells`; `0` retains every gene detected in
-  at least one cell.
-- `TAPSEQ_QC_MODE = true` removes the standard 10-cell preprocessing floor so
-  observed TAP-seq genes reach the final fractional filter. Pair it with a very
-  small fraction (for example `0.000001`) when all observed genes should be
-  retained.
+- `QC_min_cells_per_gene` is a fraction in `[0, 1)` and is applied immediately
+  after RNA measurement-set concatenation and mitochondrial filtering. A gene
+  must be detected in strictly more
+  than `QC_min_cells_per_gene * total_cells`; `0` retains every gene detected
+  in at least one cell.
+- Clone calling/removal remains downstream of guide-assignment aggregation and
+  therefore necessarily occurs after mitochondrial filtering. It is still
+  controlled by `ENABLE_CLONE_REMOVAL` and `CLONE_REMOVAL_action`.
+- Cells with more than `GUIDE_ASSIGNMENT_max_guides_per_cell` binary guide
+  assignments are removed before clone calling. The default is 15; zero disables it.
+- After optional clone removal, HTO positive-cell support is recalculated within
+  each measurement set. An HTO must have at least `HTO_min_positive_cells`
+  surviving positive singlets (default 20) to be called. When
+  `HTO_keep_singlets_only=true`, only called HTO singlets enter inference.
+- The HTML and live W&B dashboards show per-measurement-set before/after counts,
+  thresholds, assigned-guide distributions, HTO support, and the sequential flow.

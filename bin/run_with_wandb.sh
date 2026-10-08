@@ -3,6 +3,7 @@
 set -Eeuo pipefail
 
 PIPELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export WANDB_DASHBOARD_RENDERER_REVISION="$(git -C "$PIPELINE_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
 PYTHON_BIN="${WANDB_PYTHON:-python}"
 RUN_NAME="${WANDB_RUN_NAME:-crispr_$(date -u +%Y%m%dT%H%M%SZ)}"
 RUN_ID="${WANDB_SOURCE_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$}"

@@ -17,10 +17,14 @@ include { inference_pipeline } from '../../subworkflows/local/inference_pipeline
 include { additional_qc_plots } from '../../modules/local/additional_qc_plots'
 include { remove_clonal_cells } from '../../modules/local/remove_clonal_cells'
 include { sequencing_saturation } from '../../modules/local/sequencing_saturation'
+include { guide_mapping_qc } from '../../modules/local/guide_mapping_qc'
+include { guide_mapping_qc_gate } from '../../modules/local/guide_mapping_qc_gate'
+include { filter_hto_post_clone } from '../../modules/local/filter_hto_post_clone'
+include { postconcat_embedding_qc as embedding_before_clone } from '../../modules/local/postconcat_embedding_qc'
+include { postconcat_embedding_qc as embedding_after_clone } from '../../modules/local/postconcat_embedding_qc'
 
 // Import hashing-specific modules
 include { CreateMuData } from '../../modules/local/CreateMuData'
-include { doublets_scrub } from '../../modules/local/doublets_scrub'
 include { demultiplex } from '../../modules/local/demultiplex'
 include { filter_hashing } from '../../modules/local/filter_hashing'
 include { hashing_concat } from '../../modules/local/hashing_concat'
@@ -133,7 +137,8 @@ workflow CRISPR_PIPELINE {
     // Common preprocessing for both workflows
     Preprocessing = preprocessing_pipeline(
         mapping_rna_pipeline.out.concat_anndata_rna,
-        mapping_rna_pipeline.out.trans_out_dir
+        mapping_rna_pipeline.out.trans_out_dir,
+        prepare_mapping_pipeline.out.parsed_covariate_file
     )
 
     if (params.ENABLE_SEQUENCING_SATURATION) {
@@ -183,18 +188,49 @@ workflow CRISPR_PIPELINE {
             params.Multiplicity_of_infection,
             params.GUIDE_ASSIGNMENT_capture_method,
             params.REFERENCE_restrict_genes_to_gtf,
-            Hashing_Concat.concatenated_hashing_demux
+            // Preserve classes until GEX/guide QC; HTO filtering then establishes
+            // the common raw-count population for clone calling and embedding QC.
+            Hashing_Concat.concatenated_hashing_unfiltered_demux
         )
 
+        GuideMappingQC = guide_mapping_qc(
+            Preprocessing.filtered_anndata_rna,
+            mapping_guide_pipeline.out.concat_anndata_guide,
+            MergeMuData.mudata,
+            ch_guide_design,
+            params.reverse_complement_guides,
+            params.spacer_tag
+        )
+        GuideMappingGate = guide_mapping_qc_gate(MergeMuData.mudata, GuideMappingQC.qc_dir)
+
         // Shared processing pipeline
-        GuideAssignment = guide_assignment_pipeline(MergeMuData.mudata)
+        GuideAssignment = guide_assignment_pipeline(GuideMappingGate.mudata)
+        // HTO support is assessed on GEX/guide-qualified cells before the parallel branches.
+        HTOFilter = filter_hto_post_clone(GuideAssignment.concat_mudata)
+        qualified_mudata = HTOFilter.filtered_mudata
+        if (params.ENABLE_POSTCONCAT_EMBEDDING_QC) {
+            BeforeEmbedding = embedding_before_clone(qualified_mudata, 'before_clone', file("${projectDir}/assets/cell_cycle/regev_lab_cell_cycle_genes.txt"))
+        }
         if (params.ENABLE_CLONE_REMOVAL) {
-            CloneRemoval = remove_clonal_cells(GuideAssignment.concat_mudata)
-            mudata_for_inference = CloneRemoval.filtered_mudata
+            CloneRemoval = remove_clonal_cells(qualified_mudata)
+            mudata_before_hto = CloneRemoval.filtered_mudata
             clone_qc_dir = CloneRemoval.clone_qc
         } else {
-            mudata_for_inference = GuideAssignment.concat_mudata
+            mudata_before_hto = qualified_mudata
             clone_qc_dir = file("${workflow.projectDir}/assets/clone_qc_empty")
+        }
+        mudata_for_inference = mudata_before_hto
+        if (params.ENABLE_POSTCONCAT_EMBEDDING_QC) {
+            if (params.ENABLE_CLONE_REMOVAL) {
+                AfterEmbedding = embedding_after_clone(mudata_before_hto, 'after_clone', file("${projectDir}/assets/cell_cycle/regev_lab_cell_cycle_genes.txt"))
+                mudata_for_inference = AfterEmbedding.filtered_mudata
+                embedding_dirs = BeforeEmbedding.qc_dir.mix(AfterEmbedding.qc_dir).collect()
+            } else {
+                mudata_for_inference = BeforeEmbedding.filtered_mudata
+                embedding_dirs = BeforeEmbedding.qc_dir.collect()
+            }
+        } else {
+            embedding_dirs = file("${workflow.projectDir}/assets/embedding_qc_empty")
         }
         Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
 
@@ -206,7 +242,11 @@ workflow CRISPR_PIPELINE {
         AdditionalQC = additional_qc_plots(
             Inference.inference_mudata,
             clone_qc_dir,
-            saturation_qc_dir
+            saturation_qc_dir,
+            GuideAssignment.guide_assignment_qc,
+            HTOFilter.hto_qc,
+            embedding_dirs,
+            GuideMappingQC.qc_dir
         )
 
         if (params.ENABLE_BENCHMARK) {
@@ -233,8 +273,8 @@ workflow CRISPR_PIPELINE {
             mapping_guide_pipeline.out.ks_guide_out_dir_collected,
             Hashing_Filtered.adata_hashing,
             mapping_hashing_pipeline.out.ks_hashing_out_dir_collected,
-            Hashing_Concat.concatenated_hashing_demux,
-            Hashing_Concat.concatenated_hashing_unfiltered_demux,
+            HTOFilter.filtered_hashing,
+            HTOFilter.unfiltered_hashing,
             Inference.inference_mudata,
             AdditionalQC.additional_qc,
             Preprocessing.figures_dir,
@@ -257,16 +297,25 @@ workflow CRISPR_PIPELINE {
             file("${workflow.projectDir}/dummy_hash.txt") // Dummy file for hashing parameter when not using hashing
         )
 
-        // Conditionally run scrublet based on ENABLE_SCRUBLET parameter (defaults to false)
-        if (params.ENABLE_SCRUBLET ?: false) {
-            MuData_Doublets = doublets_scrub(MergeMuData.mudata)
-            mudata_for_processing = MuData_Doublets.mudata_doublet
-        } else {
-            mudata_for_processing = MergeMuData.mudata
-        }
+        GuideMappingQC = guide_mapping_qc(
+            Preprocessing.filtered_anndata_rna,
+            mapping_guide_pipeline.out.concat_anndata_guide,
+            MergeMuData.mudata,
+            ch_guide_design,
+            params.reverse_complement_guides,
+            params.spacer_tag
+        )
+        GuideMappingGate = guide_mapping_qc_gate(MergeMuData.mudata, GuideMappingQC.qc_dir)
+
+        // Scrublet now runs independently for each RNA measurement set before
+        // concatenation, so the assembled MuData is already doublet-filtered.
+        mudata_for_processing = GuideMappingGate.mudata
 
         // Shared processing pipeline
         GuideAssignment = guide_assignment_pipeline(mudata_for_processing)
+        if (params.ENABLE_POSTCONCAT_EMBEDDING_QC) {
+            BeforeEmbedding = embedding_before_clone(GuideAssignment.concat_mudata, 'before_clone', file("${projectDir}/assets/cell_cycle/regev_lab_cell_cycle_genes.txt"))
+        }
         if (params.ENABLE_CLONE_REMOVAL) {
             CloneRemoval = remove_clonal_cells(GuideAssignment.concat_mudata)
             mudata_for_inference = CloneRemoval.filtered_mudata
@@ -274,6 +323,18 @@ workflow CRISPR_PIPELINE {
         } else {
             mudata_for_inference = GuideAssignment.concat_mudata
             clone_qc_dir = file("${workflow.projectDir}/assets/clone_qc_empty")
+        }
+        if (params.ENABLE_POSTCONCAT_EMBEDDING_QC) {
+            if (params.ENABLE_CLONE_REMOVAL) {
+                AfterEmbedding = embedding_after_clone(mudata_for_inference, 'after_clone', file("${projectDir}/assets/cell_cycle/regev_lab_cell_cycle_genes.txt"))
+                mudata_for_inference = AfterEmbedding.filtered_mudata
+                embedding_dirs = BeforeEmbedding.qc_dir.mix(AfterEmbedding.qc_dir).collect()
+            } else {
+                mudata_for_inference = BeforeEmbedding.filtered_mudata
+                embedding_dirs = BeforeEmbedding.qc_dir.collect()
+            }
+        } else {
+            embedding_dirs = file("${workflow.projectDir}/assets/embedding_qc_empty")
         }
         Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
 
@@ -285,7 +346,11 @@ workflow CRISPR_PIPELINE {
         AdditionalQC = additional_qc_plots(
             Inference.inference_mudata,
             clone_qc_dir,
-            saturation_qc_dir
+            saturation_qc_dir,
+            GuideAssignment.guide_assignment_qc,
+            file("${workflow.projectDir}/assets/hto_qc_empty"),
+            embedding_dirs,
+            GuideMappingQC.qc_dir
         )
 
         if (params.ENABLE_BENCHMARK) {

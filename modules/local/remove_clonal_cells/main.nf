@@ -1,7 +1,7 @@
 process remove_clonal_cells {
     tag "${params.CLONE_REMOVAL_action}"
     cache 'lenient'
-    publishDir "${params.outdir}/clone_removal", mode: params.publish_dir_mode, pattern: "clone_qc/*", overwrite: true
+    publishDir "${params.outdir}/clone_removal", mode: params.publish_dir_mode, pattern: "clone_qc", overwrite: true
 
     input:
         path mudata_input
@@ -15,7 +15,7 @@ process remove_clonal_cells {
         export MPLCONFIGDIR="./tmp/mplconfigdir"
         mkdir -p \${MPLCONFIGDIR}
 
-        remove_clonal_cells.py \
+        python ${projectDir}/bin/remove_clonal_cells.py \
             ${mudata_input} \
             clone_filtered_mudata.h5mu \
             --outdir clone_qc \

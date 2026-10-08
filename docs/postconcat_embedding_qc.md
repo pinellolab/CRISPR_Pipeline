@@ -1,0 +1,143 @@
+# Post-concatenation visualization QC
+
+`ENABLE_POSTCONCAT_EMBEDDING_QC=true` enables the reconciled workflow. This feature
+was compared with the supplied `tf_perturb_qc/1.0.qc_adata.py`,
+`2.0.prepare_adata.py`, and `2.1.concatenate_normalize.py`.
+
+## Order and data contract
+
+1. Per measurement set: existing knee caller, RNA UMI floor, two-sided log1p
+   count/gene MAD filters, optional Scrublet. These are not changed to the
+   reference's inflection caller, upper-only caps, or fixed Scrublet threshold.
+2. Concatenate raw RNA; retain the original per-cell mitochondrial percentages.
+   Merge aligned RNA/guide/HTO modalities, perform guide assignment and keep
+   cells with 1–15 assigned guides by default (both limits configurable).
+3. For hashing assays, use filtered HTO singlets with sufficient positive-cell
+   support, assessed within each measurement set. This now occurs before clone
+   calling, following the updated requested intersection order.
+4. Fork the qualified raw-count matrix. One branch applies `QC_pct_mito` then
+   makes temporary normalized QC plots. The other calls/removes clones on the
+   same **un-normalized, pre-mitochondrial** qualified cells.
+5. If clone removal is enabled, the surviving original counts receive the same
+   mitochondrial filter and a fresh, independent normalization/PCA/UMAP. This
+   is not a subset of the first normalized matrix. Gene support is recomputed
+   on retained cells with the existing strict fractional rule.
+6. Only the final filtered **raw-count** MuData reaches inference. No normalized
+   layer, PCA/UMAP vectors or neighbor graphs from this QC are added to it.
+
+The physical concatenation still precedes assignment: assignment is performed
+per measurement set and pooled afterward. Requiring a guide before assignment
+would not be equivalent to this intersection. Non-targeting assigned guides
+count as guides and are preserved.
+
+## Normalization and plots
+
+| Reference scripts | Existing pipeline | Reconciliation |
+| --- | --- | --- |
+| DropletUtils inflection, per tag | Knee per measurement set | Preserve requested knee method |
+| Upper-only 5-MAD caps, Scrublet before caps | Two-sided 5-MAD then Scrublet | Preserve requested pipeline order |
+| Absolute gene floor before Scrublet | Fractional support after concatenation | Keep fractional support, now on final retained cells |
+| Positive assigned guides after pooling | Previously only upper guide limit | Require at least one assigned guide, configurable |
+| MT 25/30% sweep | Single user cutoff | Single configurable cutoff, default 25% |
+| Median-depth/log1p/HVG/scale/PCA50/neighbors15 | No matching pre/post-clone embeddings | Add matching visualization-only recipe |
+| `diff_day` HVG covariate | No universal biological day annotation | Explicit optional HVG batch key |
+| Private cell-cycle/plate annotations | Private marker files are not portable | Package the canonical 97-gene Regev/Scanpy list; score eligible whole-transcriptome assays and record marker overlap |
+| Leiden 0.0–1.2 sweep | Not previously present | Run native igraph Leiden on the temporary graph; keep clusters out of inference data |
+| Saved normalized AnnData and embeddings | Counts required for inference | Do not save normalized matrices or embedding arrays |
+
+```mermaid
+flowchart TD
+    A[Per-measurement-set knee → UMI floor → MAD → Scrublet] --> B[Concatenate raw RNA and assign guides]
+    B --> C[Assigned-guide limits and filtered HTO intersection]
+    C --> D[MT cutoff → temporary normalization → PCA/UMAP]
+    C --> E[Optional clone calling/removal on raw counts]
+    E --> F[MT cutoff → fresh temporary normalization → PCA/UMAP]
+    F --> G[Fractional gene support on retained raw counts → inference]
+    D --> H[Before-clone dashboard QC]
+    F --> I[After-clone dashboard QC]
+```
+
+When clone removal is disabled, the first branch supplies the final filtered
+raw-count matrix and no duplicate after-clone embedding is computed.
+
+The reference's uncorrected Scanpy recipe is used: median-depth total-count
+normalization (`target_sum=None`), log1p, Seurat-flavor HVGs (maximum 6,000),
+scaling clipped at 10, ARPACK PCA, neighbors, UMAP. Default requested dimensions
+are 50 PCs and 15 neighbors. Small targeted panels use all expressed,
+nonconstant genes and cap PCs at `min(requested, cells-1, genes-1)`.
+`QC_EMBEDDING_hvg_batch_key` is empty by default: the reference's `diff_day`
+cannot be assumed to exist in other datasets. Set it explicitly if appropriate.
+It controls HVG selection only, not integration or batch correction.
+
+`QC_EMBEDDING_cell_cycle=auto` scores whole-transcriptome human and mouse
+assays after median-depth normalization and log1p. It uses the packaged 97-gene
+Regev/Scanpy list (first 43 S-phase, remaining 54 G2M); mouse symbols use
+mouse-style capitalization. At least `QC_EMBEDDING_min_cell_cycle_genes=10`
+markers from **each** phase must be represented. TAP-seq is skipped in `auto`
+because a targeted panel cannot provide an unbiased score; `on` explicitly
+overrides that guard, while `off` disables scoring. The metrics JSON records the
+reference, marker source, represented counts, status and skip reason.
+
+`QC_EMBEDDING_enable_leiden=true` runs the configurable resolution list
+`QC_EMBEDDING_leiden_resolutions` (default 0.0–1.2 by 0.1) with two native
+igraph Leiden iterations. The resolution nearest
+`QC_EMBEDDING_leiden_diagnostic_resolution` (default 0.5) supplies the
+measurement-set composition view. This uses the existing container's igraph
+implementation because that image does not contain the separate `leidenalg`
+package.
+
+Outputs under `postconcat_embedding_qc/{before_clone,after_clone}` include:
+
+- RNA-depth/detected-gene scatter colored by mitochondrial fraction, MT
+  histograms and log-count boxplots, before/after MT for every measurement set;
+- per-set cell-retention table;
+- raw-versus-log-normalized depth distributions;
+- PCA variance-ratio and cumulative-variance curves and TSV;
+- PCA/UMAP multipanels colored by measurement set, RNA depth, detected genes,
+  MT percentage, assigned-guide count and any existing supported covariates;
+- a dedicated pooled PCA containing every high-quality cell colored by
+  measurement set, plus a shared-coordinate grid highlighting each set with
+  the same categorical palette;
+- cell-cycle phase proportions by measurement set for eligible non-TAP-seq
+  assays, plus marker-overlap and phase-count tables;
+- Leiden cluster-count/modularity curves, synchronized UMAPs across all
+  resolutions and diagnostic measurement-set composition;
+- effective settings and omitted covariates in `embedding_qc_metrics.json`.
+
+Parse-specific plate maps and well annotations are not invented. Cell-cycle
+scores are computed only when the assay and marker overlap support them;
+otherwise the reason is recorded. Embeddings and Leiden clusters are
+descriptive QC, not evidence that technical variation has been corrected.
+Independent pre/post UMAP coordinates need not have matching orientation.
+
+The packaged cell-cycle markers follow the Scanpy cell-cycle tutorial and its
+Regev-lab marker list. They are vendored so runs do not depend on network access
+or Olga's private filesystem paths.
+
+All computations run in the existing base container. No host packages are
+installed. Scaling is memory guarded; no cells are silently subsampled.
+The chr8 test sets `QC_pct_mito=25`; targeted panels may lack informative MT
+genes, so a zero mitochondrial percentage does not establish low mitochondrial
+content in the whole transcriptome.
+
+Live dashboards collect published plots after each process completes; final
+dashboards include the same panels through `additional_qc/embeddings`.
+The live **Post-concatenation QC** category appears between Guide assignment
+and Inference. It contains pre/post-clone embedding tasks, clone calling and
+HTO intersection QC, with actual per-stage settings and per-set retention
+tables available before the final report exists.
+
+Nextflow publishes the emitted QC **directory**, not a glob for undeclared
+child outputs. Collection uses `find -L` because Nextflow stages input folders
+as symlinks. The W&B publisher watches nested PNG/TSV/JSON changes, including
+asynchronous publications that arrive after a trace update.
+
+The image budget is 38 MB by default (`WANDB_MAX_IMAGE_BYTES` in the wrapper),
+under the default 50 MB HTML limit. Core normalized QC panels receive first
+priority. The Final dashboard category explicitly lists image omissions if
+the configured limit is reached. Identical plots in the before/after-clone
+stages remain visible in both stages; duplicate copies of the same stage are
+deduplicated. A separate renderer revision identifies report-only refreshes
+without relabeling the pipeline version used to generate scientific results.
+Existing upstream knee/MAD/Scrublet panels remain available rather than being
+replaced by these post-concatenation views.

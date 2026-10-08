@@ -1,0 +1,48 @@
+from pathlib import Path
+
+
+ROOT = Path(__file__).parents[1]
+
+
+def test_post_concat_mito_precedes_gene_support():
+    script = (ROOT / "bin" / "concat_preprocessed_rna.py").read_text()
+    assert script.index("mito_keep =") < script.index("required_cells = resolve_min_cells")
+
+
+def test_clone_calling_is_after_aggregation_and_before_inference():
+    workflow = (ROOT / "workflows" / "crispr_pipeline" / "main.nf").read_text()
+    assert workflow.index("GuideAssignment = guide_assignment_pipeline") < workflow.index(
+        "CloneRemoval = remove_clonal_cells"
+    )
+    assert workflow.index("CloneRemoval = remove_clonal_cells") < workflow.index(
+        "Inference = inference_pipeline"
+    )
+    assert "CloneRemoval = remove_clonal_cells(GuideAssignment.concat_mudata)" in workflow
+
+
+def test_guide_and_hto_filters_follow_the_required_cell_lineage():
+    workflow = (ROOT / "workflows" / "crispr_pipeline" / "main.nf").read_text()
+    guide_workflow = (ROOT / "subworkflows" / "local" / "guide_assignment_pipeline" / "main.nf").read_text()
+    assert guide_workflow.index("mudata_concat(") < guide_workflow.index("filter_guide_assignment_qc(")
+    assert "CloneRemoval = remove_clonal_cells(GuideAssignment.concat_mudata)" in workflow
+    assert workflow.index("HTOFilter = filter_hto_post_clone(GuideAssignment.concat_mudata)") < workflow.index(
+        "CloneRemoval = remove_clonal_cells(qualified_mudata)"
+    )
+    assert workflow.index("HTOFilter = filter_hto_post_clone(GuideAssignment.concat_mudata)") < workflow.index(
+        "Inference = inference_pipeline(mudata_for_inference"
+    )
+    assert "Hashing_Concat.concatenated_hashing_unfiltered_demux" in workflow
+
+
+def test_scrublet_is_not_reapplied_after_mudata_aggregation():
+    workflow = (ROOT / "workflows" / "crispr_pipeline" / "main.nf").read_text()
+    assert "doublets_scrub(" not in workflow
+    preprocessing = (ROOT / "subworkflows" / "local" / "preprocessing_pipeline" / "main.nf").read_text()
+    assert "params.ENABLE_SCRUBLET" in preprocessing
+    assert "params.SCRUBLET_assay_type" in preprocessing
+
+
+def test_hashing_disables_scrublet_before_preprocessing():
+    preprocessing = (ROOT / "subworkflows" / "local" / "preprocessing_pipeline" / "main.nf").read_text()
+    assert "params.ENABLE_SCRUBLET && !params.ENABLE_DATA_HASHING" in preprocessing
+    assert "scrublet_enabled," in preprocessing
