@@ -28,6 +28,7 @@ process guide_mapping_qc {
             --batch-column "${params.QC_batch_col ?: 'batch'}" \
             --min-overlap-cells-per-set ${params.GUIDE_MAPPING_QC_min_overlap_cells_per_set} \
             --min-guide-to-rna-fraction ${params.GUIDE_MAPPING_QC_min_guide_to_rna_fraction} \
+            --min-overlap-to-rna-fraction ${params.GUIDE_MAPPING_QC_min_overlap_to_rna_fraction} \
             --min-overlap-to-guide-fraction ${params.GUIDE_MAPPING_QC_min_overlap_to_guide_fraction} \
             --min-recovered-guide-fraction ${params.GUIDE_MAPPING_QC_min_recovered_guide_fraction} \
             --outdir guide_mapping_qc

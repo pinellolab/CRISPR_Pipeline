@@ -100,7 +100,8 @@ def main() -> int:
     parser.add_argument("--batch-column", default="batch")
     parser.add_argument("--min-overlap-cells-per-set", type=int, default=20)
     parser.add_argument("--min-guide-to-rna-fraction", type=float, default=0.001)
-    parser.add_argument("--min-overlap-to-guide-fraction", type=float, default=0.5)
+    parser.add_argument("--min-overlap-to-rna-fraction", type=float, default=0.5)
+    parser.add_argument("--min-overlap-to-guide-fraction", type=float, default=0.0)
     parser.add_argument("--min-recovered-guide-fraction", type=float, default=0.5)
     parser.add_argument("--outdir", type=Path, required=True)
     args = parser.parse_args()
@@ -133,6 +134,7 @@ def main() -> int:
         overlap_cells = len(overlap)
         guide_to_rna = guide_cells / rna_cells if rna_cells else 0.0
         overlap_to_guide = overlap_cells / guide_cells if guide_cells else 0.0
+        overlap_to_rna = overlap_cells / rna_cells if rna_cells else 0.0
         status = "PASS"
         reasons = []
         if overlap_cells < args.min_overlap_cells_per_set:
@@ -140,6 +142,10 @@ def main() -> int:
         if guide_to_rna < args.min_guide_to_rna_fraction:
             reasons.append(
                 f"guide/RNA {guide_to_rna:.6f} < {args.min_guide_to_rna_fraction:.6f}"
+            )
+        if overlap_to_rna < args.min_overlap_to_rna_fraction:
+            reasons.append(
+                f"overlap/RNA {overlap_to_rna:.6f} < {args.min_overlap_to_rna_fraction:.6f}"
             )
         if overlap_to_guide < args.min_overlap_to_guide_fraction:
             reasons.append(
@@ -156,6 +162,7 @@ def main() -> int:
                 "overlap_cells": overlap_cells,
                 "guide_to_rna_fraction": guide_to_rna,
                 "overlap_to_guide_fraction": overlap_to_guide,
+                "overlap_to_rna_fraction": overlap_to_rna,
                 "status": status,
                 "reason": "; ".join(reasons),
             }
@@ -169,7 +176,7 @@ def main() -> int:
         )
     status = "PASS" if not failures else "FAIL"
     summary = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "status": status,
         "configured_orientation": {
             "reverse_complement_guides": args.reverse_complement_guides,
@@ -179,6 +186,7 @@ def main() -> int:
             "min_overlap_cells_per_set": args.min_overlap_cells_per_set,
             "min_guide_to_rna_fraction": args.min_guide_to_rna_fraction,
             "min_overlap_to_guide_fraction": args.min_overlap_to_guide_fraction,
+            "min_overlap_to_rna_fraction": args.min_overlap_to_rna_fraction,
             "min_recovered_guide_fraction": args.min_recovered_guide_fraction,
         },
         "overall": {

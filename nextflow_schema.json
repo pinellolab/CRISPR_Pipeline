@@ -448,10 +448,17 @@
                 },
                 "GUIDE_MAPPING_QC_min_overlap_to_guide_fraction": {
                     "type": "number",
+                    "default": 0.0,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Optional legacy raw-guide barcode overlap gate; disabled by default because uncalled guide droplets are not high-quality RNA cells. The raw-guide overlap remains reported."
+                },
+                "GUIDE_MAPPING_QC_min_overlap_to_rna_fraction": {
+                    "type": "number",
                     "default": 0.5,
                     "minimum": 0,
                     "maximum": 1,
-                    "description": "Minimum fraction of guide-mapped cells sharing an exact RNA barcode."
+                    "description": "Minimum fraction of retained high-quality RNA cells sharing an exact barcode with the guide matrix, per measurement set."
                 },
                 "GUIDE_MAPPING_QC_min_recovered_guide_fraction": {
                     "type": "number",
