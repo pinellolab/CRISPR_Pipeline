@@ -62,6 +62,7 @@ workflow mapping_guide_pipeline {
             GuideRef.guide_index,
             GuideRef.t2g_guide,
             SeqSpecResult.parsed_seqspec,
+            ch_guide_seqspec,
             SeqSpecResult.barcode_file,
             bc_replacement_ch,
             params.is_10x3v3,

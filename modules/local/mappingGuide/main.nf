@@ -8,6 +8,7 @@ process mappingGuide {
     path guide_index
     path t2g_guide
     path parsed_seqSpec_file
+    path guide_seqspec
     path barcode_file
     path bc_replacement_file
     val is_10xv3v
@@ -86,6 +87,32 @@ process mappingGuide {
 
     echo "Final Chemistry: \$CHEM"
 
+    # kallisto pseudoaligns only 66.8% of these reads while 75.8% of them carry
+    # an exact library spacer, and --no-jump made no difference. Handing kb a
+    # read that is just the spacer removes the question. splitcode writes one
+    # record per input read, empty where it found no anchor, so the extracted
+    # file stays in step with R1 without any filtering.
+    KB_FASTQS="${fastq_files}"
+    if [ "${params.guide_extract_spacer}" = true ]; then
+        seqspec_to_splitcode.py \\
+            --seqspec ${guide_seqspec} \\
+            --output splitcode_config.txt \\
+            --read-index 1
+        if [ -s splitcode_config.txt ]; then
+            echo "Extracting the spacer with splitcode:"
+            cat splitcode_config.txt
+            splitcode -c splitcode_config.txt -N 2 --gzip -t ${task.cpus} \\
+                -o sc_R1.fastq.gz,sc_R2.fastq.gz ${fastq_files}
+            # The extracted file is named for the @extract variable.
+            KB_FASTQS="sc_R1.fastq.gz spacer.fastq.gz"
+            # The spacer is now the whole of the second file.
+            CHEM="\$(echo "\$CHEM" | awk -F: 'BEGIN{OFS=":"} {\$3="1,0,0"; print}')"
+            echo "Chemistry after extraction: \$CHEM"
+        else
+            echo "The guide read is already just the spacer; no extraction needed."
+        fi
+    fi
+
     if [ "${params.replace_barcodes}" = true ] && [ -f "${bc_replacement_file}" ] && [ -s "${bc_replacement_file}" ]; then
         # bustools reads the replacement list with a plain ifstream, so a
         # gzipped file comes back as binary and stops with "Barcode lengths
@@ -116,7 +143,7 @@ process mappingGuide {
         --strand ${params.guide_strand} \\
         -w ${barcode_file} \\
         \${replacement_args} \\
-        ${fastq_files}
+        \${KB_FASTQS}
 
     expected_h5ad="${batch}_ks_guide_out/${counts_dir}/adata.h5ad"
     if [ ! -s "\${expected_h5ad}" ]; then
