@@ -47,6 +47,7 @@ process mappingscRNA {
                 --overwrite \\
                 --h5ad \\
                 --sum total \\
+                --strand ${params.scrna_strand} \\
                 --verbose \\
                 -w ${barcode_file} \\
                 \$replacement_args \\
