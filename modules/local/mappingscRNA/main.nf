@@ -17,7 +17,7 @@ process mappingscRNA {
 
     output:
     path "*_ks_transcripts_out", emit: ks_transcripts_out_dir
-    path "*_ks_transcripts_out/counts_unfiltered${params.replace_barcodes ? '_modified' : ''}/adata.h5ad", emit: ks_transcripts_out_adata
+    path "*_ks_transcripts_out/counts_unfiltered${params.rna_replace_barcodes ? '_modified' : ''}/adata.h5ad", emit: ks_transcripts_out_adata
 
     script:
         def batch = meta.measurement_sets
@@ -29,7 +29,7 @@ process mappingscRNA {
 
         chemistry=\$(extract_parsed_seqspec.py --file ${parsed_seqSpec_file})
 
-        if [ -f "${bc_replacement_file}" ] && [ -s "${bc_replacement_file}" ];
+        if [ "${params.rna_replace_barcodes}" = true ] && [ -f "${bc_replacement_file}" ] && [ -s "${bc_replacement_file}" ];
         then
                 replacement_args="-r ${bc_replacement_file}"
         else
