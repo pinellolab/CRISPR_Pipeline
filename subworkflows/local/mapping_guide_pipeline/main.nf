@@ -55,7 +55,7 @@ workflow mapping_guide_pipeline {
         }
     }
     else {
-        bc_replacement_ch = params.replace_barcodes ? Channel.fromPath(params.bc_replacement_file).collect() : Channel.fromPath("dummy_bc_replacement.txt").collect()
+        bc_replacement_ch = params.replace_barcodes ? Channel.fromPath(params.bc_replacement_file).collect() : Channel.fromPath("${projectDir}/assets/dummy_bc_replacement.txt").collect()
 
         MappingOut = mappingGuide(
             ch_guide,
