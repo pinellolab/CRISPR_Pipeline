@@ -113,6 +113,7 @@ process mappingGuide {
         --h5ad \\
         --overwrite \\
         --verbose \\
+        ${params.guide_no_jump ? '--no-jump' : ''} \\
         -w ${barcode_file} \\
         \${replacement_args} \\
         ${fastq_files}
