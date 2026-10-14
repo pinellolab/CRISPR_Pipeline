@@ -24,6 +24,10 @@ process mappingGuide {
     def counts_dir = "counts_unfiltered${params.replace_barcodes ? '_modified' : ''}"
     // Check if spacer is valid (not null/empty and length > 1)
     def has_spacer  = (spacer_tag && spacer_tag.length() > 1) ? "true" : "false"
+    // A spacer tag is one reason to search the whole read, not the only one. A
+    // library whose spacer sits at a variable offset needs the same search with
+    // no tag, since nothing fixed precedes the spacer to anchor on.
+    def whole_read  = (has_spacer == "true" || params.guide_whole_read) ? "true" : "false"
 
     """
     set -euo pipefail
@@ -42,8 +46,8 @@ process mappingGuide {
         # part of the parsed chemistry, preserve its read id, and set start/end to 0.
         # Ex: 0,0,16:0,16,26:0,37,58 -> 0,0,16:0,16,26:0,0,0
         #     0,0,16:0,16,26:1,20,30 -> 0,0,16:0,16,26:1,0,0
-        if [ "${has_spacer}" == "true" ]; then
-            echo "Spacer tag detected ('${spacer_tag}'). Enabling automatic guide whole-read search."
+        if [ "${whole_read}" == "true" ]; then
+            echo "Guide whole-read search enabled (spacer tag: '${spacer_tag}', guide_whole_read: ${params.guide_whole_read})."
             echo "The guide feature read is preserved from the parsed seqspec chemistry; only feature start/end are reset to 0,0."
             echo "Parsed guide chemistry: \$RAW_CHEM"
             CHEM=\$(echo "\$RAW_CHEM" | awk -F: 'BEGIN{OFS=":"} {
