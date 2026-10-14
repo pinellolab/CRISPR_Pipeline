@@ -21,7 +21,7 @@ workflow mapping_rna_pipeline {
 
     DownloadRefResult = downloadReference(params.REFERENCE_transcriptome, params.use_igvf_reference)
 
-    bc_replacement_ch = params.replace_barcodes ? Channel.fromPath(params.bc_replacement_file).collect() : Channel.fromPath("${projectDir}/assets/dummy_bc_replacement.txt").collect()
+    bc_replacement_ch = (params.replace_barcodes || params.rna_replace_barcodes) ? Channel.fromPath(params.bc_replacement_file).collect() : Channel.fromPath("${projectDir}/assets/dummy_bc_replacement.txt").collect()
 
     MappingOut = mappingscRNA(
         ch_rna,
@@ -43,7 +43,8 @@ workflow mapping_rna_pipeline {
 
     AnndataConcatenate = anndata_concat(
         parsed_covariate_file,
-        ks_transcripts_out_dir_collected
+        ks_transcripts_out_dir_collected,
+        params.rna_replace_barcodes
     )
 
     emit:
