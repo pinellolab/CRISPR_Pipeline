@@ -89,8 +89,22 @@ workflow CRISPR_PIPELINE {
         ch_hash_seqspec.view { "Hash seqspec: $it" }
     }
 
-    // barcode_onlist
-    ch_barcode_onlist = ch_rna
+    // barcode_onlist, per modality. A feature-barcode library can be prepared
+    // with a different index kit from the RNA, so its cell barcodes come from a
+    // different onlist and have to be translated into the RNA's space
+    // afterwards. Taking the RNA's onlist for every modality silently discards
+    // a guide library whose barcodes are in the other space.
+    ch_rna_barcode_onlist = ch_rna
+        .map { meta, _fastqs -> file(meta.barcode_onlist) }
+        .unique()
+        .first()
+
+    ch_guide_barcode_onlist = ch_guide
+        .map { meta, _fastqs -> file(meta.barcode_onlist) }
+        .unique()
+        .first()
+
+    ch_hash_barcode_onlist = ch_hash
         .map { meta, _fastqs -> file(meta.barcode_onlist) }
         .unique()
         .first()
@@ -120,14 +134,14 @@ workflow CRISPR_PIPELINE {
     mapping_rna_pipeline(
             ch_rna,
             ch_rna_seqspec,
-            ch_barcode_onlist,
+            ch_rna_barcode_onlist,
             prepare_mapping_pipeline.out.parsed_covariate_file
         )
 
     mapping_guide_pipeline(
         ch_guide,
         ch_guide_seqspec,
-        ch_barcode_onlist,
+        ch_guide_barcode_onlist,
         ch_guide_design,
         prepare_mapping_pipeline.out.parsed_covariate_file,
         params.reverse_complement_guides,
@@ -157,7 +171,7 @@ workflow CRISPR_PIPELINE {
         mapping_hashing_pipeline(
             ch_hash,
             ch_hash_seqspec,
-            ch_barcode_onlist,
+            ch_hash_barcode_onlist,
             ch_barcode_hashtag_map,
             prepare_mapping_pipeline.out.parsed_covariate_file
             )
