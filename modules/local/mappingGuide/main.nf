@@ -113,7 +113,6 @@ process mappingGuide {
         --h5ad \\
         --overwrite \\
         --verbose \\
-        ${params.guide_no_jump ? '--no-jump' : ''} \\
         --strand ${params.guide_strand} \\
         -w ${barcode_file} \\
         \${replacement_args} \\
