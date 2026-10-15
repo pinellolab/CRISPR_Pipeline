@@ -601,14 +601,18 @@ def main(args):
             })
         else:
             scrublet_status = "applied"
-            # Scrublet only sets threshold_ when call_doublets finds a minimum
-            # between the two modes. On a channel where the simulated-doublet
-            # histogram has no clean minimum it warns, leaves the attribute
-            # unset and returns calls anyway, so reading it directly raises
-            # AttributeError instead of taking the np.nan path this line
-            # already provides for.
+            # Scrublet only sets threshold_, and only returns calls, when
+            # call_doublets finds a minimum between the two modes of the
+            # simulated-doublet histogram. Where there is none it warns,
+            # leaves threshold_ unset and returns predicted_doublets=None,
+            # without raising, so this branch has scores but no calls. Keep
+            # the scores, call no doublets, and let the flow table say the
+            # threshold was never found; dropping the channel instead would
+            # lose it from the whole screen.
             threshold_value = getattr(scrub, "threshold_", None)
             threshold = float(threshold_value) if threshold_value is not None else np.nan
+            if predicted is None:
+                predicted = np.zeros(scores.shape[0], dtype=bool)
             adata.obs["doublet_scores"] = np.nan
             adata.obs.iloc[selected, adata.obs.columns.get_loc("doublet_scores")] = scores
             adata.obs["predicted_doublets"] = False
@@ -628,7 +632,8 @@ def main(args):
                     f"expected_doublet_rate = {args.scrublet_expected_doublet_rate:g}; "
                     f"PCA components = {scrublet_n_prin_comps_used}"
                     f"{' (adaptive fallback)' if scrublet_pca_fallback_used else ''}; "
-                    f"call threshold = {threshold:.3g}"
+                    f"call threshold = "
+                    f"{'not found' if np.isnan(threshold) else format(threshold, '.3g')}"
                 ),
                 "applied": True,
                 "cells_before": before_count,
