@@ -217,8 +217,12 @@ workflow CRISPR_PIPELINE {
         )
         GuideMappingGate = guide_mapping_qc_gate(MergeMuData.mudata, GuideMappingQC.qc_dir)
 
+        // Alignment and quantification only: an empty channel leaves every
+        // downstream process without input, so the run stops here and succeeds.
+        mudata_past_gate = params.stop_after_guide_mapping_qc ? Channel.empty() : GuideMappingGate.mudata
+
         // Shared processing pipeline
-        GuideAssignment = guide_assignment_pipeline(GuideMappingGate.mudata)
+        GuideAssignment = guide_assignment_pipeline(mudata_past_gate)
         // HTO support is assessed on GEX/guide-qualified cells before the parallel branches.
         HTOFilter = filter_hto_post_clone(GuideAssignment.concat_mudata)
         qualified_mudata = HTOFilter.filtered_mudata
@@ -323,7 +327,9 @@ workflow CRISPR_PIPELINE {
 
         // Scrublet now runs independently for each RNA measurement set before
         // concatenation, so the assembled MuData is already doublet-filtered.
-        mudata_for_processing = GuideMappingGate.mudata
+        // Alignment and quantification only: an empty channel leaves every
+        // downstream process without input, so the run stops here and succeeds.
+        mudata_for_processing = params.stop_after_guide_mapping_qc ? Channel.empty() : GuideMappingGate.mudata
 
         // Shared processing pipeline
         GuideAssignment = guide_assignment_pipeline(mudata_for_processing)
