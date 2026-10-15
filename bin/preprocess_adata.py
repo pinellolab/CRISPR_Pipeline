@@ -601,7 +601,14 @@ def main(args):
             })
         else:
             scrublet_status = "applied"
-            threshold = float(scrub.threshold_) if scrub.threshold_ is not None else np.nan
+            # Scrublet only sets threshold_ when call_doublets finds a minimum
+            # between the two modes. On a channel where the simulated-doublet
+            # histogram has no clean minimum it warns, leaves the attribute
+            # unset and returns calls anyway, so reading it directly raises
+            # AttributeError instead of taking the np.nan path this line
+            # already provides for.
+            threshold_value = getattr(scrub, "threshold_", None)
+            threshold = float(threshold_value) if threshold_value is not None else np.nan
             adata.obs["doublet_scores"] = np.nan
             adata.obs.iloc[selected, adata.obs.columns.get_loc("doublet_scores")] = scores
             adata.obs["predicted_doublets"] = False
