@@ -39,12 +39,12 @@ OUTPUT_COLUMNS = [
     "perturbo_q_value",
     "perturbo_fc_se",
     "perturbo_negLog10p",
-    "element_id",
-    "element_type",
-    "element_chr",
-    "element_start",
-    "element_end",
-    "element_name",
+    "genomic_element_id",
+    "genomic_element_type",
+    "genomic_element_chr",
+    "genomic_element_start",
+    "genomic_element_end",
+    "genomic_element_name",
     "guide_ids",
     "num_guides",
     "gene_name",
@@ -411,17 +411,18 @@ def create_catalog_per_element(
     merged["perturbo_cis_negLog10p"] = _neg_log10(merged["_perturbo_cis_p_value"], pvalue_floor)
     merged["perturbo_cis_p_value"] = merged["_perturbo_cis_p_value"]
 
-    merged["element_name"] = merged["intended_target_name"]
-    merged["element_id"] = merged["element_name"]
-    merged["element_chr"] = merged["intended_target_chr"]
-    merged["element_start"] = merged["intended_target_start"]
-    merged["element_end"] = merged["intended_target_end"]
+    merged = merged.rename(columns={"element_type": "genomic_element_type"})
+    merged["genomic_element_name"] = merged["intended_target_name"]
+    merged["genomic_element_id"] = merged["genomic_element_name"]
+    merged["genomic_element_chr"] = merged["intended_target_chr"]
+    merged["genomic_element_start"] = merged["intended_target_start"]
+    merged["genomic_element_end"] = merged["intended_target_end"]
 
     merged["gene_name"] = _fill_gene_names(merged, mdata)
 
     catalog = categoricalize_text_columns(merged[OUTPUT_COLUMNS])
     catalog = catalog.sort_values(
-        by=["element_chr", "element_start", "element_end", "element_name", "gene_id"],
+        by=["genomic_element_chr", "genomic_element_start", "genomic_element_end", "genomic_element_name", "gene_id"],
         kind="stable",
         na_position="last",
     ).reset_index(drop=True)
@@ -454,19 +455,19 @@ def build_catalog_per_element_output(
             "perturbo_q_value",
             "perturbo_fc_se",
             "perturbo_negLog10p",
-            "element_id",
-            "element_type",
-            "element_chr",
-            "element_start",
-            "element_end",
-            "element_name",
+            "genomic_element_id",
+            "genomic_element_type",
+            "genomic_element_chr",
+            "genomic_element_start",
+            "genomic_element_end",
+            "genomic_element_name",
             "guide_ids",
             "num_guides",
             "gene_name",
             "nPerturbedCells",
         ],
         output_columns=OUTPUT_COLUMNS,
-        sort_columns=["element_chr", "element_start", "element_end", "element_name", "gene_id"],
+        sort_columns=["genomic_element_chr", "genomic_element_start", "genomic_element_end", "genomic_element_name", "gene_id"],
         # perturbo_cis_* are the local table's perturbo_* columns under another
         # name -- the pandas path renames them -- so they exist under that name in
         # neither input and the fast path has to do the rename too. Without this

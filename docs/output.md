@@ -38,11 +38,11 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
 
 The local-analysis tables contain guide-gene or target-element-gene tests restricted to the configured pairing strategy. The global-analysis tables contain all-by-all PerTurbo tests. Element-level tables aggregate guides by intended target fields: `intended_target_name`, `intended_target_chr`, `intended_target_start`, and `intended_target_end`.
 
-The local/global analysis TSVs include raw p-values, BH-adjusted q-values when applicable, and the nonredundant `*_negLog10p` significance transform. Element-level TSVs also include the catalog-facing element annotations: `element_id`, `element_type`, `element_chr`, `element_start`, `element_end`, `element_name`, `guide_ids`, `num_guides`, `gene_name`, and `nPerturbedCells`. Per-guide TSVs include guide sequence, type, targeting status, guide and intended-target coordinates, PAM/strand, tested-gene symbol, and per-guide perturbed-cell count.
+The local/global analysis TSVs include raw p-values, BH-adjusted q-values when applicable, and the nonredundant `*_negLog10p` significance transform. Element-level TSVs also include the catalog-facing genomic-element annotations: `genomic_element_id`, `genomic_element_type`, `genomic_element_chr`, `genomic_element_start`, `genomic_element_end`, `genomic_element_name`, `guide_ids`, `num_guides`, `gene_name`, and `nPerturbedCells`. Per-guide TSVs include guide sequence, type, targeting status, guide and intended-target coordinates, PAM/strand, tested-gene symbol, and per-guide perturbed-cell count. Source guide metadata fields named `element_*` are not renamed.
 
 `catalog_per_element_output.tsv.gz` is an additive, per-element catalog view with one row per `(element, gene)` pair and the following columns:
 `sceptre_log2_fc`, `sceptre_p_value`, `sceptre_q_value`, `sceptre_fc_se`, `sceptre_negLog10p`, `perturbo_log2_fc`, `perturbo_p_value`, `perturbo_q_value`, `perturbo_fc_se`, `perturbo_negLog10p`,
-`element_id`, `element_type`, `element_chr`, `element_start`, `element_end`, `element_name`,
+`genomic_element_id`, `genomic_element_type`, `genomic_element_chr`, `genomic_element_start`, `genomic_element_end`, `genomic_element_name`,
 `guide_ids`, `num_guides`, `gene_name`, `gene_id`, and `nPerturbedCells`.
 
 `catalog_per_guide_output.tsv.gz` is the corresponding per-guide catalog view with one row per `(guide_id, gene_id)` pair. It contains the same 10 nonredundant SCEPTRE/PerTurbo metric columns plus:

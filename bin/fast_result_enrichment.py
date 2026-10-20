@@ -235,12 +235,13 @@ def enrich_global_parquet(
             **JOIN_ORDER_LEFT,
         )
         scan = scan.with_columns(
-            pl.col("intended_target_name").alias("element_id"),
-            pl.col("intended_target_name").alias("element_name"),
-            pl.col("intended_target_chr").alias("element_chr"),
-            pl.col("intended_target_start").alias("element_start"),
-            pl.col("intended_target_end").alias("element_end"),
+            pl.col("intended_target_name").alias("genomic_element_id"),
+            pl.col("intended_target_name").alias("genomic_element_name"),
+            pl.col("intended_target_chr").alias("genomic_element_chr"),
+            pl.col("intended_target_start").alias("genomic_element_start"),
+            pl.col("intended_target_end").alias("genomic_element_end"),
         )
+        scan = scan.rename({"element_type": "genomic_element_type"})
         scan = _add_gene_names(scan, genes, fill_missing=False)
         output_columns = ELEMENT_OUTPUT_COLUMNS
     else:

@@ -236,11 +236,11 @@ The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62a
 | per-guide annotations | intended_target_end | integer nullable | Current annotated tables | Intended-target end coordinate. | analysis_output_formatting.py |
 | shared annotations | gene_name | string nullable | Current annotated tables | Human-readable tested-gene symbol. | analysis_output_formatting.py |
 | shared annotations | nPerturbedCells | integer nullable | Current annotated tables | Number of cells assigned to the tested guide or element under guide_assignment. | analysis_output_formatting.py |
-| per-element annotations | element_id | string | Current annotated element tables | Catalog-facing canonical element identifier. | build_catalog_per_element_output.py |
-| per-element annotations | element_type | string | Current annotated element tables | Catalog-facing element class. | build_catalog_per_element_output.py |
-| per-element annotations | element_chr | string nullable | Current annotated element tables | Catalog-facing element chromosome. | build_catalog_per_element_output.py |
-| per-element annotations | element_start | integer nullable | Current annotated element tables | Catalog-facing element start coordinate. | build_catalog_per_element_output.py |
-| per-element annotations | element_end | integer nullable | Current annotated element tables | Catalog-facing element end coordinate. | build_catalog_per_element_output.py |
-| per-element annotations | element_name | string | Current annotated element tables | Human-readable/catalog element name. | build_catalog_per_element_output.py |
+| per-element annotations | genomic_element_id | string | Current annotated element tables | Catalog-facing canonical element identifier. | build_catalog_per_element_output.py |
+| per-element annotations | genomic_element_type | string | Current annotated element tables | Catalog-facing element class. | build_catalog_per_element_output.py |
+| per-element annotations | genomic_element_chr | string nullable | Current annotated element tables | Catalog-facing element chromosome. | build_catalog_per_element_output.py |
+| per-element annotations | genomic_element_start | integer nullable | Current annotated element tables | Catalog-facing element start coordinate. | build_catalog_per_element_output.py |
+| per-element annotations | genomic_element_end | integer nullable | Current annotated element tables | Catalog-facing element end coordinate. | build_catalog_per_element_output.py |
+| per-element annotations | genomic_element_name | string | Current annotated element tables | Human-readable/catalog element name. | build_catalog_per_element_output.py |
 | per-element annotations | guide_ids | delimited string | Current annotated element tables | Guide identifiers aggregated into the element. | analysis_output_formatting.py |
 | per-element annotations | num_guides | integer | Current annotated element tables | Number of guides represented by the element. | analysis_output_formatting.py |

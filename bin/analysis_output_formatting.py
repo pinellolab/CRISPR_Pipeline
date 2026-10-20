@@ -10,16 +10,20 @@ ELEMENT_COLUMNS = [
     "intended_target_end",
 ]
 ELEMENT_ANNOTATION_COLUMNS = [
-    "element_id",
-    "element_type",
-    "element_chr",
-    "element_start",
-    "element_end",
-    "element_name",
+    "genomic_element_id",
+    "genomic_element_type",
+    "genomic_element_chr",
+    "genomic_element_start",
+    "genomic_element_end",
+    "genomic_element_name",
     "guide_ids",
     "num_guides",
     "gene_name",
     "nPerturbedCells",
+]
+LEGACY_ELEMENT_ANNOTATION_COLUMNS = [
+    "element_id", "element_type", "element_chr", "element_start",
+    "element_end", "element_name",
 ]
 SCEPTRE_RESULT_COLUMNS = [
     "sceptre_log2_fc",
@@ -360,7 +364,7 @@ def _fill_gene_names(results: pd.DataFrame, mdata) -> pd.Series:
 
 def add_element_annotations(df: pd.DataFrame, mdata) -> pd.DataFrame:
     out = _normalize_element_columns(df).drop(
-        columns=ELEMENT_ANNOTATION_COLUMNS + ["_element_key"],
+        columns=ELEMENT_ANNOTATION_COLUMNS + LEGACY_ELEMENT_ANNOTATION_COLUMNS + ["_element_key"],
         errors="ignore",
     )
     out["_element_key"] = _element_key(out)
@@ -368,11 +372,12 @@ def add_element_annotations(df: pd.DataFrame, mdata) -> pd.DataFrame:
     element_meta = _build_element_metadata(mdata)
     out = out.merge(element_meta, on="_element_key", how="left")
 
-    out["element_name"] = out["intended_target_name"]
-    out["element_id"] = out["element_name"]
-    out["element_chr"] = out["intended_target_chr"]
-    out["element_start"] = out["intended_target_start"]
-    out["element_end"] = out["intended_target_end"]
+    out = out.rename(columns={"element_type": "genomic_element_type"})
+    out["genomic_element_name"] = out["intended_target_name"]
+    out["genomic_element_id"] = out["genomic_element_name"]
+    out["genomic_element_chr"] = out["intended_target_chr"]
+    out["genomic_element_start"] = out["intended_target_start"]
+    out["genomic_element_end"] = out["intended_target_end"]
     out["gene_name"] = _fill_gene_names(out, mdata)
 
     out = out.drop(columns=["_element_key"], errors="ignore")

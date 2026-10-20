@@ -114,7 +114,7 @@ def _frame(columns, n, pvalues):
         elif column == "targeting":
             data[column] = rng.random(n) > 0.5
         elif column in {
-            "guide_start", "guide_end", "element_start", "element_end",
+            "guide_start", "guide_end", "genomic_element_start", "genomic_element_end",
             "intended_target_start", "intended_target_end",
             "nPerturbedCells", "num_guides",
         }:

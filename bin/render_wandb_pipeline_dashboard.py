@@ -929,7 +929,10 @@ def final_inference_content(path: Path | None, limit: int = 25) -> str:
     marker = re.compile(r'<h3[^>]*>Guide Inference</h3>', re.I)
     sections = []
     preferred = [
-        "gene_name", "gene_id", "guide_id", "intended_target_name", "nPerturbedCells",
+        "gene_name", "gene_id", "guide_id", "intended_target_name",
+        "genomic_element_id", "genomic_element_name", "genomic_element_type",
+        "genomic_element_chr", "genomic_element_start", "genomic_element_end",
+        "guide_ids", "num_guides", "nPerturbedCells",
         "sceptre_log2_fc", "sceptre_p_value", "sceptre_q_value",
         "perturbo_log2_fc", "perturbo_p_value", "perturbo_q_value",
     ]

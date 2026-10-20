@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Defer the global gene-prevalence filter until final pooled cell QC when the embedding workflow is enabled, retaining the canonical intended-target rescue rule and the shared assigned-guide cell population.
 - Preserve the rc12 PerTurbo image, current control-group logic, streaming Parquet conversion, optional live W&B observer, and saturation publication.
 
+### Output schema
+
+- Rename final per-element result annotations `element_id`, `element_type`, `element_chr`, `element_start`, `element_end`, and `element_name` to the corresponding `genomic_element_*` columns in local/global tables, catalog tables, and MuData inference-result tables. Source `guide.var` metadata and `intended_target_*` join fields retain their original names. This is a breaking column-name change for consumers of final outputs; runs pinned to older commits are unaffected.
+
 ### Inference
 
 - Pin PerTurbo to `v2.0.0rc12` (`sha256:0c7d3e31…e9df4f`) for new runs. This supersedes the rc10 pin below; rc11–rc12 include propensity-tail safeguards and guide-efficacy fixes. Completed rc10 outputs are not relabeled as rc12 results.

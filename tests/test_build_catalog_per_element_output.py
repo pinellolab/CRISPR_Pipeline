@@ -13,6 +13,7 @@ if str(BIN_DIR) not in sys.path:
     sys.path.insert(0, str(BIN_DIR))
 
 import build_catalog_per_element_output as catalog_builder
+from analysis_output_formatting import format_element_output
 
 
 def _make_test_mudata():
@@ -96,7 +97,7 @@ def test_create_catalog_per_element_merge_and_metrics():
     assert list(catalog.columns) == catalog_builder.OUTPUT_COLUMNS
     assert len(catalog) == 2
 
-    row_a = catalog[(catalog['element_name'] == 'elemA') & (catalog['gene_id'] == 'GENE1')].iloc[0]
+    row_a = catalog[(catalog['genomic_element_name'] == 'elemA') & (catalog['gene_id'] == 'GENE1')].iloc[0]
     assert row_a['sceptre_log2_fc'] == 1.2
     assert row_a['sceptre_p_value'] == 0.01
     assert row_a['sceptre_q_value'] == 0.02
@@ -109,7 +110,7 @@ def test_create_catalog_per_element_merge_and_metrics():
     assert row_a['gene_name'] == 'SYM1'
     assert row_a['nPerturbedCells'] == 2
 
-    row_b = catalog[(catalog['element_name'] == 'elemB') & (catalog['gene_id'] == 'GENE2')].iloc[0]
+    row_b = catalog[(catalog['genomic_element_name'] == 'elemB') & (catalog['gene_id'] == 'GENE2')].iloc[0]
     assert pd.isna(row_b['sceptre_log2_fc'])
     assert pd.isna(row_b['sceptre_p_value'])
     assert pd.isna(row_b['sceptre_q_value'])
@@ -120,6 +121,18 @@ def test_create_catalog_per_element_merge_and_metrics():
     assert row_b['num_guides'] == 1
     assert row_b['gene_name'] == 'SYM2'
     assert row_b['nPerturbedCells'] == 1
+
+
+def test_final_element_formatter_replaces_legacy_annotation_names():
+    cis, _ = _make_input_tables()
+    cis['element_id'] = 'stale_id'
+    cis['element_type'] = 'stale_type'
+    formatted = format_element_output(cis, _make_test_mudata())
+
+    assert formatted.loc[0, 'genomic_element_id'] == 'elemA'
+    assert formatted.loc[0, 'genomic_element_type'] == 'targeting'
+    assert 'element_id' not in formatted.columns
+    assert 'element_type' not in formatted.columns
 
 
 def test_build_catalog_writes_gzip_tsv(tmp_path):

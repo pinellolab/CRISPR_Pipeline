@@ -157,13 +157,13 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
     assert np.isclose(guide_out.loc[0, "perturbo_negLog10p"], 2.0)
     assert guide_out.loc[0, "gene_name"] == "SYM1"
     assert guide_out.loc[0, "nPerturbedCells"] == 2
-    assert "element_id" in element_out.columns
-    assert "element_type" in element_out.columns
+    assert "genomic_element_id" in element_out.columns
+    assert "genomic_element_type" in element_out.columns
     assert "guide_ids" in element_out.columns
     assert "num_guides" in element_out.columns
     assert "gene_name" in element_out.columns
     assert "nPerturbedCells" in element_out.columns
-    assert element_out.loc[0, "element_id"] == "target1"
+    assert element_out.loc[0, "genomic_element_id"] == "target1"
     assert element_out.loc[0, "guide_ids"] == "g1"
     assert element_out.loc[0, "num_guides"] == 1
     assert element_out.loc[0, "gene_name"] == "SYM1"
@@ -174,7 +174,7 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
     assert "perturbo_q_value" in stored.columns
     assert "sceptre_negLog10p" in stored.columns
     assert "perturbo_negLog10p" in stored.columns
-    assert "element_id" in stored.columns
+    assert "genomic_element_id" in stored.columns
     assert "num_guides" in stored.columns
     assert "nPerturbedCells" in stored.columns
 
@@ -321,8 +321,8 @@ def test_merge_local_global_results_writes_q_columns_to_outputs_and_mudata(
         "perturbo_fc_se", "perturbo_negLog10p",
     ]
     element_columns = [
-        "element_id", "element_type", "element_chr", "element_start",
-        "element_end", "element_name", "guide_ids", "num_guides", "gene_name",
+        "genomic_element_id", "genomic_element_type", "genomic_element_chr", "genomic_element_start",
+        "genomic_element_end", "genomic_element_name", "guide_ids", "num_guides", "gene_name",
         "nPerturbedCells",
     ]
     intended_target_columns = [
@@ -367,16 +367,16 @@ def test_merge_local_global_results_writes_q_columns_to_outputs_and_mudata(
     assert "sceptre_negLog10p" in cis_guide_observed.columns
     assert "perturbo_negLog10p" in cis_guide_observed.columns
     assert "perturbo_negLog10p" in trans_guide_observed.columns
-    assert "element_id" in cis_observed.columns
-    assert "element_type" in cis_observed.columns
+    assert "genomic_element_id" in cis_observed.columns
+    assert "genomic_element_type" in cis_observed.columns
     assert "guide_ids" in cis_observed.columns
     assert "num_guides" in cis_observed.columns
     assert "gene_name" in cis_observed.columns
     assert "nPerturbedCells" in cis_observed.columns
-    assert "element_id" in trans_observed.columns
+    assert "genomic_element_id" in trans_observed.columns
     assert "guide_ids" in trans_observed.columns
     assert "num_guides" in trans_observed.columns
-    assert cis_observed.loc[0, "element_id"] == "target1"
+    assert cis_observed.loc[0, "genomic_element_id"] == "target1"
     assert cis_observed.loc[0, "gene_name"] == "SYM1"
     assert np.isclose(cis_observed.loc[0, "sceptre_negLog10p"], 2.0)
     assert np.isclose(trans_observed.loc[0, "perturbo_negLog10p"], -np.log10(0.05))
@@ -390,7 +390,7 @@ def test_merge_local_global_results_writes_q_columns_to_outputs_and_mudata(
     assert "perturbo_q_value" in stored_trans.columns
     assert "sceptre_negLog10p" in stored_cis.columns
     assert "perturbo_negLog10p" in stored_trans.columns
-    assert "element_id" in stored_cis.columns
+    assert "genomic_element_id" in stored_cis.columns
 
 
 def test_merge_local_global_results_uses_fast_parquet_path(tmp_path, monkeypatch):
@@ -487,8 +487,8 @@ def test_merge_local_global_results_uses_fast_parquet_path(tmp_path, monkeypatch
         "gene_id", "intended_target_name", "intended_target_chr",
         "intended_target_start", "intended_target_end", "perturbo_log2_fc",
         "perturbo_p_value", "perturbo_q_value", "perturbo_fc_se",
-        "perturbo_negLog10p", "element_id", "element_type", "element_chr",
-        "element_start", "element_end", "element_name", "guide_ids",
+        "perturbo_negLog10p", "genomic_element_id", "genomic_element_type", "genomic_element_chr",
+        "genomic_element_start", "genomic_element_end", "genomic_element_name", "guide_ids",
         "num_guides", "gene_name", "nPerturbedCells",
     ]
     assert np.allclose(

@@ -545,12 +545,12 @@ The local-analysis outputs report guide-gene or target-element-gene tests restri
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this local-analysis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
-| `element_id` | Element identifier (equal to `element_name` in this pipeline). |
-| `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
-| `element_chr` | Element chromosome. |
-| `element_start` | Element start coordinate. |
-| `element_end` | Element end coordinate. |
-| `element_name` | Element name mapped from `intended_target_name`. |
+| `genomic_element_id` | Element identifier (equal to `genomic_element_name` in this pipeline). |
+| `genomic_element_type` | Element type derived from guide metadata (`guide.var['type']`). |
+| `genomic_element_chr` | Element chromosome. |
+| `genomic_element_start` | Element start coordinate. |
+| `genomic_element_end` | Element end coordinate. |
+| `genomic_element_name` | Element name mapped from `intended_target_name`. |
 | `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
 | `num_guides` | Number of unique guides aggregated into the element result. |
 | `gene_name` | Gene symbol from local gene metadata when available. |
@@ -608,12 +608,12 @@ The global-analysis outputs report genome-wide, all-by-all PerTurbo tests.
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this global-analysis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
-| `element_id` | Element identifier (equal to `element_name` in this pipeline). |
-| `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
-| `element_chr` | Element chromosome. |
-| `element_start` | Element start coordinate. |
-| `element_end` | Element end coordinate. |
-| `element_name` | Element name mapped from `intended_target_name`. |
+| `genomic_element_id` | Element identifier (equal to `genomic_element_name` in this pipeline). |
+| `genomic_element_type` | Element type derived from guide metadata (`guide.var['type']`). |
+| `genomic_element_chr` | Element chromosome. |
+| `genomic_element_start` | Element start coordinate. |
+| `genomic_element_end` | Element end coordinate. |
+| `genomic_element_name` | Element name mapped from `intended_target_name`. |
 | `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
 | `num_guides` | Number of unique guides aggregated into the element result. |
 | `gene_name` | Gene symbol from local gene metadata when available. |
@@ -633,12 +633,12 @@ The global-analysis outputs report genome-wide, all-by-all PerTurbo tests.
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value from global-analysis per-element results. |
 | `perturbo_fc_se` | PerTurbo posterior standard error from global-analysis per-element results. |
 | `perturbo_negLog10p` | Catalog-facing PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. Prefer this for catalog/export consumers that should avoid extremely small raw p-values. |
-| `element_id` | Element identifier (equal to `element_name` in this pipeline). |
-| `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
-| `element_chr` | Element chromosome. |
-| `element_start` | Element start coordinate. |
-| `element_end` | Element end coordinate. |
-| `element_name` | Element name mapped from `intended_target_name`. |
+| `genomic_element_id` | Element identifier (equal to `genomic_element_name` in this pipeline). |
+| `genomic_element_type` | Element type derived from guide metadata (`guide.var['type']`). |
+| `genomic_element_chr` | Element chromosome. |
+| `genomic_element_start` | Element start coordinate. |
+| `genomic_element_end` | Element end coordinate. |
+| `genomic_element_name` | Element name mapped from `intended_target_name`. |
 | `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
 | `num_guides` | Number of unique guides aggregated into the element result. |
 | `gene_name` | Gene symbol from local gene metadata when available. |
