@@ -60,6 +60,23 @@ CANONICAL_COVARIATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 )
 
 
+def declared_external_covariates(mdata) -> list[str]:
+    """Return validated numeric covariates introduced at the continuation gate."""
+    raw = mdata.uns.get("external_covariates", [])
+    if isinstance(raw, (str, bytes)):
+        raw = [raw]
+    names = [value.decode() if isinstance(value, bytes) else str(value) for value in raw]
+    if len(names) != len(set(names)):
+        raise ValueError("duplicate external covariate declarations")
+    for name in names:
+        if not name.startswith("external_") or name not in mdata["gene"].obs:
+            raise ValueError(f"invalid or missing external covariate {name!r}")
+        values = np.asarray(mdata["gene"].obs[name], dtype=float)
+        if not np.isfinite(values).all() or np.unique(values).size < 2:
+            raise ValueError(f"external covariate {name!r} must be finite and nonconstant")
+    return names
+
+
 def _first_source(mdata, aliases):
     """The first alias present on a modality frame, preferring the analysed modality."""
     for column in aliases:
@@ -145,6 +162,9 @@ def materialize_shared_covariates(mdata, columns=CANONICAL_COVARIATES) -> list[s
         if source != column:
             print(f"Covariate {column!r} taken from column {source!r}.")
         written.append(column)
+    for name in declared_external_covariates(mdata):
+        mdata.obs[name] = mdata["gene"].obs[name].reindex(mdata.obs_names).to_numpy()
+        written.append(name)
     print(f"Shared covariates written to the MuData's top-level obs: {written or 'none'}")
     return written
 

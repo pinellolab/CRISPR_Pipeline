@@ -42,6 +42,7 @@ from inference_covariates import (
     CANONICAL_COVARIATES,
     GUIDE_UMI_COVARIATE,
     derive_guide_umi_covariate,
+    declared_external_covariates,
     perturbo_covariate_arguments,
 )
 from result_table_io import write_result_table
@@ -628,7 +629,9 @@ def _run_perturbo(
     # leaves them on the modalities for PerTurbo.
     with _open_mudata(input_path, backed="r") as mdata:
         present = [c for c, _kind, _aliases in CANONICAL_COVARIATES if c in mdata[GENE_MODALITY].obs.columns]
+        external = declared_external_covariates(mdata)
     continuous, batch = perturbo_covariate_arguments(present)
+    continuous.extend(external)
     # Only bites if the guide-UMI term is ever added to CANONICAL_COVARIATES; it is
     # not one today, so neither method conditions on it.
     if GUIDE_UMI_COVARIATE in continuous and not _covariate_has_control_variance(
