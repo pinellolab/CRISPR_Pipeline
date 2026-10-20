@@ -3,7 +3,7 @@
 The default `ANALYSIS_mode = 'checkpoint'` runs mapping, RNA/guide/optional HTO
 quality control, guide assignment, optional clone removal, and post-concatenation
 QC. It then exits successfully **without submitting inference**. The handoff is
-published at `OUTDIR/preinference_checkpoint/`:
+published at `OUTDIR/preinference_checkpoint/RUN_NAME/`:
 
 - `preinference_mudata.h5mu`: the unmodified, final pre-inference population;
 - `preinference_manifest.json`: its SHA-256, GTF SHA-256, cell/feature counts,

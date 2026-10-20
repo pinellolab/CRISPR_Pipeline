@@ -1,7 +1,7 @@
 process preinference_checkpoint {
     tag "${workflow.runName}"
     container { params.containers.base }
-    publishDir { "${params.outdir}/preinference_checkpoint" }, mode: 'copy', overwrite: false
+    publishDir { "${params.outdir}/preinference_checkpoint/${workflow.runName}" }, mode: 'copy', overwrite: false
 
     input:
     path mudata_input
@@ -15,6 +15,6 @@ process preinference_checkpoint {
     """
     python ${projectDir}/bin/preinference_checkpoint.py \\
       --input ${mudata_input} --gtf ${gtf_reference} \\
-      --run-name '${workflow.runName}' --commit '${workflow.commitId ?: 'unavailable'}'
+      --run-name '${workflow.runName}' --commit '${workflow.commitId ?: workflow.manifest.version ?: 'unavailable'}'
     """
 }
