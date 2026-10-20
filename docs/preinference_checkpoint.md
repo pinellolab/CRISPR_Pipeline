@@ -1,5 +1,8 @@
 # Pre-inference checkpoint pilot
 
+For a wrapper-free, step-by-step user procedure, see
+`docs/preinference_checkpoint_user_guide.md`.
+
 The default `ANALYSIS_mode = 'checkpoint'` runs mapping, RNA/guide/optional HTO
 quality control, guide assignment, optional clone removal, and post-concatenation
 QC. It then exits successfully **without submitting inference**. The handoff is
