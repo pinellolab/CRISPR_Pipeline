@@ -379,8 +379,10 @@ behaviour is unchanged.
 The resolution is logged once, at the start of the inference subworkflow, as a
 single line naming the declared MOI, the setting, what each method resolved to,
 and why. It is also recorded beside the results: `control_group_resolution.json`
-and a `pipeline_control_group` block inside PerTurbo's `crt_metadata.json`, and
-`sceptre_control_group.json` on the SCEPTRE side.
+at the top of PerTurbo's `perturbo_v2_outputs/`, and `sceptre_control_group.json`
+on the SCEPTRE side. PerTurbo's own `crt_metadata.json` files are left untouched:
+they are hashed into the conversion manifest, and a conversion-only recovery
+verifies those hashes.
 
 ### When `auto` is wrong: check where the control cells sit
 

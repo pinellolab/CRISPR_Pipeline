@@ -744,25 +744,26 @@ def _ensure_requested_pairs(raw_path: Path, requested_path: Path, pairs_path: Pa
     import pyarrow.parquet as pq
 
     pairs = pd.read_parquet(pairs_path, columns=["element", "gene"]).astype(str).drop_duplicates()
+    wanted = pd.MultiIndex.from_frame(pairs)
     parquet = pq.ParquetFile(raw_path)
     columns = _bounded_raw_columns(parquet)
+    # The writer takes the source's own schema for the selected columns and each
+    # batch is filtered in Arrow. Inferring the schema from the first filtered
+    # batch through pandas pinned null types whenever that batch was empty, and
+    # every later batch then failed to append.
+    schema = pa.schema([parquet.schema_arrow.field(name) for name in columns])
     temporary = requested_path.with_name(requested_path.name + ".partial")
-    writer = None
-    try:
+    with pq.ParquetWriter(temporary, schema, compression="zstd") as writer:
         for batch in parquet.iter_batches(batch_size=batch_rows, columns=columns):
-            frame = batch.to_pandas()
-            frame["element"] = frame["element"].astype(str)
-            frame["gene"] = frame["gene"].astype(str)
-            selected = frame.merge(pairs, on=["element", "gene"], how="inner")
-            table = pa.Table.from_pandas(selected, preserve_index=False)
-            if writer is None:
-                writer = pq.ParquetWriter(temporary, table.schema, compression="zstd")
-            writer.write_table(table)
-    finally:
-        if writer is not None:
-            writer.close()
-    if writer is None:
-        pd.DataFrame(columns=columns).to_parquet(temporary, index=False)
+            keys = pd.MultiIndex.from_arrays(
+                [
+                    batch.column("element").to_pandas().astype(str),
+                    batch.column("gene").to_pandas().astype(str),
+                ]
+            )
+            keep = pa.array(keys.isin(wanted))
+            selected = pa.Table.from_batches([batch.filter(keep)])
+            writer.write_table(selected.cast(schema))
     os.replace(temporary, requested_path)
     return requested_path
 
