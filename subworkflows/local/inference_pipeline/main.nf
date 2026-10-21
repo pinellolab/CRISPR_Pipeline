@@ -15,6 +15,7 @@ include { buildCatalogElement } from '../../../modules/local/buildCatalogElement
 include { buildCatalogGuide } from '../../../modules/local/buildCatalogGuide'
 include { resolveControlGroupFromParams } from '../../../modules/local/control_group'
 include { resolve_inference_mode } from '../../../modules/local/resolve_inference_mode'
+include { ntc_calibration_pipeline } from '../ntc_calibration_pipeline'
 
 workflow inference_pipeline {
 
@@ -92,10 +93,17 @@ workflow inference_pipeline {
         mudata_input = mudata_concat
     }
 
+    def calibration_placeholder = Channel.value(file("${workflow.projectDir}/assets/calibration_empty"))
+    def run_calibration = params.ENABLE_NTC_CALIBRATION && params.INFERENCE_method in ['default', 'sceptre,perturbo']
+    if (params.ENABLE_NTC_CALIBRATION && !run_calibration) {
+        log.info("Non-targeting calibration: skipped, it needs both methods (INFERENCE_method='${params.INFERENCE_method}').")
+    }
+
     if (params.INFERENCE_method == "sceptre"){
         mode = resolve_inference_mode(mudata_input, resolution_setting, resolution_moi, resolution_perturbo_pool, resolution_sceptre_group)
             .json.map(modeFromJson).first()
         mode.subscribe { resolved -> log.info(resolved.log_line) }
+        calibration_output = calibration_placeholder
         SceptreChunkInput = sceptre_chunk_prepare(mudata_input)
         SceptreChunkResults = inference_sceptre(SceptreChunkInput.mudata_chunks.flatten(), mode)
         TestResults = sceptre_chunk_merge(
@@ -110,12 +118,13 @@ workflow inference_pipeline {
         mode = resolve_inference_mode(mudata_input, resolution_setting, resolution_moi, resolution_perturbo_pool, resolution_sceptre_group)
             .json.map(modeFromJson).first()
         mode.subscribe { resolved -> log.info(resolved.log_line) }
+        calibration_output = calibration_placeholder
         TestResults = inference_perturbo(mudata_input, mudata_input, params.INFERENCE_method, mode)
         FinalInference = TestResults.inference_mudata
     }
     else if (params.INFERENCE_method == "sceptre,perturbo") {
-        mode = resolve_inference_mode(mudata_input, resolution_setting, resolution_moi, resolution_perturbo_pool, resolution_sceptre_group)
-            .json.map(modeFromJson).first()
+        ModeJson = resolve_inference_mode(mudata_input, resolution_setting, resolution_moi, resolution_perturbo_pool, resolution_sceptre_group)
+        mode = ModeJson.json.map(modeFromJson).first()
         mode.subscribe { resolved -> log.info(resolved.log_line) }
         SceptreChunkInput = sceptre_chunk_prepare(mudata_input)
         SceptreChunkResults = inference_sceptre(SceptreChunkInput.mudata_chunks.flatten(), mode)
@@ -135,6 +144,16 @@ workflow inference_pipeline {
             true  // this workflow ends here, so it needs the MuData
         )
         FinalInference = MergedInference.inference_mudata
+        if (run_calibration) {
+            Calibration = ntc_calibration_pipeline(
+                mudata_input, mudata_input, mode, ModeJson.json,
+                SceptreResults.per_guide_output, SceptreResults.per_element_output,
+                PerturboResults.global_per_guide_output, PerturboResults.global_per_element_output
+            )
+            calibration_output = Calibration.calibration_output
+        } else {
+            calibration_output = calibration_placeholder
+        }
     }
     else if (params.INFERENCE_method == "default"){
         if (params.INFERENCE_target_guide_pairing_strategy != 'default') {
@@ -153,8 +172,8 @@ workflow inference_pipeline {
         )
         // The mode is measured on the full-guide copy PerTurbo fits; SCEPTRE's
         // cis subset drops untested guides and could misread the design.
-        mode = resolve_inference_mode(PrepareInferenceGlobal.mudata_inference_input, resolution_setting, resolution_moi, resolution_perturbo_pool, resolution_sceptre_group)
-            .json.map(modeFromJson).first()
+        ModeJson = resolve_inference_mode(PrepareInferenceGlobal.mudata_inference_input, resolution_setting, resolution_moi, resolution_perturbo_pool, resolution_sceptre_group)
+        mode = ModeJson.json.map(modeFromJson).first()
         mode.subscribe { resolved -> log.info(resolved.log_line) }
         // Process local-analysis results
         SceptreChunkInput_local = sceptre_chunk_prepare(PrepareInference.mudata_inference_input)
@@ -198,6 +217,19 @@ workflow inference_pipeline {
             MergedInference.inference_mudata,
         )
         FinalInference = MergedInference.inference_mudata
+        // The non-targeting calibration pass: SCEPTRE on the NT pseudo-elements,
+        // joined to PerTurbo's global rows. Separate from the main run and its
+        // families; see subworkflows/local/ntc_calibration_pipeline.
+        if (run_calibration) {
+            Calibration = ntc_calibration_pipeline(
+                PrepareInferenceGlobal.mudata_inference_input, PrepareInference.mudata_inference_input, mode, ModeJson.json,
+                SceptreResults_local.per_guide_output, SceptreResults_local.per_element_output,
+                PerturboResults.global_per_guide_output, PerturboResults.global_per_element_output
+            )
+            calibration_output = Calibration.calibration_output
+        } else {
+            calibration_output = calibration_placeholder
+        }
     } else {
         error("Invalid INFERENCE_method: ${params.INFERENCE_method}. Valid options: sceptre, perturbo, sceptre,perturbo, default")
     }
@@ -205,5 +237,6 @@ workflow inference_pipeline {
     emit:
     inference_mudata = FinalInference
     inference_mode = mode
+    calibration_output = calibration_output
 
 }
