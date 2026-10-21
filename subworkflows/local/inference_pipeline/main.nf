@@ -1,6 +1,7 @@
 nextflow.enable.dsl=2
 
 include { prepare_guide_inference } from '../../../modules/local/prepare_guide_inference'
+include { prepare_guide_inference as prepare_global_guide_inference } from '../../../modules/local/prepare_guide_inference'
 include { prepare_all_guide_inference } from '../../../modules/local/prepare_all_guide_inference'
 include { prepare_user_guide_inference } from '../../../modules/local/prepare_user_guide_inference'
 include { inference_sceptre } from '../../../modules/local/inference_sceptre'
@@ -101,6 +102,17 @@ workflow inference_pipeline {
         if (params.INFERENCE_target_guide_pairing_strategy != 'default') {
             error "INFERENCE_method='default' requires INFERENCE_target_guide_pairing_strategy='default'"
         }
+        // PerTurbo fits the full gene universe, but it must receive the same
+        // configured cell design as the local SCEPTRE input. Passing the raw
+        // concatenated MuData here silently bypassed INFERENCE_COV_* and could
+        // retain a constant batch that SCEPTRE correctly skipped. Prepare a
+        // second, un-subset copy with the identical pair universe instead.
+        PrepareInferenceGlobal = prepare_global_guide_inference(
+            mudata_concat,
+            gtf_reference,
+            params.INFERENCE_max_target_distance_bp,
+            false
+        )
         // Process local-analysis results
         SceptreChunkInput_local = sceptre_chunk_prepare(PrepareInference.mudata_inference_input)
         SceptreChunkResults_local = inference_sceptre(SceptreChunkInput_local.mudata_chunks.flatten(), control_group.sceptre_control_group)
@@ -113,7 +125,7 @@ workflow inference_pipeline {
         // One PerTurbo run on every gene of concat_mudata yields both the local
         // (requested-pair) and the global (transcriptome-wide) tables; the pairs
         // come from the prepared inference input.
-        PerturboResults = inference_perturbo(mudata_concat, PrepareInference.mudata_inference_input, "perturbo", control_group)
+        PerturboResults = inference_perturbo(PrepareInferenceGlobal.mudata_inference_input, PrepareInference.mudata_inference_input, "perturbo", control_group)
         MergedInference_local = mergedResults(
             SceptreResults_local.per_guide_output,
             SceptreResults_local.per_element_output,
@@ -128,7 +140,7 @@ workflow inference_pipeline {
             MergedInference_local.per_element_output,
             PerturboResults.global_per_guide_output,
             PerturboResults.global_per_element_output,
-            mudata_concat,
+            PrepareInferenceGlobal.mudata_inference_input,
         )
         // Catalog construction is intentionally independent from mergeMudata:
         // each large table is cacheable and resumable on its own.
