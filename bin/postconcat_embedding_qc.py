@@ -181,6 +181,11 @@ def qc_observations(mdata, batch_key):
             obs[batch_key] = 'all'
     assignment = mdata.mod['guide'].layers['guide_assignment']
     obs['n_guides_assigned'] = vector((assignment > 0).sum(axis=1))
+    for name in (column for column in obs if column.startswith('cov_')):
+        values = obs[name].astype(str)
+        numeric = pd.to_numeric(values, errors='coerce')
+        if numeric.notna().all() and not values.str.match(r'[+-]?0\d+').any():
+            obs[name] = numeric.astype(float)
     return obs
 
 
@@ -428,7 +433,8 @@ def embedding_plots(raw, obs, args):
     sc.tl.umap(temp, random_state=args.seed)
     result['leiden'] = run_leiden_sweep(temp, args)
     colors = list(dict.fromkeys([args.batch_key, 'total_counts', 'n_genes_by_counts', 'pct_counts_mt', 'n_guides_assigned'] +
-                 [k for k in ('pct_counts_ribo', 'doublet_score', 'rep', 'well', 'diff_day', 'guide_category', 'S_score', 'G2M_score') if k in temp.obs]))
+                 [k for k in ('pct_counts_ribo', 'doublet_score', 'rep', 'well', 'diff_day', 'guide_category', 'S_score', 'G2M_score') if k in temp.obs] +
+                 sorted(k for k in temp.obs if k.startswith('cov_'))))
     for basis in ('pca', 'umap'):
         fig, axes = plt.subplots(int(np.ceil(len(colors)/3)), 3, figsize=(18, 5*int(np.ceil(len(colors)/3))))
         for ax, key in zip(np.asarray(axes).ravel(), colors):

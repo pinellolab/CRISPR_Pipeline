@@ -14,11 +14,12 @@ set of values. ``ensure_inference_covariates`` is the entry point; it is
 idempotent, and ``bin/prepare_inference.py`` and the PerTurbo adapter call it
 again only as a fallback for a user-supplied MuData that skipped that step.
 
-The set is the per-cell guide UMI depth, the per-cell library size, the number of
-genes detected, and the sequencing batch. All three counts enter on the log
-scale.
-
-``percent_mito`` is deliberately absent from this first version.
+The default set is the per-cell guide UMI depth, the per-cell library size,
+the number of genes detected, and the sequencing batch. All three counts enter
+on the log scale. Optional mitochondrial/ribosomal, assigned-guide, samplesheet
+``cov_*``, and checkpoint ``external_*`` terms are materialized by
+``_materialize_configured_covariates`` before either method fits. Mitochondrial
+fraction is deliberately absent from the default model.
 
 Why the formula is written out rather than auto-constructed
 -----------------------------------------------------------
@@ -111,6 +112,8 @@ from __future__ import annotations
 from typing import NamedTuple
 
 import numpy as np
+import pandas as pd
+import re
 
 GUIDE_UMI_COLUMN = "total_guide_umis"
 GENE_UMI_COLUMN = "total_gene_umis"
@@ -129,6 +132,23 @@ SCEPTRE_RESERVED_NAMES = frozenset(
         "grna_n_umis",
     }
 )
+
+
+def declared_external_covariates(mdata) -> list[str]:
+    """Return validated numeric covariates introduced at the continuation gate."""
+    raw = mdata.uns.get("external_covariates", [])
+    if isinstance(raw, (str, bytes)):
+        raw = [raw]
+    names = [value.decode() if isinstance(value, bytes) else str(value) for value in raw]
+    if len(names) != len(set(names)):
+        raise ValueError("duplicate external covariate declarations")
+    for name in names:
+        if not name.startswith("external_") or name not in mdata["gene"].obs:
+            raise ValueError(f"invalid or missing external covariate {name!r}")
+        values = np.asarray(mdata["gene"].obs[name], dtype=float)
+        if not np.isfinite(values).all() or np.unique(values).size < 2:
+            raise ValueError(f"external covariate {name!r} must be finite and nonconstant")
+    return names
 
 
 def perturbo_log_name(column: str) -> str:
@@ -270,7 +290,7 @@ def derive_perturbo_log_covariates(mdata) -> list[str]:
     return written
 
 
-def materialize_shared_covariates(mdata, columns=CANONICAL_COVARIATES) -> list[str]:
+def materialize_shared_covariates(mdata, columns=CANONICAL_COVARIATES, config=None) -> list[str]:
     """Copy the agreed covariates into the MuData's top-level ``obs``.
 
     Returns the SCEPTRE-facing columns actually written. A column absent from
@@ -282,6 +302,8 @@ def materialize_shared_covariates(mdata, columns=CANONICAL_COVARIATES) -> list[s
     adapter's own. They are deliberately not written to the top-level ``obs``:
     handing SCEPTRE both scales of one quantity would be exactly collinear.
     """
+    if config is not None:
+        return _materialize_configured_covariates(mdata, config)
     derive_perturbo_log_covariates(mdata)
     written: list[str] = []
     for covariate in columns:
@@ -301,6 +323,9 @@ def materialize_shared_covariates(mdata, columns=CANONICAL_COVARIATES) -> list[s
             mdata["gene"].obs[name] = values.reindex(mdata["gene"].obs_names).to_numpy()
         if source != name:
             print(f"Covariate {name!r} taken from column {source!r}.")
+        written.append(name)
+    for name in declared_external_covariates(mdata):
+        mdata.obs[name] = mdata["gene"].obs[name].reindex(mdata.obs_names).to_numpy()
         written.append(name)
     print(f"Shared covariates written to the MuData's top-level obs: {written or 'none'}")
     return written
@@ -338,3 +363,126 @@ def perturbo_covariate_arguments(available) -> tuple[list[str], str | None]:
     continuous = [c.perturbo_name for c in available if c.kind == "count"]
     categorical = [c.perturbo_name for c in available if c.kind == "categorical"]
     return continuous, (categorical[0] if categorical else None)
+
+
+def _materialize_configured_covariates(mdata, config):
+    """Keep PR #101's depth model and append optional cell-level terms.
+
+    SCEPTRE receives raw counts and logs them in its formula. PerTurbo receives
+    the same counts pre-logged. All other numeric terms are shared by name.
+    """
+    ensure_guide_umi_totals(mdata)
+    ensure_gene_depth_totals(mdata)
+    gene = mdata["gene"]
+    index = gene.obs_names
+    candidates = {}
+    continuous = []
+    for covariate in CANONICAL_COVARIATES:
+        if covariate.name == "batch" and not config["batch"]:
+            continue
+        if covariate.name == DETECTED_GENES_COLUMN and not config["detected_genes"]:
+            continue
+        if covariate.name == GUIDE_UMI_COLUMN and not config["guide_umis"]:
+            continue
+        _, values = _first_source(mdata, covariate.aliases)
+        if values is None:
+            if covariate.kind == "count":
+                raise ValueError(f"Required inference covariate {covariate.name} is missing")
+            continue
+        values = values.reindex(index)
+        if covariate.kind == "count":
+            logged = np.log(validate_positive(values, covariate.name))
+            candidates[covariate.name] = values.to_numpy()
+            gene.obs[covariate.perturbo_name] = logged
+            continuous.append(covariate.perturbo_name)
+        else:
+            candidates[covariate.name] = values.astype(str)
+
+    optional = {}
+    if config["mito"]:
+        _, value = _first_source(mdata, ("percent_mito", "pct_counts_mt", "percent.mito", "pct_mito", "mito_frac"))
+        if value is None:
+            raise ValueError("INFERENCE_COV_MITOCHONDRIAL requested but percent_mito is absent")
+        optional["percent_mito"] = pd.to_numeric(value.reindex(index), errors="raise")
+    if config["ribo"]:
+        _, value = _first_source(mdata, ("pct_counts_ribo", "percent_ribo"))
+        if value is None:
+            raise ValueError("INFERENCE_COV_RIBOSOMAL requested but ribosomal percentage is absent")
+        optional["percent_ribo"] = pd.to_numeric(value.reindex(index), errors="raise")
+    if config["guide_count"]:
+        assignment = mdata["guide"].layers.get(ASSIGNMENT_LAYER)
+        if assignment is None:
+            raise ValueError("INFERENCE_COV_GUIDE_COUNT needs guide_assignment layer")
+        optional["assigned_guide_count"] = pd.Series(
+            np.asarray((assignment > 0).sum(axis=1)).ravel(), index=mdata["guide"].obs_names
+        ).reindex(index)
+    raw_custom = str(config.get("custom", "auto") or "").strip()
+    available_custom = sorted(name for name in gene.obs if name.startswith("cov_"))
+    if raw_custom.lower() in ("auto", "all"):
+        custom = available_custom
+    elif raw_custom.lower() in ("", "none"):
+        custom = []
+    else:
+        custom = [name.strip() for name in raw_custom.split(",") if name.strip()]
+        missing = sorted(set(custom) - set(available_custom))
+        if missing:
+            raise ValueError(f"INFERENCE_COV_CUSTOM requested missing columns: {missing}")
+    for name in custom:
+        values = gene.obs[name].reindex(index)
+        if values.isna().any():
+            raise ValueError(f"{name} has missing cell values")
+        labels = values.astype(str)
+        numeric = pd.to_numeric(labels, errors="coerce")
+        if numeric.notna().all() and not labels.str.match(r"[+-]?0\d+").any():
+            optional[name] = numeric.astype(float)
+        else:
+            levels = sorted(labels.unique())
+            if len(levels) > 15:
+                raise ValueError(f"{name} has {len(levels)} levels; maximum supported is 15")
+            encoded_names = set()
+            for level in levels[1:]:
+                encoded = f"{name}__{re.sub(r'[^A-Za-z0-9_]', '_', level)}"
+                if encoded in encoded_names or encoded in optional:
+                    raise ValueError(f"{name} has category labels that collide after safe encoding")
+                encoded_names.add(encoded)
+                optional[encoded] = (labels == level).astype(float)
+    for name in declared_external_covariates(mdata):
+        optional[name] = pd.to_numeric(gene.obs[name].reindex(index), errors="raise")
+
+    design = pd.DataFrame({**candidates, **optional}, index=index)
+    if design.isna().any().any() or not np.isfinite(design.select_dtypes(include="number").to_numpy()).all():
+        raise ValueError("Requested inference covariates contain missing or nonfinite cell values")
+    constant = [name for name in design if design[name].nunique(dropna=False) < 2]
+    # Match PR #101's default behavior: a constant depth or batch term is not
+    # estimable and is skipped, rather than making a small pilot fail. Explicit
+    # custom/external terms remain strict so the user's intended model cannot
+    # silently change.
+    automatic_names = {"batch", "percent_mito"} | {c.name for c in CANONICAL_COVARIATES}
+    automatic_skips = [name for name in constant if name in automatic_names]
+    rejected = [name for name in constant if name not in automatic_skips]
+    if rejected:
+        raise ValueError(f"Requested inference covariates are constant: {rejected}")
+    if automatic_skips:
+        print(f"Skipping non-estimable covariates: {automatic_skips}")
+        design = design.drop(columns=automatic_skips)
+    continuous = [name for name in continuous if name.removeprefix("log_") in design]
+    continuous += [name for name in optional if name in design]
+    rank_parts = [np.ones((len(design), 1), dtype=float)]
+    if "batch" in design:
+        levels = sorted(design["batch"].unique())
+        rank_parts += [(design["batch"] == level).to_numpy(dtype=float)[:, None]
+                       for level in levels[1:]]
+    rank_parts += [np.log(design[c.name].to_numpy(dtype=float))[:, None]
+                   for c in CANONICAL_COVARIATES if c.kind == "count" and c.name in design]
+    rank_parts += [design[name].to_numpy(dtype=float)[:, None] for name in optional if name in design]
+    matrix = np.hstack(rank_parts)
+    if np.linalg.matrix_rank(matrix) != matrix.shape[1]:
+        raise ValueError("Requested covariates are collinear; disable a redundant optional term")
+    for name in design:
+        gene.obs[name] = design[name].to_numpy()
+    mdata.obs = design.reindex(mdata.obs_names).copy()
+    mdata.uns["inference_continuous_covariates"] = continuous
+    mdata.uns["inference_batch_covariate"] = "batch" if "batch" in design else ""
+    mdata.uns["inference_covariate_config"] = [f"{key}={value}" for key, value in sorted(config.items())]
+    print(f"Shared inference covariates: continuous={continuous}, batch={mdata.uns['inference_batch_covariate']}")
+    return list(design)

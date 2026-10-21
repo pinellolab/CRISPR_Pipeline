@@ -22,6 +22,7 @@ include { guide_mapping_qc_gate } from '../../modules/local/guide_mapping_qc_gat
 include { filter_hto_post_clone } from '../../modules/local/filter_hto_post_clone'
 include { postconcat_embedding_qc as embedding_before_clone } from '../../modules/local/postconcat_embedding_qc'
 include { postconcat_embedding_qc as embedding_after_clone } from '../../modules/local/postconcat_embedding_qc'
+include { preinference_checkpoint } from '../../modules/local/preinference_checkpoint'
 
 // Import hashing-specific modules
 include { CreateMuData } from '../../modules/local/CreateMuData'
@@ -50,6 +51,7 @@ workflow CRISPR_PIPELINE {
 
     take:
     ch_samplesheet // channel: samplesheet read in from --input
+    ch_samplesheet_file
 
     main:
     ch_versions = Channel.empty()
@@ -114,7 +116,7 @@ workflow CRISPR_PIPELINE {
         seqSpecCheck_pipeline(ch_guide.first(), ch_guide_design)
     }
 
-    prepare_mapping_pipeline(ch_samples)
+    prepare_mapping_pipeline(ch_samples, ch_samplesheet_file)
 
     // Run mapping pipelines for each modality
     mapping_rna_pipeline(
@@ -232,6 +234,9 @@ workflow CRISPR_PIPELINE {
         } else {
             embedding_dirs = file("${workflow.projectDir}/assets/embedding_qc_empty")
         }
+        if (params.ANALYSIS_mode == 'checkpoint') {
+            preinference_checkpoint(mudata_for_inference, Preprocessing.gencode_gtf)
+        } else {
         Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
 
         evaluation_pipeline (
@@ -283,6 +288,7 @@ workflow CRISPR_PIPELINE {
             benchmark_output_dir
 
             )
+        }
     }
     else {
         // Create MuData without hashing
@@ -336,6 +342,9 @@ workflow CRISPR_PIPELINE {
         } else {
             embedding_dirs = file("${workflow.projectDir}/assets/embedding_qc_empty")
         }
+        if (params.ANALYSIS_mode == 'checkpoint') {
+            preinference_checkpoint(mudata_for_inference, Preprocessing.gencode_gtf)
+        } else {
         Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
 
         evaluation_pipeline (
@@ -380,6 +389,7 @@ workflow CRISPR_PIPELINE {
             evaluation_pipeline.out.control_output_dir,
             benchmark_output_dir
             )
+        }
     }
 
 

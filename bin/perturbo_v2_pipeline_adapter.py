@@ -41,6 +41,7 @@ from intended_target_key_utils import (
 from mudata_uns_io import write_uns_patch
 from inference_covariates import (
     CANONICAL_COVARIATES,
+    declared_external_covariates,
     GUIDE_UMI_COLUMN,
     derive_perturbo_log_covariates,
     ensure_gene_depth_totals,
@@ -593,13 +594,18 @@ def _run_perturbo(
     # has already guaranteed those exist, including on inputs that skipped the shared
     # preparation step.
     with _open_mudata(input_path, backed="r") as mdata:
-        obs_columns = set(mdata[GENE_MODALITY].obs.columns)
-    present = [
-        c
-        for c in CANONICAL_COVARIATES
-        if c.perturbo_name is not None and c.perturbo_name in obs_columns
-    ]
-    continuous, batch = perturbo_covariate_arguments(present)
+        if "inference_continuous_covariates" in mdata.uns:
+            continuous = [str(name) for name in mdata.uns["inference_continuous_covariates"]]
+            batch = str(mdata.uns.get("inference_batch_covariate", "")) or None
+            missing = [name for name in continuous + ([batch] if batch else [])
+                       if name not in mdata[GENE_MODALITY].obs]
+            if missing:
+                raise ValueError(f"Shared inference covariates missing from gene.obs: {missing}")
+        else:
+            obs_columns = set(mdata[GENE_MODALITY].obs.columns)
+            present = [c for c in CANONICAL_COVARIATES if c.perturbo_name in obs_columns]
+            continuous, batch = perturbo_covariate_arguments(present)
+            continuous.extend(declared_external_covariates(mdata))
     # Live now that the guide-UMI term is a conditioned covariate: a covariate
     # constant across the cells PerTurbo fits its baseline on is unidentifiable
     # there. Which cells those are depends on the resolved CRT pool.

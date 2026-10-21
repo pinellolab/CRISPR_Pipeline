@@ -131,6 +131,7 @@ Do not report, publish, or treat these outputs as results from the full dataset.
 
     emit:
     samplesheet = ch_samplesheet
+    samplesheet_file = ch_samplesheet_file
     versions    = ch_versions
 }
 

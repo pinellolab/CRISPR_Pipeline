@@ -146,8 +146,12 @@ CATEGORICAL_COVARIATES <- c("batch")
 # is per chunk, and at inference time the gRNA matrix is the binary assignment
 # layer, so grna_n_umis is the number of assigned guides per cell -- identical to
 # grna_n_nonzero, and constant at 1 under low MOI.
-build_formula_object <- function(covariate_df) {
+build_formula_object <- function(covariate_df, requested = character(0)) {
   present <- colnames(covariate_df)
+  missing <- setdiff(requested, present)
+  if (length(missing)) {
+    stop(sprintf("SCEPTRE lost configured covariates: %s", paste(missing, collapse = ", ")))
+  }
   terms_vec <- character(0)
 
   for (covariate in COUNT_COVARIATES) {
@@ -179,6 +183,8 @@ build_formula_object <- function(covariate_df) {
     }
     terms_vec <- c(terms_vec, covariate)
   }
+
+  terms_vec <- c(terms_vec, setdiff(requested, c(COUNT_COVARIATES, CATEGORICAL_COVARIATES)))
 
   if (length(terms_vec) == 0) {
     # Nothing prepared upstream. Fall back to sceptre's own behaviour rather than
@@ -217,6 +223,7 @@ prepare_extra_covariates <- function(mudata, remove_collinear_covariates = TRUE)
   }
   retain_non_collinear_covariates(covariates)
 }
+
 convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE) {
   # extract information from MuData
   declared_moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
@@ -568,7 +575,8 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
 
   # construct formula excluding gRNA covariates to avoid multicollinearity
   # (gRNA assignments are binary, making grna_n_nonzero and grna_n_umis identical)
-  formula_object <- build_formula_object(sceptre_object@covariate_data_frame)
+  requested <- colnames(SummarizedExperiment::colData(mudata))
+  formula_object <- build_formula_object(sceptre_object@covariate_data_frame, requested)
   args_list[["formula_object"]] <- formula_object
 
   # We'll run two analyses on the same sceptre_object to exploit caching:
