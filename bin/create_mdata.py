@@ -298,16 +298,25 @@ def main(adata_rna, adata_guide, guide_metadata, gtf, moi, capture_method, adata
         )
     )
 
-    # rename adata_rna obs
+    # Rename scanpy's per-cell QC columns (sc.pp.calculate_qc_metrics) to the
+    # names the rest of the pipeline uses:
+    #   total_counts       -> total_gene_umis      UMIs summed over every gene
+    #   n_genes_by_counts  -> num_expressed_genes  genes with at least one UMI
+    #   pct_counts_mt      -> percent_mito
+    # sc.pp.filter_cells(min_genes=...) writes the same detected-gene count as
+    # `n_genes`, but only when the barcode-rank filter is off, so it is dropped
+    # rather than relied on. Before this fix n_genes_by_counts was renamed to
+    # `n_counts` (a count of genes under a name that reads as UMIs) and
+    # num_expressed_genes only existed on runs without the barcode filter.
     adata_rna.obs.rename(
         columns={
-            "n_genes_by_counts": "n_counts",
+            "n_genes_by_counts": "num_expressed_genes",
             "pct_counts_mt": "percent_mito",
-            "n_genes": "num_expressed_genes",
             "total_counts": "total_gene_umis",
         },
         inplace=True,
     )
+    adata_rna.obs.drop(columns=["n_genes"], errors="ignore", inplace=True)
 
     # knee plots
     knee_df = pd.DataFrame(

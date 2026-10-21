@@ -73,8 +73,13 @@ make_model_matrix_data <- function(covariates_df) {
       covariates_df,
       function(column) {
         if (is.factor(column)) {
-          # Keep missing values explicit for model-matrix construction.
-          return(stats::relevel(addNA(column), ref = levels(addNA(column))[1]))
+          # Keep missing values explicit for model-matrix construction -- but
+          # only when there are any. addNA() with the default ifany = FALSE
+          # adds an empty NA level to every factor, whose dummy column is all
+          # zeros, so the rank check below failed for any complete factor and
+          # the collinearity filter silently dropped it (batch, on TAP-seq).
+          with_na <- droplevels(addNA(column, ifany = TRUE))
+          return(stats::relevel(with_na, ref = levels(with_na)[1]))
         }
         if (all(is.na(column))) {
           return(rep(0, length(column)))
@@ -108,9 +113,87 @@ retain_non_collinear_covariates <- function(covariates_df) {
   }
 
   if (length(dropped) > 0) {
+    # message() as well as warning(): warnings from a top-level call are
+    # deferred to the end of the script, so the log would not show which
+    # covariates went missing until the run was over.
+    message(sprintf("Dropping collinear covariates: %s", paste(dropped, collapse = ", ")))
     warning(sprintf("Dropping collinear covariates: %s", paste(dropped, collapse = ", ")))
   }
   covariates_df[, kept, drop = FALSE]
+}
+
+# SCEPTRE's formula is written out rather than produced by
+# sceptre:::auto_construct_formula_object. That builder drops any covariate whose
+# name does not match n_umis|n_nonzero once it takes >= 15 distinct values
+# (MAX_N_LEVELS_ALLOWED, applied with no type check, so continuous covariates are
+# caught too), and it derives the response depth from whatever matrix it was
+# handed -- which, under bin/chunk_mudata_sceptre.py, is a single gene chunk. Its
+# response_n_umis is then a per-chunk partial sum and response_n_nonzero saturates
+# at the chunk size.
+#
+# The covariates below come from bin/inference_covariates.py, are measured over
+# the full matrices before any subsetting or chunking, and are log-transformed
+# here. SCEPTRE fits an explicit formula without complaint: it goes straight to
+# model.matrix, a continuous term enters as one numeric column, and
+# convert_covariate_df_to_design_matrix still rank-checks the result, so a
+# redundant formula raises rather than being silently pruned.
+#
+# Keep this in step with CANONICAL_COVARIATES in bin/inference_covariates.py.
+COUNT_COVARIATES <- c("total_guide_umis", "total_gene_umis", "num_expressed_genes")
+CATEGORICAL_COVARIATES <- c("batch")
+
+# SCEPTRE's own depth covariates are excluded by construction: the response_* pair
+# is per chunk, and at inference time the gRNA matrix is the binary assignment
+# layer, so grna_n_umis is the number of assigned guides per cell -- identical to
+# grna_n_nonzero, and constant at 1 under low MOI.
+build_formula_object <- function(covariate_df) {
+  present <- colnames(covariate_df)
+  terms_vec <- character(0)
+
+  for (covariate in COUNT_COVARIATES) {
+    if (!(covariate %in% present)) next
+    values <- covariate_df[[covariate]]
+    if (any(!is.finite(values)) || any(values <= 0, na.rm = TRUE)) {
+      stop(sprintf(
+        paste0("Covariate `%s` must be strictly positive to be log-transformed; ",
+               "found %d non-positive or non-finite values. This is enforced ",
+               "upstream in bin/inference_covariates.py, so reaching here means ",
+               "the covariates were not prepared by that step."),
+        covariate, sum(!is.finite(values) | values <= 0)
+      ))
+    }
+    terms_vec <- c(terms_vec, sprintf("log(%s)", covariate))
+  }
+
+  for (covariate in CATEGORICAL_COVARIATES) {
+    if (!(covariate %in% present)) next
+    n_levels <- length(unique(covariate_df[[covariate]]))
+    if (n_levels >= 15L) {
+      # auto_construct_formula_object would have dropped this silently. Fit it,
+      # but say so: a screen with this many batches spends real degrees of
+      # freedom here, and PerTurbo is conditioning on the same column.
+      warning(sprintf(
+        "Categorical covariate `%s` has %d levels; fitting it as %d dummy columns.",
+        covariate, n_levels, n_levels - 1L
+      ))
+    }
+    terms_vec <- c(terms_vec, covariate)
+  }
+
+  if (length(terms_vec) == 0) {
+    # Nothing prepared upstream. Fall back to sceptre's own behaviour rather than
+    # fitting an intercept-only model.
+    warning(paste0(
+      "None of the expected covariates (", paste(c(COUNT_COVARIATES, CATEGORICAL_COVARIATES), collapse = ", "),
+      ") are present; falling back to sceptre's automatic formula."
+    ))
+    return(sceptre:::auto_construct_formula_object(
+      cell_covariates = covariate_df, include_grna_covariates = FALSE
+    ))
+  }
+
+  message(sprintf("SCEPTRE formula: ~ %s", paste(terms_vec, collapse = " + ")))
+  stats::as.formula(paste0("~ ", paste(terms_vec, collapse = " + ")))
 }
 
 prepare_extra_covariates <- function(mudata, remove_collinear_covariates = TRUE) {
@@ -485,10 +568,7 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
 
   # construct formula excluding gRNA covariates to avoid multicollinearity
   # (gRNA assignments are binary, making grna_n_nonzero and grna_n_umis identical)
-  formula_object <- sceptre:::auto_construct_formula_object(
-    cell_covariates = sceptre_object@covariate_data_frame,
-    include_grna_covariates = FALSE
-  )
+  formula_object <- build_formula_object(sceptre_object@covariate_data_frame)
   args_list[["formula_object"]] <- formula_object
 
   # We'll run two analyses on the same sceptre_object to exploit caching:
