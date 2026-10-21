@@ -1,5 +1,7 @@
 # CRISPR Pipeline live-dashboard plugin
 
+## Summary
+
 `nf-crispr-dashboard` is a Nextflow trace observer for the detailed CRISPR
 Pipeline execution dashboard. It starts the existing self-contained renderer
 when a run begins, records live and cached task events, finalizes the HTML
@@ -17,6 +19,8 @@ configuration. Online installations can obtain the plugin from the Nextflow
 Plugin Registry once it is published; offline clusters must pre-stage this
 exact archive in `NXF_PLUGINS_DIR`. Merely cloning the pipeline source is not
 enough for Nextflow to load an uninstalled plugin archive.
+
+## Get Started
 
 For offline installation from the archive bundled in this repository:
 
@@ -38,6 +42,8 @@ renderer script path and its arguments. No host Python packages are required.
 Set `params.DASHBOARD_PLUGIN.imageLibraryDir` to the directory containing a
 pre-pulled Nextflow-style `.img` file if that image is not in the configured
 Apptainer/Singularity library. Otherwise the plugin uses the pinned OCI URI.
+
+#### Examples
 
 ```groovy
 params.DASHBOARD_PLUGIN = [
@@ -67,3 +73,17 @@ reverse proxy for any remote exposure; raw HTTP does not encrypt passwords.
 
 Build with `./gradlew assemble` using JDK 21. The distributable ZIP is in
 `build/distributions/`. Run `./gradlew installPlugin` for local testing.
+
+To publish from GitHub Actions, first obtain approval for the
+`nf-crispr-dashboard` plugin claim with provider `pinellolab` in the Nextflow
+Plugin Registry. Add the registry token as the `NPR_API_KEY` repository secret
+in `pinellolab/CRISPR_Pipeline` (never commit it). Then manually run the
+**Build dashboard plugin** workflow on the reviewed branch and enter `0.1.0`
+in its `publish_version` input. Pushes and pull requests build and test only;
+they never publish. After publication, verify that a fresh Nextflow plugin
+cache can resolve `nf-crispr-dashboard@0.1.0` before enabling the plugin in
+the pipeline's default configuration.
+
+## License
+
+MIT, as specified in the CRISPR Pipeline repository's `LICENSE` file.

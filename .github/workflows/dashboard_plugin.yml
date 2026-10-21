@@ -10,6 +10,14 @@ on:
       - 'plugins/nf-crispr-dashboard/**'
       - '.github/workflows/dashboard_plugin.yml'
   workflow_dispatch:
+    inputs:
+      publish_version:
+        description: 'Enter 0.1.0 to publish nf-crispr-dashboard@0.1.0 to the registry'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -27,3 +35,29 @@ jobs:
         with:
           name: nf-crispr-dashboard-0.1.0
           path: plugins/nf-crispr-dashboard/build/distributions/nf-crispr-dashboard-0.1.0.zip
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_version == '0.1.0'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Publish to Nextflow Plugin Registry
+        working-directory: plugins/nf-crispr-dashboard
+        env:
+          NPR_API_KEY: ${{ secrets.NPR_API_KEY }}
+          GRADLE_USER_HOME: ${{ runner.temp }}/crispr-dashboard-gradle
+        run: |
+          if [ -z "$NPR_API_KEY" ]; then
+            echo 'NPR_API_KEY repository secret is not configured' >&2
+            exit 1
+          fi
+          mkdir -p "$GRADLE_USER_HOME"
+          chmod 700 "$GRADLE_USER_HOME"
+          printf 'npr.apiKey=%s\n' "$NPR_API_KEY" > "$GRADLE_USER_HOME/gradle.properties"
+          chmod 600 "$GRADLE_USER_HOME/gradle.properties"
+          ./gradlew test releasePluginToRegistry --no-daemon
