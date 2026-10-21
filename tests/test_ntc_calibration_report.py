@@ -173,10 +173,17 @@ def test_report_writes_summaries_plots_and_joined_tables(tmp_path):
     assert agreement["pearson_log10p"].notna().any()
 
     auprc = pd.read_csv(outdir / "ntc_aucpr_summary.tsv", sep="\t")
-    assert set(map(tuple, auprc[["level", "method"]].to_numpy())) == {(l, m) for l in ("guide", "element") for m in ("sceptre", "perturbo")}
+    assert set(map(tuple, auprc[["level", "method", "negatives"]].to_numpy())) == {
+        (l, m, v) for l in ("guide", "element") for m in ("sceptre", "perturbo") for v in ("matched_1to1", "all")
+    }
     assert auprc["auprc"].between(0, 1).all() and auprc["auroc"].between(0, 1).all()
     # Direct targets were planted as strong hits, so both methods separate them.
     assert auprc["auroc"].gt(0.9).all()
+    matched = auprc[auprc["negatives"] == "matched_1to1"]
+    everything = auprc[auprc["negatives"] == "all"]
+    assert (matched["n_ntc_used"] == matched["n_direct_target"]).all()
+    assert (everything["n_ntc_used"] == everything["n_ntc_available"]).all()
+    assert (everything["positive_rate"] < matched["positive_rate"].to_numpy()).all()
 
     notes = (outdir / "ntc_calibration_notes.txt").read_text()
     assert "Self-inclusion" in notes and "5.0%" in notes

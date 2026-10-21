@@ -124,30 +124,43 @@ def agreement_row(joined: pd.DataFrame, *, level: str, pair_set: str) -> dict:
     return row
 
 
-def auprc_rows(positives: pd.DataFrame, negatives: pd.DataFrame, *, level: str, method: str, p_col: str) -> dict:
-    """Lucas's controls evaluation: direct-target rows against NTC rows on the
-    same genes, 1:1 by sampling, scored by 1 - p."""
+def auprc_rows(positives: pd.DataFrame, negatives: pd.DataFrame, *, level: str, method: str, p_col: str) -> list[dict]:
+    """The controls evaluation's metric, twice: direct-target rows against NTC
+    rows on the same genes, scored by 1 - p, with the negatives drawn 1:1 as
+    the evaluation has always done (``matched_1to1``) and with every available
+    negative (``all``), which moves the precision-recall baseline to the real
+    positive rate but removes the draw's sampling noise."""
     from sklearn.metrics import auc, precision_recall_curve, roc_curve
 
     pos = positives.dropna(subset=[p_col])
     neg = negatives.dropna(subset=[p_col])
     neg = neg[neg["gene_id"].isin(set(pos["gene_id"]))] if len(pos) else neg
-    row = {"level": level, "method": method, "n_direct_target": int(len(pos)), "n_ntc_available": int(len(neg))}
-    if pos.empty or neg.empty:
-        row.update({"n_ntc_sampled": 0, "auprc": np.nan, "auroc": np.nan, "sampled_with_replacement": False})
-        return row
-    with_replacement = len(neg) < len(pos)
-    sampled = neg.sample(n=len(pos), random_state=AUPRC_SEED, replace=with_replacement)
-    labels = np.concatenate([np.ones(len(pos)), np.zeros(len(sampled))])
-    scores = 1.0 - np.concatenate([pos[p_col].to_numpy(), sampled[p_col].to_numpy()])
-    precision, recall, _ = precision_recall_curve(labels, scores)
-    fpr, tpr, _ = roc_curve(labels, scores)
-    row.update({
-        "n_ntc_sampled": int(len(sampled)), "auprc": float(auc(recall, precision)), "auroc": float(auc(fpr, tpr)),
-        "sampled_with_replacement": bool(with_replacement),
-        "_curves": {"precision": precision, "recall": recall, "fpr": fpr, "tpr": tpr},
-    })
-    return row
+    base = {"level": level, "method": method, "n_direct_target": int(len(pos)), "n_ntc_available": int(len(neg))}
+    rows = []
+    for variant in ("matched_1to1", "all"):
+        row = {**base, "negatives": variant}
+        if pos.empty or neg.empty:
+            row.update({"n_ntc_used": 0, "positive_rate": np.nan, "auprc": np.nan, "auroc": np.nan, "sampled_with_replacement": False})
+            rows.append(row)
+            continue
+        if variant == "matched_1to1":
+            with_replacement = len(neg) < len(pos)
+            used = neg.sample(n=len(pos), random_state=AUPRC_SEED, replace=with_replacement)
+        else:
+            with_replacement = False
+            used = neg
+        labels = np.concatenate([np.ones(len(pos)), np.zeros(len(used))])
+        scores = 1.0 - np.concatenate([pos[p_col].to_numpy(), used[p_col].to_numpy()])
+        precision, recall, _ = precision_recall_curve(labels, scores)
+        fpr, tpr, _ = roc_curve(labels, scores)
+        row.update({
+            "n_ntc_used": int(len(used)), "positive_rate": float(len(pos) / (len(pos) + len(used))),
+            "auprc": float(auc(recall, precision)), "auroc": float(auc(fpr, tpr)),
+            "sampled_with_replacement": bool(with_replacement),
+            "_curves": {"precision": precision, "recall": recall, "fpr": fpr, "tpr": tpr},
+        })
+        rows.append(row)
+    return rows
 
 
 # --- plots ---------------------------------------------------------------------
@@ -238,13 +251,17 @@ def scatter_plot(joined_by_set: list[tuple[str, pd.DataFrame]], path: Path, titl
 def curves_plot(rows: list[dict], path: Path, level: str) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(9, 4), dpi=130)
     drawn = False
+    colors = {"sceptre": "C0", "perturbo": "C1"}
     for row in rows:
         curves = row.get("_curves")
         if not curves:
             continue
         drawn = True
-        axes[0].plot(curves["recall"], curves["precision"], lw=1.2, label=f"{row['method']} AUPRC={row['auprc']:.3f}")
-        axes[1].plot(curves["fpr"], curves["tpr"], lw=1.2, label=f"{row['method']} AUROC={row['auroc']:.3f}")
+        style = "-" if row.get("negatives") == "matched_1to1" else "--"
+        label = f"{row['method']}, {row.get('negatives', '')} negatives"
+        color = colors.get(row["method"])
+        axes[0].plot(curves["recall"], curves["precision"], lw=1.2, ls=style, color=color, label=f"{label} AUPRC={row['auprc']:.3f}")
+        axes[1].plot(curves["fpr"], curves["tpr"], lw=1.2, ls=style, color=color, label=f"{label} AUROC={row['auroc']:.3f}")
     axes[0].set_xlabel("recall"); axes[0].set_ylabel("precision")
     axes[1].set_xlabel("false positive rate"); axes[1].set_ylabel("true positive rate")
     axes[1].plot([0, 1], [0, 1], color="black", lw=0.8, ls="--")
@@ -419,7 +436,7 @@ def main(argv: list[str] | None = None) -> int:
                 neg = sceptre_pass[level]
             else:
                 neg = all_ntc
-            auprc.append(auprc_rows(pos, neg, level=level, method=method, p_col=f"{method}_p_value"))
+            auprc.extend(auprc_rows(pos, neg, level=level, method=method, p_col=f"{method}_p_value"))
 
     # --- write tables ------------------------------------------------------------
     per_guide_counts = pd.read_csv(args.cell_counts_per_guide, sep="\t")
