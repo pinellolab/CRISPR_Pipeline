@@ -498,7 +498,8 @@ def main(argv: list[str] | None = None) -> int:
     auprc_frame.to_csv(outdir / "ntc_aucpr_summary.tsv", sep="\t", index=False)
     if auprc_pairs:
         pairs_frame = pd.concat(auprc_pairs, ignore_index=True)
-        pairs_frame = pairs_frame[["level"] + [c for c in pairs_frame.columns if c != "level"]]
+        leading = [c for c in ("level", "role", "guide_id", "intended_target_name", "ntc_bucket", "gene_id") if c in pairs_frame.columns]
+        pairs_frame = pairs_frame[leading + [c for c in pairs_frame.columns if c not in leading]]
         pairs_frame.to_csv(outdir / "ntc_aucpr_pairs.tsv", sep="\t", index=False)
     cells_summary, cell_warnings = cell_count_summary(per_guide_counts, per_element_counts)
     cells_summary.to_csv(outdir / "ntc_cell_count_summary.tsv", sep="\t", index=False)
