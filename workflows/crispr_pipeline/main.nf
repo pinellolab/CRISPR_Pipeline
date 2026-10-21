@@ -51,6 +51,7 @@ workflow CRISPR_PIPELINE {
 
     take:
     ch_samplesheet // channel: samplesheet read in from --input
+    ch_samplesheet_file
 
     main:
     ch_versions = Channel.empty()
@@ -115,7 +116,7 @@ workflow CRISPR_PIPELINE {
         seqSpecCheck_pipeline(ch_guide.first(), ch_guide_design)
     }
 
-    prepare_mapping_pipeline(ch_samples)
+    prepare_mapping_pipeline(ch_samples, ch_samplesheet_file)
 
     // Run mapping pipelines for each modality
     mapping_rna_pipeline(

@@ -134,6 +134,25 @@ prepare_extra_covariates <- function(mudata, remove_collinear_covariates = TRUE)
   }
   retain_non_collinear_covariates(covariates)
 }
+
+construct_shared_formula <- function(sceptre_object, mudata) {
+  formula_object <- sceptre:::auto_construct_formula_object(
+    cell_covariates = sceptre_object@covariate_data_frame,
+    include_grna_covariates = FALSE
+  )
+  requested <- colnames(SummarizedExperiment::colData(mudata))
+  available <- colnames(sceptre_object@covariate_data_frame)
+  missing <- setdiff(requested, available)
+  if (length(missing)) {
+    stop(sprintf("SCEPTRE lost configured covariates: %s", paste(missing, collapse = ", ")))
+  }
+  base_terms <- attr(stats::terms(formula_object), "term.labels")
+  additional_terms <- setdiff(requested, all.vars(formula_object))
+  if (length(additional_terms)) {
+    formula_object <- stats::reformulate(c(base_terms, additional_terms))
+  }
+  formula_object
+}
 convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE) {
   # extract information from MuData
   declared_moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
@@ -485,10 +504,9 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
 
   # construct formula excluding gRNA covariates to avoid multicollinearity
   # (gRNA assignments are binary, making grna_n_nonzero and grna_n_umis identical)
-  formula_object <- sceptre:::auto_construct_formula_object(
-    cell_covariates = sceptre_object@covariate_data_frame,
-    include_grna_covariates = FALSE
-  )
+  # SCEPTRE's automatic formula does not include every supplied extra column.
+  # Add the configured shared terms explicitly so PerTurbo sees the same design.
+  formula_object <- construct_shared_formula(sceptre_object, mudata)
   args_list[["formula_object"]] <- formula_object
 
   # We'll run two analyses on the same sceptre_object to exploit caching:

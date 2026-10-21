@@ -45,6 +45,8 @@ That is a property of SCEPTRE, not something to hide by withholding the column.
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
+import re
 
 GUIDE_UMI_COLUMN = "total_guide_umis"
 GUIDE_UMI_COVARIATE = "log1p_total_guide_umis_centered"
@@ -131,7 +133,7 @@ def derive_guide_umi_covariate(mdata) -> str | None:
     return GUIDE_UMI_COVARIATE
 
 
-def materialize_shared_covariates(mdata, columns=CANONICAL_COVARIATES) -> list[str]:
+def materialize_shared_covariates(mdata, columns=CANONICAL_COVARIATES, config=None) -> list[str]:
     """Copy the agreed covariates into the MuData's top-level ``obs``.
 
     Returns the columns actually written. A column absent from every modality, or
@@ -145,6 +147,8 @@ def materialize_shared_covariates(mdata, columns=CANONICAL_COVARIATES) -> list[s
     putting it in SCEPTRE's ``extra_covariates`` would silently add a gRNA
     covariate SCEPTRE excludes by design.
     """
+    if config is not None:
+        return _materialize_configured_covariates(mdata, config)
     derive_guide_umi_covariate(mdata)
     written: list[str] = []
     for column, _kind, aliases in columns:
@@ -175,3 +179,118 @@ def perturbo_covariate_arguments(available: list[str]) -> tuple[list[str], str |
     continuous = [c for c in available if kinds.get(c) == "continuous"]
     categorical = [c for c in available if kinds.get(c) == "categorical"]
     return continuous, (categorical[0] if categorical else None)
+
+
+def _materialize_configured_covariates(mdata, config):
+    """Make one full-rank cell design shared by both inference adapters.
+
+    Batch stays categorical; other categorical sample-level terms use reference
+    one-hot coding because the pinned PerTurbo CLI accepts only one batch factor.
+    """
+    gene = mdata["gene"]
+    index = gene.obs_names
+    candidates = {}
+    if config["mito"]:
+        _, value = _first_source(mdata, CANONICAL_COVARIATES[0][2])
+        if value is None:
+            raise ValueError("INFERENCE_COV_MITOCHONDRIAL requested but percent_mito is absent")
+        candidates["percent_mito"] = pd.to_numeric(value.reindex(index), errors="raise")
+    if config["batch"]:
+        _, value = _first_source(mdata, ("batch",))
+        if value is None:
+            raise ValueError("INFERENCE_COV_BATCH requested but batch is absent")
+        candidates["batch"] = value.reindex(index).astype(str)
+    if config["ribo"]:
+        _, value = _first_source(mdata, ("pct_counts_ribo", "percent_ribo"))
+        if value is None:
+            raise ValueError("INFERENCE_COV_RIBOSOMAL requested but pre-filter ribosomal percentage is unavailable")
+        candidates["percent_ribo"] = pd.to_numeric(value.reindex(index), errors="raise")
+    if config["detected_genes"]:
+        source, value = _first_source(mdata, ("num_expressed_genes", "n_genes_by_counts", "n_counts", "log1p_n_genes_by_counts"))
+        if value is None:
+            raise ValueError("INFERENCE_COV_DETECTED_GENES requested but detected gene count is absent")
+        measured = pd.to_numeric(value.reindex(index), errors="raise")
+        candidates["log1p_detected_genes"] = measured if source == "log1p_n_genes_by_counts" else np.log1p(measured)
+    if config["guide_count"]:
+        assignment = mdata["guide"].layers.get(ASSIGNMENT_LAYER)
+        if assignment is None:
+            raise ValueError("INFERENCE_COV_GUIDE_COUNT needs guide_assignment layer")
+        candidates["assigned_guide_count"] = pd.Series(
+            np.asarray((assignment > 0).sum(axis=1)).ravel(), index=mdata["guide"].obs_names
+        ).reindex(index)
+    if config["guide_umis"]:
+        totals, _ = _guide_umi_totals(mdata)
+        candidates["log1p_total_guide_umis"] = pd.Series(
+            np.log1p(totals), index=mdata["guide"].obs_names
+        ).reindex(index)
+    raw_custom = str(config.get("custom", "auto") or "").strip()
+    available_custom = sorted(name for name in gene.obs if name.startswith("cov_"))
+    if raw_custom.lower() in ("auto", "all"):
+        custom = available_custom
+    elif raw_custom.lower() in ("", "none"):
+        custom = []
+    else:
+        custom = [name.strip() for name in raw_custom.split(",") if name.strip()]
+        missing = sorted(set(custom) - set(available_custom))
+        if missing:
+            raise ValueError(f"INFERENCE_COV_CUSTOM requested missing columns: {missing}")
+    for name in custom:
+        values = gene.obs[name].reindex(index)
+        if values.isna().any():
+            raise ValueError(f"{name} has missing cell values")
+        text_values = values.astype(str)
+        # IDs with leading zeros are labels, not continuous measurements.
+        numeric = pd.to_numeric(text_values, errors="coerce")
+        as_numeric = numeric.notna().all() and not text_values.str.match(r"[+-]?0\d+").any()
+        if as_numeric:
+            candidates[name] = numeric.astype(float)
+        else:
+            levels = sorted(text_values.unique())
+            if len(levels) > 15:
+                raise ValueError(f"{name} has {len(levels)} levels; maximum supported is 15")
+            encoded_names = set()
+            for level in levels[1:]:
+                encoded = f"{name}__{re.sub(r'[^A-Za-z0-9_]', '_', level)}"
+                if encoded in encoded_names or encoded in candidates:
+                    raise ValueError(f"{name} has category labels that collide after safe encoding")
+                encoded_names.add(encoded)
+                candidates[encoded] = (text_values == level).astype(float)
+    for name in declared_external_covariates(mdata):
+        candidates[name] = pd.to_numeric(gene.obs[name].reindex(index), errors="raise")
+
+    design = pd.DataFrame(candidates, index=index)
+    if design.isna().any().any() or not np.isfinite(design.select_dtypes(include="number").to_numpy()).all():
+        raise ValueError("Requested inference covariates contain missing or nonfinite cell values")
+    constant = [name for name in design if design[name].nunique(dropna=False) < 2]
+    # These two are historical auto-adjustments: single-set demo runs have no
+    # estimable batch effect, and a fully MT-filtered tiny pilot can have a
+    # constant mitochondrial fraction. Preserve their former skip behavior.
+    automatic_skips = [name for name in constant if name in ("batch", "percent_mito")]
+    if automatic_skips:
+        print(f"Skipping non-estimable automatic covariates: {automatic_skips}")
+        design = design.drop(columns=automatic_skips)
+    rejected = [name for name in constant if name not in automatic_skips]
+    if rejected:
+        raise ValueError(f"Requested inference covariates are constant: {rejected}")
+    categorical = ["batch"] if "batch" in design else []
+    continuous = [name for name in design if name not in categorical]
+    rank_parts = [np.ones((len(design), 1), dtype=float)]
+    if categorical:
+        levels = sorted(design["batch"].astype(str).unique())
+        if len(levels) >= 15:
+            raise ValueError(f"batch has {len(levels)} levels; SCEPTRE supports fewer than 15")
+        rank_parts += [(design["batch"].astype(str) == level).to_numpy(dtype=float)[:, None]
+                       for level in levels[1:]]
+    rank_parts += [design[name].to_numpy(dtype=float)[:, None] for name in continuous]
+    matrix = np.hstack(rank_parts)
+    if np.linalg.matrix_rank(matrix) != matrix.shape[1]:
+        raise ValueError("Requested covariates are collinear (often cov_* nested in measurement-set batch); disable a redundant term")
+    for name in design:
+        gene.obs[name] = design[name].to_numpy()
+    mdata.obs = design.copy()
+    mdata.uns["inference_continuous_covariates"] = continuous
+    mdata.uns["inference_batch_covariate"] = categorical[0] if categorical else ""
+    mdata.uns["inference_covariate_config"] = [f"{key}={value}" for key, value in sorted(config.items())]
+    derive_guide_umi_covariate(mdata)
+    print(f"Shared inference covariates: continuous={continuous}, categorical={categorical}")
+    return list(design)

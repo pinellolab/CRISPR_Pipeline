@@ -628,10 +628,18 @@ def _run_perturbo(
     # preparation step writes them into the MuData's top-level obs for SCEPTRE and
     # leaves them on the modalities for PerTurbo.
     with _open_mudata(input_path, backed="r") as mdata:
-        present = [c for c, _kind, _aliases in CANONICAL_COVARIATES if c in mdata[GENE_MODALITY].obs.columns]
-        external = declared_external_covariates(mdata)
-    continuous, batch = perturbo_covariate_arguments(present)
-    continuous.extend(external)
+        if "inference_continuous_covariates" in mdata.uns:
+            continuous = [str(name) for name in mdata.uns["inference_continuous_covariates"]]
+            batch = str(mdata.uns.get("inference_batch_covariate", "")) or None
+            missing = [name for name in continuous + ([batch] if batch else [])
+                       if name not in mdata[GENE_MODALITY].obs]
+            if missing:
+                raise ValueError(f"Shared inference covariates missing from gene.obs: {missing}")
+        else:
+            present = [c for c, _kind, _aliases in CANONICAL_COVARIATES if c in mdata[GENE_MODALITY].obs.columns]
+            external = declared_external_covariates(mdata)
+            continuous, batch = perturbo_covariate_arguments(present)
+            continuous.extend(external)
     # Only bites if the guide-UMI term is ever added to CANONICAL_COVARIATES; it is
     # not one today, so neither method conditions on it.
     if GUIDE_UMI_COVARIATE in continuous and not _covariate_has_control_variance(

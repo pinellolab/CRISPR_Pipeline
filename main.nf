@@ -37,13 +37,15 @@ workflow NFCORE_CRISPR {
 
     take:
     samplesheet // channel: samplesheet read in from --input
+    samplesheet_file
 
     main:
     //
     // WORKFLOW: Run pipeline
     //
     CRISPR_PIPELINE(
-        samplesheet
+        samplesheet,
+        samplesheet_file
         )
 }
 
@@ -184,7 +186,8 @@ workflow {
         // WORKFLOW: Run main workflow
         //
         NFCORE_CRISPR (
-            PIPELINE_INITIALISATION.out.samplesheet
+            PIPELINE_INITIALISATION.out.samplesheet,
+            PIPELINE_INITIALISATION.out.samplesheet_file
         )
     }
 
