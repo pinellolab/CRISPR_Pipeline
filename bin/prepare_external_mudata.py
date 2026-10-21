@@ -82,7 +82,36 @@ def main():
     edited = mu.read_h5mu(source)
     validate_edited(parent, edited)
     starting_cells = edited["gene"].obs_names.copy()
+    # An external analyst may edit the MuData itself instead of providing a
+    # separate covariate TSV. Preserve and validate those embedded terms.
+    declared = edited.uns.get("external_covariates", [])
+    if isinstance(declared, (str, bytes)):
+        declared = [declared]
+    declared = [value.decode() if isinstance(value, bytes) else str(value) for value in declared]
+    if len(declared) != len(set(declared)):
+        raise ValueError("duplicate embedded external covariate declarations")
+    embedded = set(declared)
+    embedded.update(name for name in edited["gene"].obs if name.startswith("external_"))
+    embedded.update(name for name in edited.obs if name.startswith("external_"))
     external_covariates = []
+    for name in sorted(embedded):
+        if not re.fullmatch(r"external_[A-Za-z0-9_]+", name):
+            raise ValueError(f"invalid embedded external covariate name {name!r}")
+        gene_values = edited["gene"].obs.get(name)
+        top_values = edited.obs.get(name)
+        if gene_values is None and top_values is None:
+            raise ValueError(f"declared external covariate {name!r} is absent")
+        source_values = gene_values if gene_values is not None else top_values
+        values = pd.to_numeric(source_values, errors="raise").to_numpy(dtype=float)
+        if not np.isfinite(values).all() or np.unique(values).size < 2:
+            raise ValueError(f"embedded external covariate {name!r} must be finite and nonconstant")
+        if gene_values is not None and top_values is not None:
+            other = pd.to_numeric(top_values, errors="raise").to_numpy(dtype=float)
+            if not np.array_equal(values, other):
+                raise ValueError(f"embedded external covariate {name!r} disagrees between MuData and gene obs")
+        edited["gene"].obs[name] = values
+        edited.obs[name] = values
+        external_covariates.append(name)
 
     if args.keep_cells:
         table = read_table(args.keep_cells)
@@ -113,7 +142,7 @@ def main():
         for name in table.columns.drop("cell_id"):
             if not re.fullmatch(r"external_[A-Za-z0-9_]+", name):
                 raise ValueError(f"custom covariate {name!r} must begin with external_")
-            if any(name in mod.obs for mod in edited.mod.values()) or name in edited.obs:
+            if name in external_covariates or any(name in mod.obs for mod in edited.mod.values()) or name in edited.obs:
                 raise ValueError(f"custom covariate {name!r} would overwrite an existing column")
             values = pd.to_numeric(table.loc[cells, name], errors="raise").to_numpy(dtype=float)
             if not np.isfinite(values).all() or np.unique(values).size < 2:

@@ -87,3 +87,32 @@ def test_reject_changed_raw_counts(tmp_path, monkeypatch):
                "--parent-manifest", manifest, "--parent-mudata", checkpoint,
                "--input-mudata", changed, "--gtf", gtf,
                "--output", tmp_path / "analysis_input.h5mu")
+
+
+def test_embedded_external_covariate_without_tsv(tmp_path, monkeypatch):
+    source = tmp_path / "source.h5mu"
+    make_mudata(source)
+    gtf = tmp_path / "reference.gtf"
+    gtf.write_text("test reference\n")
+    checkpoint = tmp_path / "preinference_mudata.h5mu"
+    manifest = tmp_path / "preinference_manifest.json"
+    invoke(monkeypatch, preinference_checkpoint.main,
+           "--input", source, "--gtf", gtf, "--output", checkpoint,
+           "--manifest", manifest, "--run-name", "pilot", "--commit", "test")
+
+    edited = mu.read_h5mu(checkpoint)
+    edited["gene"].obs["external_quality"] = [1.0, 2.0, 3.0, 4.0]
+    edited.uns["external_covariates"] = ["external_quality"]
+    edited_path = tmp_path / "edited.h5mu"
+    edited.write_h5mu(edited_path)
+    output = tmp_path / "analysis_input.h5mu"
+    report = tmp_path / "external_mudata_report.json"
+    invoke(monkeypatch, prepare_external_mudata.main,
+           "--parent-manifest", manifest, "--parent-mudata", checkpoint,
+           "--input-mudata", edited_path, "--gtf", gtf,
+           "--output", output, "--report", report)
+    result = mu.read_h5mu(output)
+    assert declared_external_covariates(result) == ["external_quality"]
+    assert result.obs["external_quality"].tolist() == [1.0, 2.0, 3.0, 4.0]
+    assert "external_quality" in materialize_shared_covariates(result)
+    assert json.loads(report.read_text())["external_covariates"] == ["external_quality"]
