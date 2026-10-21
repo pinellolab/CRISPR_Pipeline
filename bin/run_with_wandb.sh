@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run Nextflow with an optional, fail-open advanced W&B telemetry sidecar.
+# Run Nextflow with the canonical local execution dashboard and optional W&B upload.
 set -Eeuo pipefail
 
 PIPELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -40,9 +40,8 @@ done
 }
 
 MONITOR_PID=""
-if [[ "$WANDB_ENABLED" == true ]]; then
-  [[ -n "$OUTDIR" ]] || { echo "Set WANDB_OUTDIR to the Nextflow output directory" >&2; exit 2; }
-  "$PYTHON_BIN" "$PIPELINE_DIR/bin/wandb_html_monitor.py" \
+[[ -n "$OUTDIR" ]] || { echo "Set WANDB_OUTDIR to the Nextflow output directory" >&2; exit 2; }
+"$PYTHON_BIN" "$PIPELINE_DIR/bin/wandb_html_monitor.py" \
     --project "${WANDB_PROJECT:-crispr-pipeline}" \
     --entity "${WANDB_ENTITY:-}" \
     --token-env "${WANDB_TOKEN_ENV:-WB_IGVF}" \
@@ -50,14 +49,14 @@ if [[ "$WANDB_ENABLED" == true ]]; then
     --wandb-run-id "$WANDB_SERIES_ID" \
     --replace-run "${WANDB_REPLACE_RUN:-true}" \
     --publish-live-html "${WANDB_PUBLISH_LIVE_HTML:-true}" \
+    --upload "$WANDB_ENABLED" \
     --outdir "$OUTDIR" --trace "$TRACE_FILE" --nextflow-log "$NEXTFLOW_LOG" \
     --status-file "$STATUS_FILE" --dashboard-html "$DASHBOARD_HTML" \
     --poll-seconds "${WANDB_POLL_SECONDS:-30}" \
     --max-total-bytes "${WANDB_MAX_BYTES:-2000000000}" \
     --max-final-html-bytes "${WANDB_MAX_FINAL_HTML_BYTES:-100000000}" \
     --max-image-bytes "${WANDB_MAX_IMAGE_BYTES:-38000000}" &
-  MONITOR_PID=$!
-fi
+MONITOR_PID=$!
 
 write_status() {
   local status="$1"
@@ -67,7 +66,7 @@ write_status() {
 
 finish_monitor() {
   local wrapper_exit=$?
-  if [[ ! -f "$STATUS_FILE" ]]; then
+  if [[ ! -f "$STATUS_FILE" ]] || grep -q '"status":"running"' "$STATUS_FILE"; then
     write_status interrupted "$wrapper_exit"
   fi
   if [[ -n "$MONITOR_PID" ]]; then

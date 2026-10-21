@@ -1,10 +1,20 @@
 # Live W&B execution dashboard
 
-The advanced CRISPR Pipeline execution dashboard is the canonical W&B view for
-a pipeline run. It is not the same document as
-`pipeline_dashboard/dashboard.html`. The latter is the local scientific report
-and is used as an input source for final tables and figures; it must never
-replace the advanced execution interface.
+The advanced CRISPR Pipeline execution dashboard is the canonical dashboard
+both locally and in W&B. `bin/run_with_wandb.sh` renders the same self-contained
+HTML continuously to `pipeline_dashboard/execution_dashboard.html`. On a
+completed run, it also becomes `pipeline_dashboard/dashboard.html`; the older
+scientific report is retained as `pipeline_dashboard/legacy_dashboard.html`
+only as an input source for final tables and figures. Do not link the legacy
+report as the supported dashboard.
+
+The wrapper always renders the local dashboard, even without credentials.
+With `WANDB_ENABLED=true` (default), `WB_IGVF` and a working W&B Python
+environment additionally publish the live view online. If either is missing,
+the pipeline and local HTML still work. Set `WANDB_ENABLED=false` for an
+explicit local-HTML-only run. The direct `nextflow run` entry point remains
+usable, but without the wrapper it only produces the older static report as a
+fallback; use the wrapper for the supported live dashboard.
 
 ## Required default behavior
 
@@ -19,8 +29,8 @@ Runs launched with `bin/run_with_wandb.sh` use these defaults:
 - every visible series member contains exactly one
   `pipeline/main_execution` media row, so no Step selector contains stale
   dashboard copies; and
-- W&B remains fail-open: telemetry cannot change the Nextflow exit status or
-  scientific outputs.
+- W&B remains fail-open: upload errors cannot change the Nextflow exit status
+  or scientific outputs, and the same advanced HTML remains available locally.
 
 Live refreshes share a cumulative upload budget (`WANDB_MAX_BYTES`, 400 MB by
 default). The completed dashboard does not consume that live budget and is
@@ -106,7 +116,8 @@ flowchart TD
 
 At completion, the same advanced interface is rendered with final inference
 and evaluation tables and all available QC images. Completion does not switch
-to a different dashboard design.
+to a different dashboard design. It is saved under the results directory even
+after the wrapper and W&B upload process exit.
 
 ## Verification
 

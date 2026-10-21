@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -28,6 +29,8 @@ def first_file(root: Path, patterns: list[str]) -> Path:
 
 
 def discovered_paths(outdir: Path, run_name: str) -> dict[str, Path]:
+    dashboard_dir = outdir / "pipeline_dashboard"
+    legacy_dashboard = dashboard_dir / "legacy_dashboard.html"
     return {
         "guide_report": first_file(outdir, [
             f"pipeline_info/{run_name}/guide_metadata.validation.json",
@@ -40,7 +43,10 @@ def discovered_paths(outdir: Path, run_name: str) -> dict[str, Path]:
         # execution dashboard expose QC plots as soon as their producing
         # process publishes them, before the final dashboard is assembled.
         "artifact_dir": outdir,
-        "final_dashboard_html": outdir / "pipeline_dashboard" / "dashboard.html",
+        "final_dashboard_html": (
+            legacy_dashboard if legacy_dashboard.exists()
+            else dashboard_dir / "dashboard.html"
+        ),
     }
 
 
@@ -79,6 +85,14 @@ def read_final_status(status_file: Path) -> tuple[str, bool]:
 
 
 def render_snapshot(args: argparse.Namespace, status: str, final: bool) -> int:
+    dashboard_dir = args.outdir / "pipeline_dashboard"
+    legacy_dashboard = dashboard_dir / "legacy_dashboard.html"
+    original_dashboard = dashboard_dir / "dashboard.html"
+    # The old report is only an input for final tables. Preserve it before
+    # replacing its former entrypoint with the advanced execution dashboard.
+    if final and original_dashboard.is_file() and not legacy_dashboard.exists():
+        legacy_dashboard.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(original_dashboard, legacy_dashboard)
     paths = discovered_paths(args.outdir, args.run_name)
     render_args = SimpleNamespace(
         trace=args.trace,
@@ -100,6 +114,11 @@ def render_snapshot(args: argparse.Namespace, status: str, final: bool) -> int:
     document = render(render_args)
     args.dashboard_html.parent.mkdir(parents=True, exist_ok=True)
     args.dashboard_html.write_text(document, encoding="utf-8")
+    dashboard_dir.mkdir(parents=True, exist_ok=True)
+    official = dashboard_dir / "execution_dashboard.html"
+    official.write_text(document, encoding="utf-8")
+    if final and legacy_dashboard.exists():
+        original_dashboard.write_text(document, encoding="utf-8")
     return args.dashboard_html.stat().st_size
 
 
@@ -133,6 +152,7 @@ def main() -> int:
     parser.add_argument("--wandb-run-id", default="")
     parser.add_argument("--replace-run", default="true")
     parser.add_argument("--publish-live-html", default="true")
+    parser.add_argument("--upload", default="true")
     parser.add_argument("--token-env", default="WB_IGVF")
     parser.add_argument("--outdir", type=Path, required=True)
     parser.add_argument("--trace", type=Path, required=True)
@@ -146,29 +166,34 @@ def main() -> int:
     parser.add_argument("--tail-lines", type=int, default=30)
     args = parser.parse_args()
 
-    token = os.environ.get(args.token_env, "")
-    if not token:
-        warn(f"{args.token_env} is not set; pipeline continues without W&B")
-        return 0
-    os.environ["WANDB_API_KEY"] = token
-    try:
-        import wandb
-        publish_live_html = args.publish_live_html.lower() in {"1", "true", "yes"}
-        replace_run = args.replace_run.lower() in {"1", "true", "yes"}
-        if replace_run and not (args.wandb_run_id and args.entity):
-            warn("visible-run replacement requires --wandb-run-id and --entity; using one run")
-            replace_run = False
-        api = wandb.Api(timeout=30) if replace_run else None
-    except Exception as error:
-        warn(f"initialization failed; pipeline continues: {error}")
-        return 0
+    publish_live_html = args.publish_live_html.lower() in {"1", "true", "yes"}
+    upload_enabled = args.upload.lower() in {"1", "true", "yes"}
+    replace_run = args.replace_run.lower() in {"1", "true", "yes"}
+    api = None
+    wandb = None
+    if upload_enabled:
+        token = os.environ.get(args.token_env, "")
+        if not token:
+            warn(f"{args.token_env} is not set; publishing local HTML only")
+            upload_enabled = False
+        else:
+            os.environ["WANDB_API_KEY"] = token
+            try:
+                import wandb
+                if replace_run and not (args.wandb_run_id and args.entity):
+                    warn("visible-run replacement requires --wandb-run-id and --entity; using one run")
+                    replace_run = False
+                api = wandb.Api(timeout=30) if replace_run else None
+            except Exception as error:
+                warn(f"W&B initialization failed; publishing local HTML only: {error}")
+                upload_enabled = False
 
     sent_bytes = 0
     step = 0
     previous = ""
     run = None
     old_run_ids: list[str] = []
-    if replace_run and api is not None:
+    if upload_enabled and replace_run and api is not None:
         try:
             for candidate in api.runs(f"{args.entity}/{args.project}"):
                 series = candidate.config.get("dashboard_series_id", "")
@@ -196,16 +221,20 @@ def main() -> int:
         )
 
     try:
-        if not replace_run:
-            run = open_run(args.wandb_run_id, "allow")
+        if upload_enabled and not replace_run:
+            try:
+                run = open_run(args.wandb_run_id, "allow")
+            except Exception as error:
+                warn(f"W&B run creation failed; publishing local HTML only: {error}")
+                upload_enabled = False
         while True:
             status, final = read_final_status(args.status_file)
             paths = discovered_paths(args.outdir, args.run_name)
             signature = input_signature(paths, args.trace, args.status_file, args.nextflow_log)
             if signature != previous or final:
                 try:
-                    if final or publish_live_html:
-                        size = render_snapshot(args, status, final)
+                    size = render_snapshot(args, status, final)
+                    if upload_enabled and (final or publish_live_html):
                         within_budget, budget_message = upload_allowed(
                             size=size,
                             sent_bytes=sent_bytes,

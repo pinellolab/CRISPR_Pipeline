@@ -935,7 +935,7 @@ write a small local handoff consumed by the sidecar. All Axiom HTTP and dashboar
 errors are warnings: the wrapper returns the Nextflow exit code and telemetry
 cannot terminate an otherwise healthy pipeline.
 
-### Optional live W&B execution dashboard
+### Official live execution dashboard (local HTML and optional W&B)
 
 `bin/render_wandb_pipeline_dashboard.py` is the advanced white execution dashboard
 used for the recent Gary Hon and H9 reviews. It groups tasks into Input QC,
@@ -943,7 +943,9 @@ SeqSpec, Mapping, Preprocessing, MuData, Guide assignment, Post-concatenation QC
 Inference, Evaluation, and Final dashboard. The family tabs work inside W&B's
 HTML viewer without JavaScript. Measurement-set cards, filter flows, live task
 states, mapping/guide QC, and published plots appear as their source artifacts
-become available. The final pipeline dashboard remains a separate local report.
+become available. The same advanced page is the supported local and W&B
+dashboard; the older report is retained only as a bounded source of final
+tables and as a direct-Nextflow fallback.
 
 ```bash
 python bin/render_wandb_pipeline_dashboard.py \
@@ -992,12 +994,14 @@ instead of a Step selector containing stale copies. The
 interface retains its dependency graph, process-family panels, searchable task
 tables, bounded failure evidence, QC metrics, and image galleries while it is
 running and after it finishes. Live refreshes use the cumulative
-`WANDB_MAX_BYTES` budget (400 MB by default), while the completed dashboard has
+`WANDB_MAX_BYTES` budget (2 GB by default), while the completed dashboard has
 a separate reserved upload allowance.
 
-The pipeline's ordinary `pipeline_dashboard/dashboard.html` is used only as a
-bounded source of final inference rows and evaluation artifacts. It never
-replaces the advanced execution dashboard. `WANDB_MAX_FINAL_HTML_BYTES`
+During the run the advanced page is saved to
+`pipeline_dashboard/execution_dashboard.html`. On completion it also replaces
+`pipeline_dashboard/dashboard.html`; the older report is retained as
+`pipeline_dashboard/legacy_dashboard.html` for bounded final inference rows
+and evaluation artifacts. `WANDB_MAX_FINAL_HTML_BYTES`
 controls the per-file HTML limit and defaults to 100 MB. The final snapshot is
 attempted independently of the live-refresh byte budget. Live replacement is
 enabled by default; set `WANDB_PUBLISH_LIVE_HTML=false` only to suppress
@@ -1034,11 +1038,12 @@ bin/run_with_wandb.sh nextflow \
   -resume
 ```
 
-Set `WANDB_ENABLED=false` on the same wrapper command to run Nextflow without
-starting W&B or requiring its Python package or credentials. The wrapper
-always returns the Nextflow exit code; W&B import, authentication, rendering,
-network and upload failures only produce warnings. Preserve the local
-`current_dashboard.html` and `wandb.log` in the run's provenance directory.
+Set `WANDB_ENABLED=false` on the same wrapper command for the official local
+HTML dashboard without online W&B upload. If `WB_IGVF` or the W&B package is
+missing, the wrapper falls back to that local HTML automatically. The wrapper
+always returns the Nextflow exit code; W&B authentication, network and upload
+failures only produce warnings. Preserve the local advanced HTML and the
+telemetry state directory alongside run provenance.
 Run the wrapper in a detached session for long local runs.
 
 ### Troubleshooting
