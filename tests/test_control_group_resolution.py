@@ -349,9 +349,11 @@ def test_the_resolution_is_recorded_beside_the_results():
 
     assert "control_group_resolution.json" in adapter
     # PerTurbo's own crt_metadata.json names the pool but cannot know where it
-    # came from; the adapter adds the pipeline's side to each copy.
-    assert 'rglob("crt_metadata.json")' in adapter
-    assert '"pipeline_control_group"' in adapter
+    # came from. The pipeline's side is the top-level record only: the native
+    # JSON files are hashed into the conversion manifest, and a conversion-only
+    # recovery verifies those hashes, so the adapter must not rewrite them.
+    assert 'rglob("crt_metadata.json")' not in adapter
+    assert "pipeline_control_group" not in adapter
     # The SCEPTRE side writes the same facts.
     assert "sceptre_control_group.json" in SCEPTRE_R
     assert "control_group_requested" in SCEPTRE_R
@@ -368,24 +370,26 @@ def test_the_adapter_records_pool_provenance_and_reason():
     assert adapter.SETTING_PARAM == "INFERENCE_control_group"
 
 
-def test_record_control_group_annotates_every_crt_metadata_copy(tmp_path):
+def test_record_control_group_leaves_native_metadata_untouched(tmp_path):
     import json
 
     import perturbo_v2_pipeline_adapter as adapter
 
+    native = json.dumps({"pool": "control-anchored"})
     for name in ("element", "guide"):
         (tmp_path / name).mkdir()
-        (tmp_path / name / "crt_metadata.json").write_text(json.dumps({"pool": "control-anchored"}))
+        (tmp_path / name / "crt_metadata.json").write_text(native)
     (tmp_path / "element" / "not_metadata.json").write_text("{}")
 
     record = {"method": "perturbo", "crt_pool": "control-anchored", "provenance": "auto"}
     adapter._record_control_group(tmp_path, record)
 
     assert json.loads((tmp_path / "control_group_resolution.json").read_text()) == record
+    # The native files are hashed into the conversion manifest, so the record
+    # lives beside them and never inside them.
     for name in ("element", "guide"):
-        metadata = json.loads((tmp_path / name / "crt_metadata.json").read_text())
-        assert metadata["pool"] == "control-anchored"
-        assert metadata["pipeline_control_group"] == record
+        assert (tmp_path / name / "crt_metadata.json").read_text() == native
+    assert (tmp_path / "element" / "not_metadata.json").read_text() == "{}"
 
 
 def test_record_control_group_survives_a_malformed_metadata_file(tmp_path):
