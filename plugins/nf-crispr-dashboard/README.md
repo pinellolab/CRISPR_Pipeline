@@ -5,6 +5,13 @@ Pipeline execution dashboard. It starts the existing self-contained renderer
 when a run begins, records live and cached task events, finalizes the HTML
 when the run ends, and optionally serves it through a local HTTP port.
 
+On pipeline revisions containing the non-targeting calibration check (PR
+#103), its summary, QQ and p-value distribution plots, matched-method
+scatterplots, and precision-recall curves appear in the **Inference** block
+as the calibration process publishes them. A skipped check shows its reason
+there instead. The calibration report itself remains under
+`pipeline_outputs/calibration/`.
+
 The plugin is packaged with this pipeline source and is pinned in the pipeline
 configuration. Online installations can obtain the plugin from the Nextflow
 Plugin Registry once it is published; offline clusters must pre-stage this

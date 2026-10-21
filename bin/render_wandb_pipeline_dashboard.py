@@ -70,6 +70,7 @@ CATEGORY_FLOWS = {
     "inference": [
         ("Define tests", "Build intended/local guide–gene pairs and global tests from validated metadata"),
         ("Fit methods", "Run configured SCEPTRE and/or PerTurbo local and global analyses"),
+        ("Check calibration", "Compare SCEPTRE and PerTurbo against non-targeting pseudo-elements when enabled"),
         ("Merge chunks", "Combine chunked results, preserve method-native statistics and build catalogs"),
     ],
     "evaluation": [
@@ -87,6 +88,8 @@ CATEGORY_FLOWS = {
 def family_for(process: str) -> str:
     value = process.lower()
     leaf = value.split(":")[-1]
+    if "ntc_calibration" in value or "resolve_inference_mode" in value:
+        return "inference"
     if any(key in leaf for key in ('embedding_before_clone', 'embedding_after_clone',
                                    'postconcat_embedding_qc', 'remove_clonal_cells', 'filter_hto_post_clone')):
         return 'postconcat_qc'
@@ -449,6 +452,8 @@ def image_family(path: Path) -> str:
     # the entire absolute path would therefore route every image to post-QC.
     value = path.as_posix().lower()
     parts = {part.lower() for part in path.parts}
+    if "calibration" in parts or path.name.lower().startswith("ntc_"):
+        return "inference"
     if any(term in parts for term in (
         'postconcat_embedding_qc', 'embedding_qc', 'embeddings', 'before_clone',
         'after_clone', 'clone_qc', 'clone_removal', 'clones', 'clone_filter',
@@ -494,8 +499,12 @@ def collect_images(root: Path | None, max_bytes: int = 38_000_000,
     priorities = {'normalization_check.png', 'pca_variance_ratio.png', 'pca_qc_panel.png',
                   'pca_measurement_sets_colored.png', 'pca_by_measurement_set.png', 'umap_qc_panel.png',
                   'leiden_resolution_sweep.png', 'leiden_sweep_umap.png',
-                  'cell_cycle_by_measurement_set.png', 'postconcat_qc_flow.png'}
-    for path in sorted(root.rglob("*.png"), key=lambda p: (p.name not in priorities, str(p))):
+                  'cell_cycle_by_measurement_set.png', 'postconcat_qc_flow.png',
+                  'ntc_calibration_qq_guide.png', 'ntc_calibration_qq_element.png',
+                  'ntc_aucpr_curves_guide.png', 'ntc_aucpr_curves_element.png'}
+    for path in sorted(root.rglob("*.png"), key=lambda p: (
+        p.name not in priorities and "calibration" not in {part.lower() for part in p.parts}, str(p)
+    )):
         size = path.stat().st_size
         content = path.read_bytes()
         # Preserve identical pre/post-clone images as distinct scientific views,
@@ -515,7 +524,7 @@ def collect_images(root: Path | None, max_bytes: int = 38_000_000,
     return selected
 
 
-def image_gallery(images: list[tuple[Path, str]]) -> str:
+def image_gallery(images: list[tuple[Path, str]], title: str = "QC visualizations") -> str:
     if not images:
         return ""
     figures = "".join(
@@ -523,7 +532,7 @@ def image_gallery(images: list[tuple[Path, str]]) -> str:
         f'<figcaption>{html.escape((embedding_stage(path) + " · " + path.stem.replace("_", " ")).strip(" ·"))}</figcaption></figure>'
         for path, encoded in images
     )
-    return f'<h3>QC visualizations</h3><div class="gallery">{figures}</div>'
+    return f'<h3>{html.escape(title)}</h3><div class="gallery">{figures}</div>'
 
 
 def measurement_set_names(data: dict[str, Any]) -> list[str]:
@@ -968,6 +977,56 @@ def final_inference_content(path: Path | None, limit: int = 25) -> str:
     return "".join(sections)
 
 
+def calibration_artifact_content(root: Path | None) -> str:
+    """Show the PR #103 NTC check beside the inference methods it calibrates."""
+    if not root:
+        return ""
+    candidates = (
+        root / "pipeline_outputs" / "calibration",
+        root / "pipeline_dashboard" / "benchmark_output" / "calibration",
+    )
+    calibration_dir = next((candidate for candidate in candidates if candidate.is_dir()), None)
+    if calibration_dir is None:
+        return ""
+    heading = '<div class="result-block"><h3>Non-targeting calibration</h3>'
+    summary_file = calibration_dir / "ntc_calibration_summary.json"
+    skipped_file = calibration_dir / "ntc_calibration_skipped.txt"
+    if skipped_file.is_file():
+        return (heading + '<p>The calibration pass was skipped.</p><div class="qc-callout">'
+                + html.escape(sanitized_tail(skipped_file, 12)) + '</div></div>')
+    if not summary_file.is_file():
+        return heading + '<p>The calibration report is still being prepared.</p></div>'
+    try:
+        summary = json.loads(summary_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return heading + '<p>The calibration summary could not be read yet.</p></div>'
+    if summary.get("status") != "ok":
+        return heading + '<p>The calibration check was not completed.</p></div>'
+    calibration_rows = summary.get("calibration", [])
+    auc_rows = summary.get("auprc", [])
+    calibration_columns = [
+        ("level", "Level"), ("pair_set", "Pair set"), ("method", "Method"),
+        ("n_tested", "Tested"), ("frac_p_lt_0.05", "Fraction p < 0.05"),
+        ("ks_statistic", "KS distance"),
+    ]
+    auc_columns = [
+        (key, key.replace("_", " ").title())
+        for key in ("level", "method", "negatives", "n_direct_target", "n_ntc_used", "positive_rate", "auprc", "auroc")
+        if any(key in row for row in auc_rows)
+    ]
+    notes = summary.get("notes", [])
+    note_text = "".join(f"<li>{html.escape(str(note))}</li>" for note in notes[:8])
+    return (
+        heading
+        + '<p>Control pseudo-elements test the empirical null. At p &lt; 0.05, an approximately '
+          '5% call rate is expected under a well-calibrated null. AUPRC/AUROC compare the same '
+          'direct-target positives and non-targeting negatives for both methods.</p>'
+        + '<h4>Empirical null</h4>' + data_table(calibration_rows, calibration_columns, limit=30)
+        + '<h4>Direct-target discrimination</h4>' + data_table(auc_rows, auc_columns, limit=20)
+        + (f'<ul>{note_text}</ul>' if note_text else "") + '</div>'
+    )
+
+
 def evaluation_artifact_content(root: Path | None) -> str:
     if not root:
         return ""
@@ -1170,10 +1229,14 @@ def render(args: argparse.Namespace) -> str:
             seqspec_image = None if getattr(args, "artifact_dir", None) else args.seqspec_image
             extra += seqspec_content(args.seqspec_table, seqspec_image)
         if family == "inference":
+            extra += calibration_artifact_content(getattr(args, "artifact_dir", None))
             extra += final_inference_content(getattr(args, "final_dashboard_html", None))
         if family == "evaluation":
             extra += evaluation_artifact_content(getattr(args, "artifact_dir", None))
-        extra += image_gallery(family_images)
+        extra += image_gallery(
+            family_images,
+            "Calibration and inference visualizations" if family == "inference" else "QC visualizations",
+        )
         sections.append(
             f'<section id="family-{family}" class="family-panel"><div class="family-heading">'
             f'<div><span class="eyebrow">Pipeline family</span><h2>{html.escape(title)}</h2>'
