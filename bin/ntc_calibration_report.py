@@ -265,8 +265,10 @@ def curves_plot(rows: list[dict], path: Path, level: str) -> None:
     axes[0].set_xlabel("recall"); axes[0].set_ylabel("precision")
     axes[1].set_xlabel("false positive rate"); axes[1].set_ylabel("true positive rate")
     axes[1].plot([0, 1], [0, 1], color="black", lw=0.8, ls="--")
-    for ax in axes:
-        ax.legend(fontsize=8, frameon=False)
+    # The curves hug the top of the precision panel and the top-left of the
+    # ROC panel, so the legends sit in the corners they leave empty.
+    axes[0].legend(fontsize=8, frameon=False, loc="lower left")
+    axes[1].legend(fontsize=8, frameon=False, loc="lower right")
     fig.suptitle(f"Direct targets versus non-targeting pairs, {level} level")
     fig.tight_layout()
     if drawn:
