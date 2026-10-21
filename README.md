@@ -467,9 +467,9 @@ report states that share. Under `complement` nothing is duplicated.
 tables, a calibration summary (pairs tested, fractions below 0.01, 0.05 and
 0.10, a KS distance, per level, pair set and method), the method agreement on
 the same pairs, the direct-target-versus-NTC AUPRC and AUROC the controls
-evaluation has always reported for PerTurbo, now for both methods and both with
-negatives drawn 1:1 and with every available negative, QQ and
-precision-recall plots, and a cells-per-guide and cells-per-element comparison
+evaluation has always reported for PerTurbo, now for both methods on the same
+pairs, both with negatives drawn 1:1 (one draw, shared) and with every
+available negative, QQ and precision-recall plots, and a cells-per-guide and cells-per-element comparison
 between non-targeting and targeting sets. The same directory is copied into the
 dashboard under `benchmark_output/calibration/`. The main run is unchanged:
 its pairs table, its BH families and its tables do not see the calibration

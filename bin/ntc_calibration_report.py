@@ -124,43 +124,75 @@ def agreement_row(joined: pd.DataFrame, *, level: str, pair_set: str) -> dict:
     return row
 
 
-def auprc_rows(positives: pd.DataFrame, negatives: pd.DataFrame, *, level: str, method: str, p_col: str) -> list[dict]:
-    """The controls evaluation's metric, twice: direct-target rows against NTC
-    rows on the same genes, scored by 1 - p, with the negatives drawn 1:1 as
-    the evaluation has always done (``matched_1to1``) and with every available
-    negative (``all``), which moves the precision-recall baseline to the real
-    positive rate but removes the draw's sampling noise."""
+def auprc_rows(positives: pd.DataFrame, negatives: pd.DataFrame, *, level: str, methods=METHODS) -> tuple[list[dict], pd.DataFrame]:
+    """The controls evaluation's metric, for every method on the same pairs:
+    direct-target rows against non-targeting rows on the same genes, scored by
+    1 - p. A pair that any method left without a p-value is dropped for all of
+    them. The negatives are drawn 1:1 once, as the evaluation has always done
+    (``matched_1to1``), and that one draw is scored by every method; ``all``
+    uses every available negative, which moves the precision-recall baseline
+    to the real positive rate but removes the draw's sampling noise.
+
+    Returns the summary rows and the candidate pairs: every direct-target pair
+    and every non-targeting pair on the scored direct targets' genes, with
+    each method's p-value, whether the pair was scored and whether it fell in
+    the 1:1 draw."""
     from sklearn.metrics import auc, precision_recall_curve, roc_curve
 
-    pos = positives.dropna(subset=[p_col])
-    neg = negatives.dropna(subset=[p_col])
-    neg = neg[neg["gene_id"].isin(set(pos["gene_id"]))] if len(pos) else neg
-    base = {"level": level, "method": method, "n_direct_target": int(len(pos)), "n_ntc_available": int(len(neg))}
+    p_cols = [f"{method}_p_value" for method in methods]
+    pos = positives.dropna(subset=p_cols)
+    candidates = negatives[negatives["gene_id"].isin(set(pos["gene_id"]))] if len(pos) else negatives.iloc[:0]
+    neg = candidates.dropna(subset=p_cols)
+    with_replacement = len(neg) < len(pos)
+    drawn = neg.sample(n=len(pos), random_state=AUPRC_SEED, replace=with_replacement) if len(pos) and len(neg) else neg.iloc[:0]
+    counts = {"n_direct_target": int(len(pos)), "n_ntc_available": int(len(neg))}
     rows = []
-    for variant in ("matched_1to1", "all"):
-        row = {**base, "negatives": variant}
-        if pos.empty or neg.empty:
-            row.update({"n_ntc_used": 0, "positive_rate": np.nan, "auprc": np.nan, "auroc": np.nan, "sampled_with_replacement": False})
+    for method in methods:
+        p_col = f"{method}_p_value"
+        for variant, used in (("matched_1to1", drawn), ("all", neg)):
+            row = {"level": level, "method": method, "negatives": variant, **counts}
+            if pos.empty or neg.empty:
+                row.update({"n_ntc_used": 0, "positive_rate": np.nan, "auprc": np.nan, "auroc": np.nan, "sampled_with_replacement": False})
+                rows.append(row)
+                continue
+            labels = np.concatenate([np.ones(len(pos)), np.zeros(len(used))])
+            scores = 1.0 - np.concatenate([pos[p_col].to_numpy(dtype=float), used[p_col].to_numpy(dtype=float)])
+            precision, recall, _ = precision_recall_curve(labels, scores)
+            fpr, tpr, _ = roc_curve(labels, scores)
+            row.update({
+                "n_ntc_used": int(len(used)), "positive_rate": float(len(pos) / (len(pos) + len(used))),
+                "auprc": float(auc(recall, precision)), "auroc": float(auc(fpr, tpr)),
+                "sampled_with_replacement": bool(with_replacement and variant == "matched_1to1"),
+                "_curves": {"precision": precision, "recall": recall, "fpr": fpr, "tpr": tpr},
+            })
             rows.append(row)
-            continue
-        if variant == "matched_1to1":
-            with_replacement = len(neg) < len(pos)
-            used = neg.sample(n=len(pos), random_state=AUPRC_SEED, replace=with_replacement)
-        else:
-            with_replacement = False
-            used = neg
-        labels = np.concatenate([np.ones(len(pos)), np.zeros(len(used))])
-        scores = 1.0 - np.concatenate([pos[p_col].to_numpy(), used[p_col].to_numpy()])
-        precision, recall, _ = precision_recall_curve(labels, scores)
-        fpr, tpr, _ = roc_curve(labels, scores)
-        row.update({
-            "n_ntc_used": int(len(used)), "positive_rate": float(len(pos) / (len(pos) + len(used))),
-            "auprc": float(auc(recall, precision)), "auroc": float(auc(fpr, tpr)),
-            "sampled_with_replacement": bool(with_replacement),
-            "_curves": {"precision": precision, "recall": recall, "fpr": fpr, "tpr": tpr},
-        })
-        rows.append(row)
-    return rows
+
+    key_columns = [c for c in ("guide_id", "intended_target_name", "ntc_bucket", "gene_id") if c in positives.columns or c in negatives.columns]
+
+    def _pairs(frame: pd.DataFrame, role: str, drawn_index) -> pd.DataFrame:
+        out = frame.reindex(columns=key_columns + p_cols)
+        out["role"] = role
+        out["scored"] = frame.reindex(columns=p_cols).notna().all(axis=1).to_numpy()
+        out["in_matched_draw"] = frame.index.isin(drawn_index)
+        return out
+
+    pairs = pd.concat([_pairs(positives, "direct_target", []), _pairs(candidates, "ntc", drawn.index)], ignore_index=True)
+    return rows, pairs
+
+
+def auprc_note(pairs: pd.DataFrame, *, level: str, methods=METHODS) -> str:
+    """One line for the notes file: how many pairs both methods scored and how
+    many were left out, by the method that had no p-value for them."""
+    scored = pairs[pairs["scored"]]
+    by = "both methods" if len(methods) > 1 else methods[0]
+    parts = []
+    for role, label in (("direct_target", "direct-target"), ("ntc", "non-targeting")):
+        left_out = pairs[(pairs["role"] == role) & ~pairs["scored"]]
+        missing = ", ".join(f"{method} {int(left_out[f'{method}_p_value'].isna().sum())}" for method in methods)
+        parts.append(f"{len(left_out)} {label} ({missing})")
+    return (f"AUPRC, {level} level: {int((scored['role'] == 'direct_target').sum())} direct-target and "
+            f"{int((scored['role'] == 'ntc').sum())} non-targeting pairs scored by {by}; "
+            f"left out for lacking a p-value: {', '.join(parts)}.")
 
 
 # --- plots ---------------------------------------------------------------------
@@ -390,7 +422,7 @@ def main(argv: list[str] | None = None) -> int:
             frame["ntc_bucket"] = frame[key].map(bucket_of_guide)
 
     joined: dict[str, pd.DataFrame] = {}
-    calibration, agreement, auprc = [], [], []
+    calibration, agreement, auprc, auprc_pairs = [], [], [], []
     for level in LEVELS:
         if level == "guide":
             keys = ["guide_id", "gene_id"]
@@ -422,23 +454,30 @@ def main(argv: list[str] | None = None) -> int:
         calibration.append(calibration_rows(all_ntc["perturbo_p_value"].to_numpy(dtype=float), level=level, pair_set="perturbo_global_all", method="perturbo",
                                             low_information=all_ntc["perturbo_crt_low_information"] if "perturbo_crt_low_information" in all_ntc.columns else None))
 
-        # --- AUPRC: direct-target positives against NTC negatives on the same genes
+        # --- AUPRC: direct-target positives against NTC negatives on the same
+        # genes, the same pairs for both methods and one shared 1:1 draw. The
+        # negatives are the joined NTC table, which holds both methods' p-values;
+        # the direct_target pair set guarantees every bucket on every direct
+        # target's gene is in it.
         if level == "guide":
-            positives_keys = direct[["guide_id", "gene_id"]]
+            pos_keys = ["guide_id", "gene_id"]
+            positives_keys = direct[pos_keys].drop_duplicates()
         else:
+            pos_keys = ["intended_target_name", "gene_id"]
             element_of_guide = dict(zip(guide_targets["guide_id"].astype(str), guide_targets["intended_target_name"].astype(str)))
-            positives_keys = direct.assign(intended_target_name=direct["guide_id"].map(element_of_guide))[["intended_target_name", "gene_id"]].drop_duplicates()
-        for method in METHODS:
+            positives_keys = direct.assign(intended_target_name=direct["guide_id"].map(element_of_guide))[pos_keys].drop_duplicates()
+        methods = METHODS
+        if sceptre_main[level] is None:
+            notes.append(f"No main-run SCEPTRE {level} table was supplied; its AUPRC is not reported.")
+            methods = tuple(method for method in METHODS if method != "sceptre")
+        pos = positives_keys
+        for method in methods:
             source = sceptre_main[level] if method == "sceptre" else perturbo_global[level]
-            if source is None:
-                notes.append(f"No main-run SCEPTRE {level} table was supplied; its AUPRC is not reported.")
-                continue
-            pos = positives_keys.merge(source, on=list(positives_keys.columns), how="inner")
-            if method == "sceptre":
-                neg = sceptre_pass[level]
-            else:
-                neg = all_ntc
-            auprc.extend(auprc_rows(pos, neg, level=level, method=method, p_col=f"{method}_p_value"))
+            pos = pos.merge(source[pos_keys + [f"{method}_p_value"]].drop_duplicates(pos_keys), on=pos_keys, how="left")
+        rows, scored_pairs = auprc_rows(pos, joined[level], level=level, methods=methods)
+        auprc.extend(rows)
+        auprc_pairs.append(scored_pairs.assign(level=level))
+        notes.append(auprc_note(scored_pairs, level=level, methods=methods))
 
     # --- write tables ------------------------------------------------------------
     per_guide_counts = pd.read_csv(args.cell_counts_per_guide, sep="\t")
@@ -457,6 +496,10 @@ def main(argv: list[str] | None = None) -> int:
     agreement_frame.to_csv(outdir / "ntc_method_agreement.tsv", sep="\t", index=False)
     auprc_frame = pd.DataFrame([{k: v for k, v in row.items() if k != "_curves"} for row in auprc])
     auprc_frame.to_csv(outdir / "ntc_aucpr_summary.tsv", sep="\t", index=False)
+    if auprc_pairs:
+        pairs_frame = pd.concat(auprc_pairs, ignore_index=True)
+        pairs_frame = pairs_frame[["level"] + [c for c in pairs_frame.columns if c != "level"]]
+        pairs_frame.to_csv(outdir / "ntc_aucpr_pairs.tsv", sep="\t", index=False)
     cells_summary, cell_warnings = cell_count_summary(per_guide_counts, per_element_counts)
     cells_summary.to_csv(outdir / "ntc_cell_count_summary.tsv", sep="\t", index=False)
 

@@ -184,9 +184,52 @@ def test_report_writes_summaries_plots_and_joined_tables(tmp_path):
     assert (matched["n_ntc_used"] == matched["n_direct_target"]).all()
     assert (everything["n_ntc_used"] == everything["n_ntc_available"]).all()
     assert (everything["positive_rate"] < matched["positive_rate"].to_numpy()).all()
+    # Both methods score the same pairs and share the one 1:1 draw.
+    for level in ("guide", "element"):
+        at_level = auprc[auprc["level"] == level]
+        assert at_level["n_direct_target"].nunique() == 1 and at_level["n_ntc_available"].nunique() == 1
+    scored = pd.read_csv(outdir / "ntc_aucpr_pairs.tsv", sep="\t")
+    assert scored["scored"].all()
+    for level in ("guide", "element"):
+        at_level = scored[scored["level"] == level]
+        n_direct = int((at_level["role"] == "direct_target").sum())
+        assert int(at_level["in_matched_draw"].sum()) == n_direct
+        assert at_level.loc[at_level["in_matched_draw"], "role"].eq("ntc").all()
 
     notes = (outdir / "ntc_calibration_notes.txt").read_text()
     assert "Self-inclusion" in notes and "5.0%" in notes
+    assert "AUPRC, guide level: 4 direct-target and 8 non-targeting pairs scored by both methods" in notes
+
+
+def test_auprc_drops_a_pair_either_method_left_unscored_for_both_and_shares_the_draw(tmp_path):
+    paths = _inputs(tmp_path)
+    # One direct-target pair loses its SCEPTRE p-value and one non-targeting pair
+    # on a direct target's gene loses its PerTurbo p-value.
+    main = pd.read_csv(paths["sceptre_local_per_guide"], sep="\t")
+    main.loc[(main["guide_id"] == "g1") & (main["gene_id"] == "G1"), "p_value"] = np.nan
+    main.to_csv(paths["sceptre_local_per_guide"], sep="\t", index=False, compression="gzip")
+    global_guide = pd.read_parquet(paths["perturbo_global_per_guide"])
+    global_guide.loc[(global_guide["guide_id"] == "nt1") & (global_guide["gene_id"] == "G2"), "p_value"] = np.nan
+    global_guide.to_parquet(paths["perturbo_global_per_guide"], index=False)
+    outdir = tmp_path / "calibration"
+    assert report.main(_argv(paths, outdir)) == 0
+
+    auprc = pd.read_csv(outdir / "ntc_aucpr_summary.tsv", sep="\t")
+    guide = auprc[auprc["level"] == "guide"]
+    assert set(guide["method"]) == {"sceptre", "perturbo"}
+    assert guide["n_direct_target"].eq(3).all(), "four direct-target pairs, one unscored by SCEPTRE, gone for both"
+    assert guide["n_ntc_available"].eq(7).all(), "eight non-targeting pairs on G1 and G2, one unscored by PerTurbo, gone for both"
+
+    scored = pd.read_csv(outdir / "ntc_aucpr_pairs.tsv", sep="\t")
+    guide_pairs = scored[scored["level"] == "guide"]
+    assert set(zip(guide_pairs.loc[~guide_pairs["scored"], "guide_id"], guide_pairs.loc[~guide_pairs["scored"], "gene_id"])) == {("g1", "G1"), ("nt1", "G2")}
+    assert guide_pairs.loc[guide_pairs["scored"], ["sceptre_p_value", "perturbo_p_value"]].notna().all().all()
+    drawn = guide_pairs[guide_pairs["in_matched_draw"]]
+    assert len(drawn) == 3 and drawn["role"].eq("ntc").all() and drawn["scored"].all()
+
+    notes = (outdir / "ntc_calibration_notes.txt").read_text()
+    assert "AUPRC, guide level: 3 direct-target and 7 non-targeting pairs scored by both methods" in notes
+    assert "1 direct-target (sceptre 1, perturbo 0), 1 non-targeting (sceptre 0, perturbo 1)" in notes
 
 
 def test_report_tolerates_a_missing_main_sceptre_table(tmp_path):
