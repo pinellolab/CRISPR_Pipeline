@@ -161,6 +161,25 @@ def _collapse_unique_strings(values: pd.Series) -> str:
     return ";".join(cleaned)
 
 
+CONTROL_ELEMENT_TYPES = {"non-targeting", "safe-targeting", "negative control"}
+CONTROL_ELEMENT_PREFIX = "non-targeting|"
+
+
+def _drop_control_rows(merged: pd.DataFrame) -> pd.DataFrame:
+    """Control pseudo-elements are tested, and reported for the calibration
+    check, but they are not catalog rows: they have no genomic coordinates."""
+    name = merged["intended_target_name"].astype("string").fillna("")
+    control = name.str.startswith(CONTROL_ELEMENT_PREFIX) | name.eq("non-targeting")
+    type_column = next((c for c in ("element_type", "genomic_element_type") if c in merged.columns), None)
+    if type_column is not None:
+        kind = merged[type_column].astype("string").fillna("").str.strip().str.lower()
+        control = control | kind.isin(CONTROL_ELEMENT_TYPES)
+    control = control.to_numpy(dtype=bool)
+    if control.any():
+        print(f"Dropping {int(control.sum()):,} control-element row(s) from the per-element catalog.", flush=True)
+    return merged.loc[~control].reset_index(drop=True)
+
+
 def _build_element_metadata(guide) -> pd.DataFrame:
     guide_var = guide.var.copy()
     if "guide_id" not in guide_var.columns:
@@ -401,6 +420,7 @@ def create_catalog_per_element(
         on="_element_key",
         how="left",
     )
+    merged = _drop_control_rows(merged)
 
     merged["sceptre_negLog10p"] = _neg_log10(merged["_sceptre_p_value"], pvalue_floor)
     merged["sceptre_p_value"] = merged["_sceptre_p_value"]
@@ -482,6 +502,7 @@ def build_catalog_per_element_output(
         },
         derived_neglog10={"perturbo_cis_negLog10p": "perturbo_cis_p_value"},
         require_fillable_q=(("perturbo_cis_q_value", "perturbo_cis_p_value"),),
+        exclude_rows={"intended_target_name": "startswith:non-targeting|"},
         pvalue_floor=pvalue_floor,
     ):
         return None

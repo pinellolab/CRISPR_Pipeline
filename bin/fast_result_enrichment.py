@@ -162,25 +162,10 @@ def _prepare_scan(input_path: str | Path):
             pl.lit(None, dtype=pl.Float64).alias("perturbo_fc_se")
         )
 
-    # The pandas path fills a q-value only where the q is missing but the p is
-    # present, so that is the only case this path cannot reproduce. A pair the
-    # conditional randomization test did not evaluate has neither, and
-    # Benjamini-Hochberg preserves the missingness, so such rows are no reason to
-    # abandon streaming: testing the q column alone sent every run with an
-    # untested pair down the pandas path, which materialises the whole enriched
-    # table (211M rows on a screen-scale input).
-    has_unfillable_q = (
-        scan.select(
-            (pl.col("perturbo_q_value").is_null() & pl.col("perturbo_p_value").is_not_null()).any()
-        )
-        .collect(**COLLECT_ENGINE)
-        .item()
-    )
-    if has_unfillable_q:
-        raise ValueError(
-            "Fast Parquet enrichment does not fill missing q-values where a p-value is "
-            "present; use the pandas fallback for this input."
-        )
+    # The q column is carried exactly as the adapter wrote it. A missing q beside
+    # a present p is a control element the adapter kept out of the
+    # Benjamini-Hochberg family, and the pandas path leaves it missing too, so
+    # there is nothing here the streaming plan cannot reproduce.
 
     p_dtype = lazy_schema(scan)["perturbo_p_value"]
     scan = scan.with_columns(

@@ -113,3 +113,31 @@ def test_build_catalog_per_guide_writes_gzip_tsv(tmp_path):
     observed = pd.read_csv(output_path, sep="\t")
     assert list(observed.columns) == catalog_builder.OUTPUT_COLUMNS
     assert len(observed) == 2
+
+
+def test_create_catalog_per_guide_drops_control_guides():
+    """Non-targeting guides are tested for the calibration check, not catalogued."""
+    mdata = _make_test_mudata()
+    guide = mdata["guide"]
+    var = guide.var.copy()
+    var.loc["nt1"] = {
+        "guide_id": "nt1", "spacer": "GGGG", "type": "non-targeting", "targeting": False,
+        "guide_chr": pd.NA, "guide_start": pd.NA, "guide_end": pd.NA, "strand": pd.NA, "pam": "NGG",
+        "intended_target_name": "non-targeting|1", "intended_target_chr": "non-targeting",
+        "intended_target_start": 1, "intended_target_end": 1,
+    }
+    guide_with_control = ad.AnnData(X=np.ones((3, 3)), obs=guide.obs.copy(), var=var)
+    guide_with_control.layers["guide_assignment"] = sparse.csr_matrix(
+        np.array([[1, 0, 0], [0, 1, 0], [0, 1, 1]], dtype=float)
+    )
+    mdata = mu.MuData({"gene": mdata["gene"], "guide": guide_with_control})
+
+    local, global_results = _make_input_tables()
+    global_results = pd.concat(
+        [global_results, pd.DataFrame({"gene_id": ["GENE1"], "guide_id": ["nt1"], "log2_fc": [0.0], "p_value": [0.001]})],
+        ignore_index=True,
+    )
+    catalog = catalog_builder.create_catalog_per_guide(local, global_results, mdata)
+
+    assert "nt1" not in set(catalog["guide_id"])
+    assert set(catalog["guide_id"]) == {"g1", "g2"}

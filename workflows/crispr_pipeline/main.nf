@@ -31,6 +31,7 @@ include { filter_hashing } from '../../modules/local/filter_hashing'
 include { hashing_concat } from '../../modules/local/hashing_concat'
 include { evaluation_pipeline } from '../../subworkflows/local/evaluation_pipeline'
 include { tf_benchmark } from '../../modules/local/tf_benchmark'
+include { collect_benchmark_outputs } from '../../modules/local/collect_benchmark_outputs'
 
 include { dashboard_pipeline_HASHING } from '../../subworkflows/local/dashboard_pipeline_HASHING'
 include { dashboard_pipeline } from '../../subworkflows/local/dashboard_pipeline'
@@ -265,6 +266,9 @@ workflow CRISPR_PIPELINE {
         } else {
             benchmark_output_dir = Channel.value(file("${workflow.projectDir}/assets/benchmark_empty"))
         }
+        // The dashboard copies benchmark_output/ as it is; the non-targeting
+        // calibration check rides along under benchmark_output/calibration/.
+        benchmark_output_dir = collect_benchmark_outputs(benchmark_output_dir, Inference.calibration_output).collected
 
         dashboard_pipeline_HASHING (
             seqSpecCheck_pipeline_HASHING.out.guide_seqSpecCheck_plots,
@@ -373,6 +377,9 @@ workflow CRISPR_PIPELINE {
         } else {
             benchmark_output_dir = Channel.value(file("${workflow.projectDir}/assets/benchmark_empty"))
         }
+        // The dashboard copies benchmark_output/ as it is; the non-targeting
+        // calibration check rides along under benchmark_output/calibration/.
+        benchmark_output_dir = collect_benchmark_outputs(benchmark_output_dir, Inference.calibration_output).collected
 
         dashboard_pipeline (
             seqSpecCheck_pipeline.out.guide_seqSpecCheck_plots,

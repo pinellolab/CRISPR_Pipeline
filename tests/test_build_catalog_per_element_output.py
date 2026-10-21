@@ -159,3 +159,32 @@ def test_build_catalog_writes_gzip_tsv(tmp_path):
     observed = pd.read_csv(out_path, sep='\t')
     assert list(observed.columns) == catalog_builder.OUTPUT_COLUMNS
     assert not observed.empty
+
+
+def test_create_catalog_per_element_drops_control_pseudo_elements():
+    """Non-targeting buckets are tested for the calibration check, not catalogued."""
+    mdata = _make_test_mudata()
+    guide = mdata['guide']
+    var = guide.var.copy()
+    var.loc['ntA'] = {
+        'guide_id': 'ntA', 'intended_target_name': 'non-targeting|1', 'intended_target_chr': 'non-targeting',
+        'intended_target_start': 1, 'intended_target_end': 1, 'type': 'non-targeting',
+    }
+    guide_with_control = ad.AnnData(X=np.ones((3, 4)), obs=guide.obs.copy(), var=var)
+    guide_with_control.layers['guide_assignment'] = sparse.csr_matrix(
+        np.array([[1, 0, 0, 0], [0, 1, 0, 1], [0, 0, 1, 0]], dtype=float)
+    )
+    mdata = mu.MuData({'gene': mdata['gene'], 'guide': guide_with_control})
+    cis, trans = _make_input_tables()
+    trans = pd.concat(
+        [trans, pd.DataFrame({
+            'gene_id': ['GENE1'], 'intended_target_name': ['non-targeting|1'],
+            'intended_target_chr': ['non-targeting'], 'intended_target_start': [1],
+            'intended_target_end': [1], 'log2_fc': [0.0], 'p_value': [0.001],
+        })],
+        ignore_index=True,
+    )
+    catalog = catalog_builder.create_catalog_per_element(cis, trans, mdata)
+
+    assert not catalog['genomic_element_name'].astype(str).str.startswith('non-targeting').any()
+    assert set(catalog['genomic_element_name']) == {'elemA', 'elemB'}

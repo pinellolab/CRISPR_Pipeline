@@ -717,6 +717,27 @@
                     "default": "normal",
                     "description": "Perturbation-effect prior passed to PerTurbo v2."
                 },
+                "ENABLE_NTC_CALIBRATION": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run the non-targeting calibration pass after inference and publish pipeline_outputs/calibration/.",
+                    "help_text": "A second, small SCEPTRE run tests the non-targeting pseudo-elements (the non-targeting|N buckets) as ordinary targets on three matched pair sets, and the report joins them to PerTurbo's global rows for QQ plots, empirical rates at 0.01/0.05/0.10, method agreement and the direct-target-versus-NTC AUPRC and AUROC for both methods. Under the nt_cells contrast the NT-only cells are duplicated as the reference so SCEPTRE's test mirrors PerTurbo's self-included control test. Requires INFERENCE_method 'default' or 'sceptre,perturbo'; the main run's pairs, BH families and tables are not changed."
+                },
+                "NTC_CALIBRATION_max_local_pairs": {
+                    "type": "integer",
+                    "default": 10000,
+                    "description": "Cap on element-level pairs in the local calibration set (the main local pairs with each targeting element swapped for a random non-targeting bucket); 0 removes the cap."
+                },
+                "NTC_CALIBRATION_max_global_pairs": {
+                    "type": "integer",
+                    "default": 10000,
+                    "description": "Cap on element-level pairs in the global calibration set (every non-targeting bucket against a sample of all genes); 0 removes the cap."
+                },
+                "NTC_CALIBRATION_seed": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Seed for the bucket substitution and gene sampling of the calibration pair sets."
+                },
                 "INFERENCE_PERTURBO_WRITE_MUDATA": {
                     "type": "boolean",
                     "default": false,

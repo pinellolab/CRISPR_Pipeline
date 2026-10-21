@@ -689,3 +689,32 @@ def test_guide_umi_covariate_survives_the_all_cells_pool_without_controls(
             break
         passed.append(token)
     assert (adapter.GUIDE_UMI_COVARIATE in passed) is expect_guide_umi_covariate
+
+
+def test_bounded_bh_family_excludes_control_elements(tmp_path):
+    """Control rows keep their p-value but carry no q: they are not in the family."""
+    raw = tmp_path / "with_controls.parquet"
+    elements = ["gA", "gA", "non-targeting|nt1", "non-targeting|nt1", "gB"]
+    p = np.array([0.01, 0.5, 0.001, 0.02, 0.2])
+    pd.DataFrame(
+        {
+            "element": elements, "gene": [f"G{i}" for i in range(5)],
+            "posterior_mean": np.zeros(5, dtype=np.float32),
+            "posterior_scale": np.ones(5, dtype=np.float32),
+            "posterior_prob": np.full(5, 0.5, dtype=np.float32),
+            "crt_saddlepoint_p_value": p,
+        }
+    ).to_parquet(raw, index=False)
+    output = tmp_path / "result.parquet"
+    adapter._write_bounded_effects(
+        raw, output, inference_type="guide", prepared_path=None, guide_name_map={},
+        crt=True, scratch_dir=tmp_path, max_bh_working_bytes=1 << 20,
+        compact_floats=False, batch_rows=2,
+    )
+    observed = pd.read_parquet(output)
+    np.testing.assert_array_equal(observed["p_value"].to_numpy(), p)
+    is_control = observed["guide_id"].str.contains("non-targeting")
+    assert observed.loc[is_control, "perturbo_q_value"].isna().all()
+    # The targeting rows are corrected over themselves alone.
+    expected = adapter._bh_adjust(pd.Series([0.01, 0.5, 0.2])).to_numpy()
+    np.testing.assert_allclose(observed.loc[~is_control, "perturbo_q_value"].to_numpy(), expected)
