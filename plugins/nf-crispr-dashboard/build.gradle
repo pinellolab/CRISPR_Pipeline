@@ -1,0 +1,12 @@
+plugins {
+    id 'io.nextflow.nextflow-plugin' version '1.0.0-beta.15'
+}
+
+version = '0.1.0'
+
+nextflowPlugin {
+    nextflowVersion = '26.04.6'
+    provider = 'pinellolab'
+    className = 'org.pinellolab.dashboard.DashboardPlugin'
+    extensionPoints = ['org.pinellolab.dashboard.DashboardObserverFactory']
+}

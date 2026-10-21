@@ -83,3 +83,11 @@ run_logs/replacement_bar_bug_fixes_fresh2/runs_manifest.tsv
 .qc_sweep_tui_state_repla*.json
 WORKLOG_*.md
 dashboard_preview/filtering_flow_preview.html
+.gradle-dashboard/
+.jdk21/
+plugins/nf-crispr-dashboard/.gradle/
+plugins/nf-crispr-dashboard/build/
+.nextflow-plugin-test/
+.dashboard-plugin-smoke-results/
+.dashboard-plugin-smoke-work/
+.nextflow-bundle-test/

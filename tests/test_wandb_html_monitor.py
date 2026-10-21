@@ -159,6 +159,9 @@ def test_wrapper_local_mode_keeps_official_html_without_wandb(tmp_path):
     )
     assert completed.returncode == 0
     assert (tmp_path / "results" / "pipeline_dashboard" / "execution_dashboard.html").exists()
+    assert (tmp_path / "results" / "pipeline_dashboard" / "dashboard.html").read_bytes() == (
+        tmp_path / "results" / "pipeline_dashboard" / "execution_dashboard.html"
+    ).read_bytes()
     assert "Pipeline execution" in (state / "pipeline_execution.html").read_text(encoding="utf-8")
 
 

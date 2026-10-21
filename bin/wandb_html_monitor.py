@@ -113,13 +113,20 @@ def render_snapshot(args: argparse.Namespace, status: str, final: bool) -> int:
     )
     document = render(render_args)
     args.dashboard_html.parent.mkdir(parents=True, exist_ok=True)
-    args.dashboard_html.write_text(document, encoding="utf-8")
+    write_html_atomically(args.dashboard_html, document)
     dashboard_dir.mkdir(parents=True, exist_ok=True)
     official = dashboard_dir / "execution_dashboard.html"
-    official.write_text(document, encoding="utf-8")
-    if final and legacy_dashboard.exists():
-        original_dashboard.write_text(document, encoding="utf-8")
+    write_html_atomically(official, document)
+    if final:
+        write_html_atomically(original_dashboard, document)
     return args.dashboard_html.stat().st_size
+
+
+def write_html_atomically(path: Path, document: str) -> None:
+    """Prevent the live HTTP reader from seeing a partially written page."""
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(document, encoding="utf-8")
+    os.replace(temporary, path)
 
 
 def upload_allowed(

@@ -1,5 +1,13 @@
 # Live W&B execution dashboard
 
+An in-repository Nextflow observer plugin is under validation in
+`plugins/nf-crispr-dashboard`. It starts this same renderer from Nextflow
+itself and can serve the live HTML on a configurable local HTTP port.
+`conf/dashboard_plugin.config` is opt-in until the versioned plugin has been
+published to the Nextflow Plugin Registry and tested from a clean plugin
+cache. Do not make an unpublished plugin mandatory in the default config:
+that would prevent fresh users from starting the scientific workflow.
+
 The advanced CRISPR Pipeline execution dashboard is the canonical dashboard
 both locally and in W&B. `bin/run_with_wandb.sh` renders the same self-contained
 HTML continuously to `pipeline_dashboard/execution_dashboard.html`. On a

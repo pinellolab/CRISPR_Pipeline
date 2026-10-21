@@ -1,0 +1,29 @@
+name: Build dashboard plugin
+
+on:
+  push:
+    paths:
+      - 'plugins/nf-crispr-dashboard/**'
+      - '.github/workflows/dashboard_plugin.yml'
+  pull_request:
+    paths:
+      - 'plugins/nf-crispr-dashboard/**'
+      - '.github/workflows/dashboard_plugin.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Compile and package
+        working-directory: plugins/nf-crispr-dashboard
+        run: ./gradlew test assemble --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nf-crispr-dashboard-0.1.0
+          path: plugins/nf-crispr-dashboard/build/distributions/nf-crispr-dashboard-0.1.0.zip
