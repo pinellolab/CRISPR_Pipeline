@@ -60,14 +60,12 @@ def _add_perturbo_columns(df: pd.DataFrame) -> pd.DataFrame:
         }
     )
     out = out.drop(columns=["perturbo_fdr_log10_p_value"], errors="ignore")
-    if "perturbo_p_value" in out.columns:
-        if "perturbo_q_value" not in out.columns:
-            out["perturbo_q_value"] = _bh_adjust(out["perturbo_p_value"])
-        else:
-            missing_q = out["perturbo_q_value"].isna() & out["perturbo_p_value"].notna()
-            if missing_q.any():
-                computed_q = _bh_adjust(out["perturbo_p_value"])
-                out.loc[missing_q, "perturbo_q_value"] = computed_q.loc[missing_q]
+    if "perturbo_p_value" in out.columns and "perturbo_q_value" not in out.columns:
+        # A table with no q column at all came from an older adapter; compute the
+        # family here. A table that has the column is left exactly as the adapter
+        # wrote it: a missing q beside a present p is deliberate, that row is a
+        # control element kept out of the Benjamini-Hochberg family.
+        out["perturbo_q_value"] = _bh_adjust(out["perturbo_p_value"])
     return out
 
 

@@ -684,8 +684,24 @@ def _requested_pairs_table(fit_dir: Path, effects: pd.DataFrame, pairs_path: Pat
     return keyed.merge(pairs, on=["element", "gene"], how="inner")
 
 
-def _pvalue_projection(raw_path: Path, output_path: Path, *, crt: bool, batch_rows: int) -> Path:
-    """Project only the selected p-value, in bounded Arrow batches."""
+def _pvalue_projection(
+    raw_path: Path,
+    output_path: Path,
+    *,
+    crt: bool,
+    batch_rows: int,
+    control_substring: str | None = None,
+) -> Path:
+    """Project only the selected p-value, in bounded Arrow batches.
+
+    With ``control_substring``, the rows of control elements (names containing
+    it, which covers the guide fit's ``non-targeting|<guide>`` names too) are
+    projected as missing, so they stay out of the Benjamini-Hochberg family and
+    carry no q-value. Their p-values are still written to the result table in
+    the second pass: they are what the calibration check reads. Nothing
+    downstream recomputes the family, so a missing q beside a present p is the
+    mark of a control row from here on.
+    """
     import pyarrow as pa
     import pyarrow.parquet as pq
 
@@ -694,6 +710,10 @@ def _pvalue_projection(raw_path: Path, output_path: Path, *, crt: bool, batch_ro
     candidates = ["crt_saddlepoint_p_value", "crt_p_value", "empirical_p_value"]
     selected = next((name for name in candidates if name in names), None)
     columns = [name for name in (selected, "posterior_prob") if name is not None and name in names]
+    mask_controls = bool(control_substring) and "element" in names
+    if mask_controls:
+        columns.append("element")
+    n_controls_excluded = 0
     temporary = output_path.with_name(output_path.name + ".partial")
     writer = None
     try:
@@ -703,6 +723,14 @@ def _pvalue_projection(raw_path: Path, output_path: Path, *, crt: bool, batch_ro
             if not crt:
                 posterior = pd.to_numeric(frame["posterior_prob"], errors="coerce")
                 p = p.where(p.notna(), posterior)
+            if mask_controls:
+                is_control = (
+                    frame["element"].astype(str).str.lower()
+                    .str.contains(control_substring.lower(), regex=False)
+                    .to_numpy()
+                )
+                n_controls_excluded += int(is_control.sum())
+                p = p.where(~is_control)
             # Match the target branch's legacy _bh_adjust exactly: every non-NaN
             # value, including +/-inf, participates after clipping. The unmodified
             # p-value is still written to the result table in the second pass.
@@ -716,6 +744,12 @@ def _pvalue_projection(raw_path: Path, output_path: Path, *, crt: bool, batch_ro
             writer.close()
     if writer is None:
         pd.DataFrame({"p_value": pd.Series(dtype="float64")}).to_parquet(temporary, index=False)
+    if mask_controls:
+        print(
+            f"[perturbo conversion] {n_controls_excluded:,} control-element row(s) kept out of "
+            "the Benjamini-Hochberg family (p-values retained, q-values missing).",
+            flush=True,
+        )
     os.replace(temporary, output_path)
     return output_path
 
@@ -789,7 +823,10 @@ def _write_bounded_effects(
     started = time.perf_counter()
     output_path = Path(output_path)
     print(f"[perturbo conversion] {inference_type}: {raw_path} -> {output_path}; batch_rows={batch_rows}", flush=True)
-    p_path = _pvalue_projection(raw_path, scratch_dir / f"{inference_type}.p.parquet", crt=crt, batch_rows=batch_rows)
+    p_path = _pvalue_projection(
+        raw_path, scratch_dir / f"{inference_type}.p.parquet", crt=crt, batch_rows=batch_rows,
+        control_substring=CONTROL_SUBSTRING,
+    )
     q_path = write_bh_sidecar(
         p_path,
         scratch_dir / f"{inference_type}.q.parquet",

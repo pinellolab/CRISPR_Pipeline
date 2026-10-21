@@ -5,6 +5,7 @@ import anndata as ad
 import h5py
 import mudata as mu
 import numpy as np
+import pytest
 import pandas as pd
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -548,3 +549,44 @@ def test_coordinates_typed_differently_on_the_two_sides_still_merge(tmp_path):
     assert len(matched) == 1 and matched["intended_target_name_s"].iloc[0] == "E1"
     assert left["__merge_intended_target_start"].tolist() == ["100", "200"]
     assert right["__merge_intended_target_start"].tolist() == ["100", "__NA__"]
+
+
+def test_add_perturbo_columns_leaves_a_missing_q_where_the_adapter_left_it():
+    """A missing q beside a present p marks a control row; it is never refilled."""
+    frame = pd.DataFrame(
+        {
+            "gene_id": ["GENE1", "GENE2", "GENE3"],
+            "guide_id": ["g1", "nt1", "g2"],
+            "log2_fc": [0.4, 0.0, -0.4],
+            "p_value": [0.05, 0.001, 0.5],
+            "perturbo_q_value": [0.1, np.nan, 0.5],
+        }
+    )
+    out = merge_local_global_results._add_perturbo_columns(frame)
+    assert np.isnan(out.loc[1, "perturbo_q_value"])
+    assert list(out.loc[[0, 2], "perturbo_q_value"]) == [0.1, 0.5]
+
+    # Without any q column the family is still computed here, as before.
+    legacy = merge_local_global_results._add_perturbo_columns(frame.drop(columns="perturbo_q_value"))
+    assert legacy["perturbo_q_value"].notna().all()
+
+
+def test_fast_enrichment_accepts_a_missing_q_beside_a_present_p(tmp_path):
+    pytest.importorskip("polars")
+    import fast_result_enrichment
+
+    source = tmp_path / "global.parquet"
+    pd.DataFrame(
+        {
+            "gene_id": ["GENE1", "GENE2"],
+            "guide_id": ["g1", "nt1"],
+            "log2_fc": np.array([0.4, 0.0], dtype=np.float32),
+            "perturbo_fc_se": np.array([0.1, 0.1], dtype=np.float32),
+            "p_value": np.array([0.05, 0.001], dtype=np.float32),
+            "perturbo_q_value": [0.1, np.nan],
+        }
+    ).to_parquet(source, index=False)
+    scan = fast_result_enrichment._prepare_scan(source)  # used to raise here
+    frame = scan.collect().to_pandas()
+    assert np.isnan(frame.loc[1, "perturbo_q_value"])
+    assert np.isclose(frame.loc[1, "perturbo_p_value"], 0.001)
