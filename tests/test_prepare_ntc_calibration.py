@@ -268,14 +268,14 @@ def test_screen_without_controls_is_skipped_cleanly(tmp_path):
         "--full-mudata", str(full_path), "--pairs-mudata", str(pairs_path),
         "--sceptre-control-group", "complement", "--summary", str(summary_path),
         "--output-mudata", str(tmp_path / "x.h5mu"), "--pairs", str(tmp_path / "x.tsv.gz"),
-        "--guide-targets", str(tmp_path / "t.tsv"),
+        "--guide-targets", str(tmp_path / "t.tsv"), "--direct-targets", str(tmp_path / "d.tsv"),
         "--cell-counts-per-guide", str(tmp_path / "cg.tsv"), "--cell-counts-per-element", str(tmp_path / "ce.tsv"),
     ]
     assert prep.main(argv) == 0
     summary = json.loads(summary_path.read_text())
     assert summary["status"] == "skipped"
     assert not (tmp_path / "x.h5mu").exists()
-    assert (tmp_path / "cg.tsv").exists() and (tmp_path / "t.tsv").exists()
+    assert (tmp_path / "cg.tsv").exists() and (tmp_path / "t.tsv").exists() and (tmp_path / "d.tsv").exists()
 
 
 def test_cell_counts_report_roles_before_any_restriction(tmp_path):
