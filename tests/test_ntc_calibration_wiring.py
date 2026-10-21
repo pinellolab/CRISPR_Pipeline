@@ -46,6 +46,8 @@ def test_the_pass_is_called_from_both_two_method_branches_and_emitted():
     assert "include { ntc_calibration_pipeline } from '../ntc_calibration_pipeline'" in workflow
     assert workflow.count("ntc_calibration_pipeline(") == 2
     assert "calibration_output = calibration_output" in workflow
+    # The flag is decided on its text: Nextflow 26 passes `--X false` as 'false'.
+    assert "calibration_flag.toString().trim().toLowerCase() in ['true', '1', 'yes']" in workflow
     assert "assets/calibration_empty" in workflow
     assert (REPO_ROOT / "assets/calibration_empty/.gitkeep").exists()
 

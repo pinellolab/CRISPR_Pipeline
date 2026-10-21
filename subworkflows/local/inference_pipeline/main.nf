@@ -94,8 +94,14 @@ workflow inference_pipeline {
     }
 
     def calibration_placeholder = Channel.value(file("${workflow.projectDir}/assets/calibration_empty"))
-    def run_calibration = params.ENABLE_NTC_CALIBRATION && params.INFERENCE_method in ['default', 'sceptre,perturbo']
-    if (params.ENABLE_NTC_CALIBRATION && !run_calibration) {
+    // A command-line `--ENABLE_NTC_CALIBRATION false` reaches here as the text
+    // 'false' on Nextflow 26 (a boolean on 25), and Groovy reads any non-empty
+    // text as true. Decide on the text, so the flag means what it says.
+    def calibration_flag = params.ENABLE_NTC_CALIBRATION
+    def enable_calibration = calibration_flag == true ||
+        (calibration_flag != null && calibration_flag.toString().trim().toLowerCase() in ['true', '1', 'yes'])
+    def run_calibration = enable_calibration && params.INFERENCE_method in ['default', 'sceptre,perturbo']
+    if (enable_calibration && !run_calibration) {
         log.info("Non-targeting calibration: skipped, it needs both methods (INFERENCE_method='${params.INFERENCE_method}').")
     }
 
