@@ -229,6 +229,10 @@ The complete machine-readable QC output catalog is available as
 | `INFERENCE_PERTURBO_LIKELIHOOD` | `negbin` | PerTurbo likelihood name | Likelihood family passed to PerTurbo v2. |
 | `INFERENCE_PERTURBO_PRIOR` | `normal` | PerTurbo prior name | Perturbation-effect prior passed to PerTurbo v2. |
 | `INFERENCE_PERTURBO_CRT_POOL` | `from-moi` | `from-moi`, `auto`, `all-cells`, `control-anchored` | Per-method override for PerTurbo only. `from-moi` is the historical default and counts as unset, so `INFERENCE_control_group` decides; any other value overrides the shared setting for PerTurbo alone and the pipeline logs that the two methods are then deliberately inconsistent. |
+| `ENABLE_NTC_CALIBRATION` | `true` | `true`, `false` | Run the non-targeting calibration pass after inference: a second, small SCEPTRE run on the non-targeting pseudo-elements, joined to PerTurbo's global rows for calibration curves, method agreement and the direct-target-versus-NTC AUPRC of both methods, published to `pipeline_outputs/calibration/`. Needs `INFERENCE_method` `default` or `sceptre,perturbo`. See [Non-targeting calibration](#non-targeting-calibration). |
+| `NTC_CALIBRATION_max_local_pairs` | `10000` | integer | Cap on element-level pairs in the local calibration set (the main local pairs with each targeting element swapped for a random non-targeting bucket). `0` removes the cap. |
+| `NTC_CALIBRATION_max_global_pairs` | `10000` | integer | Cap on element-level pairs in the global calibration set (every non-targeting bucket against a sample of all genes). `0` removes the cap. |
+| `NTC_CALIBRATION_seed` | `0` | integer | Seed for the bucket substitution and gene sampling of the calibration pair sets. |
 | `INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT` | `parquet` | `tsv.gz`, `parquet` | Serialization used for the global-analysis (all-by-all) PerTurbo v2 result tables and the final local/global/catalog result tables. Requires `pyarrow` in the base image (pinned by default); set `tsv.gz` for compatibility with older images. |
 | `INFERENCE_control_group` | `auto` | `auto`, `nt_cells`, `complement` | The cells a perturbation is compared against, for **both** SCEPTRE and PerTurbo, in SCEPTRE's vocabulary. `nt_cells` compares each perturbation with the non-targeting cells (PerTurbo's control-anchored pool); `complement` compares it with every other cell (PerTurbo's all-cells pool); `auto` takes whichever `Multiplicity_of_infection` implies (`low` -> `nt_cells`, `high` -> `complement`), and when the MOI is neither, PerTurbo measures the design while SCEPTRE falls back to `complement`. `nt_cells` is unavailable for a high-MOI screen and the run fails rather than substituting. See [Control group](#control-group). |
 | `INFERENCE_SCEPTRE_side` | `both` | `both`, `left`, `right` | Alternative-hypothesis side passed to SCEPTRE inference. |
@@ -420,6 +424,59 @@ change.** High-MOI screens are unaffected, and PerTurbo's behaviour is unchanged
 for both. To reproduce the old low-MOI SCEPTRE behaviour, set
 `INFERENCE_control_group = 'complement'` — which also switches PerTurbo to the
 all-cells pool — or override SCEPTRE alone as described above.
+
+### The mode both methods receive is settled from the data
+
+`auto` is only half decided by the parameters: whether a screen is low-MOI and
+whether it has a control pool are properties of the assignments. Before
+inference, `resolve_inference_mode` measures the full guide matrix once (the
+largest number of guides in any cell, the multi-guide cells, the cells carrying
+only control guides) and writes `pipeline_outputs/inference_mode.json` with
+explicit values for both methods: SCEPTRE's `control_group` and MOI mode, and
+PerTurbo's `--crt-pool`, never `from-moi`. Under `auto` the non-targeting
+contrast is chosen when the analysis is low-MOI (declared low, or every cell
+carries at most one guide) and at least one cell carries only control guides;
+otherwise both methods use the complement. Previously the PerTurbo adapter made
+that switch on its own while the SCEPTRE driver kept the complement it had
+been handed, so a screen declared high-MOI whose cells each carry one guide ran
+the two methods against different cells. One residual difference remains and is
+recorded in the JSON: under an explicit `complement` on a low-MOI screen,
+SCEPTRE's low-MOI QC sets multi-guide cells aside while PerTurbo's all-cells
+pool keeps them.
+
+## Non-targeting calibration
+
+Both methods test the non-targeting pseudo-elements (`non-targeting|N`, the
+buckets `annotate_intended_target_groups` builds), but until now only PerTurbo
+reported them: SCEPTRE tests only the pairs it is handed and, under the
+non-targeting contrast, refuses non-targeting targets outright. With
+`ENABLE_NTC_CALIBRATION` (default on) the pipeline runs SCEPTRE once more on a
+small input in which those buckets are ordinary targets named
+`ntc_calibration|N`, on three pair sets matched to PerTurbo's rows: the main
+local pairs with each targeting element swapped for a random bucket (`local`),
+every bucket against a sample of all genes (`global`, capped by
+`NTC_CALIBRATION_max_global_pairs`), and every bucket against the screen's
+direct-target genes (`direct_target`). Under the `nt_cells` contrast the
+NT-only cells are duplicated once more as the reference population, so SCEPTRE
+tests each bucket against a pool that contains its own cells, which is what
+PerTurbo's control-element test does under the control-anchored pool; both are
+then mildly conservative, by about the bucket's share of the pool, and the
+report states that share. Under `complement` nothing is duplicated.
+
+`pipeline_outputs/calibration/` holds the joined per-guide and per-element
+tables, a calibration summary (pairs tested, fractions below 0.01, 0.05 and
+0.10, a KS distance, per level, pair set and method), the method agreement on
+the same pairs, the direct-target-versus-NTC AUPRC and AUROC the controls
+evaluation has always reported for PerTurbo, now for both methods on the same
+pairs, both with negatives drawn 1:1 (one draw, shared) and with every
+available negative, QQ and precision-recall plots, and a cells-per-guide and cells-per-element comparison
+between non-targeting and targeting sets. The same directory is copied into the
+dashboard under `benchmark_output/calibration/`. The main run is unchanged:
+its pairs table, its BH families and its tables do not see the calibration
+pairs. PerTurbo's non-targeting rows stay in the global tables with their
+p-values but carry no q-value, because control elements are no longer part of
+the transcriptome-wide BH family, and the catalog tables no longer contain
+control guides or control pseudo-elements.
 
 ## 🎯 Resource Sizing Guidelines
 

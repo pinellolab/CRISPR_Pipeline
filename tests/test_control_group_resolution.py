@@ -251,16 +251,23 @@ def test_both_processes_are_driven_by_the_resolution_not_by_the_raw_params():
 
     # SCEPTRE's control group reaches the R driver from the resolution.
     assert "${params.INFERENCE_SCEPTRE_control_group}" not in sceptre_module
-    assert "${control_group}" in sceptre_module
+    assert "${control_group.sceptre_control_group}" in sceptre_module
+    # And the MOI mode, so the driver no longer reads it off a cis subset or chunk.
+    assert "${control_group.analysis_moi}" in sceptre_module
     # PerTurbo's pool likewise, with the provenance for the recorded metadata.
     assert "${params.INFERENCE_PERTURBO_CRT_POOL}" not in perturbo_module
     assert "--crt-pool ${control_group.perturbo_crt_pool}" in perturbo_module
     assert "--control-group-setting ${control_group.setting}" in perturbo_module
     assert "--control-group-provenance ${control_group.perturbo_provenance}" in perturbo_module
 
-    # Every call site passes it: three SCEPTRE calls, three PerTurbo calls.
-    assert workflow.count("control_group.sceptre_control_group)") == 3
-    assert len(re.findall(r"inference_perturbo\([^)]*control_group\)", workflow)) == 3
+    # Every method branch measures the mode once from the data and every call
+    # site passes that same map: four branches, three SCEPTRE calls, three
+    # PerTurbo calls, and nothing reads the parameter-only resolution directly.
+    assert workflow.count("resolve_inference_mode(") == 4
+    assert len(re.findall(r"inference_sceptre\(.*, mode\)", workflow)) == 3
+    assert len(re.findall(r"inference_perturbo\(.*, mode\)", workflow)) == 3
+    assert "control_group.sceptre_control_group)" not in workflow
+    assert "control_group.perturbo_crt_pool" not in workflow
 
 
 def test_the_adapter_accepts_the_provenance_arguments():
@@ -426,3 +433,154 @@ def test_the_changelog_says_low_moi_sceptre_results_change():
         re.IGNORECASE | re.DOTALL,
     )
     assert warning, "CHANGELOG.md must warn that low-MOI SCEPTRE results change"
+
+
+# --- the data-aware resolution both methods receive -------------------------
+
+
+@pytest.mark.parametrize(
+    ("setting", "declared", "singleton", "n_control_only", "sceptre", "perturbo", "analysis_moi"),
+    [
+        # The divergence this exists to close: declared high, but every cell
+        # carries one guide. PerTurbo's adapter used to go control-anchored on
+        # its own while SCEPTRE kept the complement it was handed.
+        ("auto", "high", True, 100, "nt_cells", "control-anchored", "low"),
+        ("auto", "high", False, 100, "complement", "all-cells", "high"),
+        # Declared low with a few multi-guide cells stays low: both drivers set
+        # those cells aside.
+        ("auto", "low", False, 100, "nt_cells", "control-anchored", "low"),
+        # Low-MOI but no control pool: the complement is the only valid contrast.
+        ("auto", "low", True, 0, "complement", "all-cells", "low"),
+        ("auto", None, True, 50, "nt_cells", "control-anchored", "low"),
+        ("auto", None, False, 50, "complement", "all-cells", "high"),
+        # Explicit settings pass through; 'from-moi' never reaches the adapter.
+        ("complement", "low", True, 100, "complement", "all-cells", "low"),
+        ("complement", "high", False, 0, "complement", "all-cells", "high"),
+        ("nt_cells", "low", False, 100, "nt_cells", "control-anchored", "low"),
+    ],
+)
+def test_data_aware_resolution_table(setting, declared, singleton, n_control_only, sceptre, perturbo, analysis_moi):
+    resolution = cg.resolve_from_observations(
+        setting, declared, observed_singleton=singleton, n_control_only_cells=n_control_only
+    )
+
+    assert resolution["sceptre_control_group"] == sceptre
+    assert resolution["perturbo_crt_pool"] == perturbo
+    assert resolution["perturbo_pool_effective"] == perturbo
+    assert resolution["analysis_moi"] == analysis_moi
+    assert resolution["perturbo_crt_pool"] != "from-moi"
+    assert "Both methods contrast against the same cells." in resolution["log_line"]
+
+
+@pytest.mark.parametrize(
+    ("setting", "declared", "singleton", "n_control_only", "message"),
+    [
+        ("nt_cells", "high", True, 100, "high-MOI screen"),
+        ("nt_cells", None, False, 100, "more than one guide"),
+        ("nt_cells", "low", True, 0, "no cell carries only non-targeting guides"),
+    ],
+)
+def test_data_aware_resolution_refuses_an_impossible_nt_contrast(setting, declared, singleton, n_control_only, message):
+    with pytest.raises(cg.ControlGroupError, match=message):
+        cg.resolve_from_observations(
+            setting, declared, observed_singleton=singleton, n_control_only_cells=n_control_only,
+            n_multi_guide_cells=0 if singleton else 7,
+        )
+
+
+def test_data_aware_resolution_keeps_a_per_method_override_and_says_so():
+    resolution = cg.resolve_from_observations(
+        "auto", "high", observed_singleton=True, n_control_only_cells=100, perturbo_pool="all-cells"
+    )
+
+    # SCEPTRE follows the data; PerTurbo keeps what the user forced; the log
+    # line says the two are no longer comparable.
+    assert resolution["sceptre_control_group"] == "nt_cells"
+    assert resolution["perturbo_crt_pool"] == "all-cells"
+    assert resolution["perturbo_provenance"] == "per-method-override"
+    assert "deliberately inconsistent" in resolution["log_line"]
+
+
+def test_data_aware_resolution_records_how_multi_guide_cells_are_handled():
+    low = cg.resolve_from_observations(
+        "auto", "low", observed_singleton=False, n_control_only_cells=10, n_multi_guide_cells=3
+    )
+    high = cg.resolve_from_observations(
+        "auto", "high", observed_singleton=False, n_control_only_cells=10, n_multi_guide_cells=300
+    )
+
+    assert "3 cell(s) carry more than one guide" in low["multi_guide_cell_handling"]
+    assert "sets them aside too" in low["multi_guide_cell_handling"]
+    assert high["multi_guide_cell_handling"].startswith("high-MOI analysis")
+
+
+def _mode_mudata(path, *, singleton):
+    import anndata as ad
+    import mudata as mu
+    import numpy as np
+    import pandas as pd
+    from scipy import sparse
+
+    cells = [f"cell{i}" for i in range(6)]
+    obs = pd.DataFrame(index=cells)
+    gene = ad.AnnData(
+        X=np.ones((6, 2), dtype=np.float32), obs=obs.copy(),
+        var=pd.DataFrame(index=["GENE1", "GENE2"]),
+    )
+    guide_var = pd.DataFrame(
+        {
+            "guide_id": ["gA", "gB", "nt1"],
+            "targeting": [True, True, False],
+            "type": ["targeting", "targeting", "non-targeting"],
+            "intended_target_name": ["elemA", "elemB", "non-targeting"],
+            "intended_target_chr": ["chr1", "chr2", ""],
+            "intended_target_start": [100.0, 300.0, np.nan],
+            "intended_target_end": [200.0, 400.0, np.nan],
+        },
+        index=["gA", "gB", "nt1"],
+    )
+    # Two control-only cells, two gA cells, one gB cell, and one cell that
+    # carries gA and gB together unless the screen is singleton.
+    rows = [[1, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 1], [1, 0 if singleton else 1, 0]]
+    assignment = sparse.csr_matrix(np.array(rows, dtype=np.float32))
+    guide = ad.AnnData(X=assignment.copy(), obs=obs.copy(), var=guide_var)
+    guide.layers["guide_assignment"] = assignment.copy()
+    guide.uns["moi"] = np.array(["high"], dtype=object)
+    mu.MuData({"gene": gene, "guide": guide}).write(path)
+
+
+@pytest.mark.parametrize("singleton", [True, False])
+def test_resolve_inference_mode_script_measures_the_full_matrix(tmp_path, singleton):
+    import json
+
+    import resolve_inference_mode as script
+
+    mudata_path = tmp_path / "input.h5mu"
+    _mode_mudata(mudata_path, singleton=singleton)
+    output = tmp_path / "inference_mode.json"
+
+    assert script.main([
+        "--mudata", str(mudata_path), "--setting", "auto", "--declared-moi", "high",
+        "--perturbo-pool", "from-moi", "--sceptre-group", "complement", "--output", str(output),
+    ]) == 0
+    mode = json.loads(output.read_text())
+
+    assert mode["observations"]["n_control_only_cells"] == 2
+    assert mode["observations"]["n_multi_guide_cells"] == (0 if singleton else 1)
+    assert mode["observations"]["observed_singleton"] is singleton
+    assert mode["declared_moi"] == "high"
+    if singleton:
+        assert (mode["analysis_moi"], mode["sceptre_control_group"], mode["perturbo_crt_pool"]) == (
+            "low", "nt_cells", "control-anchored"
+        )
+    else:
+        assert (mode["analysis_moi"], mode["sceptre_control_group"], mode["perturbo_crt_pool"]) == (
+            "high", "complement", "all-cells"
+        )
+    assert mode["perturbo_provenance"] == "observed"
+
+
+def test_the_sceptre_driver_takes_the_moi_mode_as_its_eighth_argument():
+    assert "moi_override <- if (length(args) >= 8" in SCEPTRE_R
+    assert "moi_override = moi_override" in SCEPTRE_R
+    assert 'fixed_moi %in% c("low", "high")' in SCEPTRE_R

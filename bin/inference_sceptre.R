@@ -224,7 +224,7 @@ prepare_extra_covariates <- function(mudata, remove_collinear_covariates = TRUE)
   retain_non_collinear_covariates(covariates)
 }
 
-convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE) {
+convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE, moi_override = NULL) {
   # extract information from MuData
   declared_moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
   if (is.null(SummarizedExperiment::assayNames(mudata[["gene"]]))) {
@@ -292,12 +292,26 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
   observed_singleton <- length(guides_per_cell) > 0 && max(guides_per_cell) <= 1
   declared_low <- !is.null(declared_moi) && tolower(trimws(as.character(declared_moi)[1])) == "low"
   observed_low_moi <- observed_singleton || declared_low
+  # The pipeline's inference-mode resolution (bin/resolve_inference_mode.py)
+  # applies the same rule to the full guide matrix and hands the answer down, so
+  # SCEPTRE and PerTurbo settle the MOI mode on the same cells. This object may
+  # be a cis subset or a gene chunk, which is why its own reading is advisory
+  # once the pipeline has spoken.
+  fixed_moi <- if (is.null(moi_override) || length(moi_override) == 0) NA_character_ else tolower(trimws(as.character(moi_override)[1]))
+  if (!is.na(fixed_moi) && nzchar(fixed_moi)) {
+    if (!(fixed_moi %in% c("low", "high"))) {
+      stop(sprintf("moi_override must be 'low' or 'high', got '%s'.", fixed_moi))
+    }
+    observed_low_moi <- fixed_moi == "low"
+  }
   moi <- if (observed_low_moi) "low" else "high"
   message(sprintf(
-    "MOI: declared '%s', observed max %s gRNA(s) per cell (%d of %d cells carry more than one) -> using '%s'.",
+    "MOI: declared '%s', observed max %s gRNA(s) per cell (%d of %d cells carry more than one)%s -> using '%s'.",
     if (is.null(declared_moi)) "unset" else as.character(declared_moi),
     if (length(guides_per_cell)) max(guides_per_cell) else NA,
-    sum(guides_per_cell > 1), length(guides_per_cell), moi
+    sum(guides_per_cell > 1), length(guides_per_cell),
+    if (!is.na(fixed_moi) && nzchar(fixed_moi)) sprintf(", fixed to '%s' by the pipeline's inference-mode resolution", fixed_moi) else "",
+    moi
   ))
 
   if (!observed_low_moi && any(guide_row_data$intended_target_name == "non-targeting", na.rm = TRUE)) {
@@ -463,9 +477,9 @@ write_control_group_metadata <- function(resolved, requested, provenance, is_low
 }
 
 
-inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
+inference_sceptre_m <- function(mudata, n_processors = NA, moi_override = NULL, ...) {
   # convert MuData object to sceptre object
-  sceptre_object <- convert_mudata_to_sceptre_object_v1(mudata, remove_collinear_covariates = TRUE)
+  sceptre_object <- convert_mudata_to_sceptre_object_v1(mudata, remove_collinear_covariates = TRUE, moi_override = moi_override)
   guide_lookup <- SingleCellExperiment::rowData(mudata[["guide"]]) |>
     as.data.frame() |>
     tibble::rownames_to_column(var = "grna_id")
@@ -723,6 +737,10 @@ if (!exists(".sourced_from_test")) {
   control_group <- args[5]
   resampling_mechanism <- args[6]
   n_processors <- if (length(args) >= 7) suppressWarnings(as.integer(args[7])) else NA
+  # Optional eighth line: the MOI mode ('low' or 'high') from the pipeline's
+  # inference-mode resolution. Absent on a direct invocation, in which case the
+  # driver reads the mode from the assignments as before.
+  moi_override <- if (length(args) >= 8 && nzchar(trimws(args[8]))) trimws(args[8]) else NULL
 
   # read MuData
   mudata_in <- MuData::readH5MU(mudata_fp)
@@ -735,7 +753,8 @@ if (!exists(".sourced_from_test")) {
     resampling_approximation = resampling_approximation,
     control_group = control_group,
     resampling_mechanism = resampling_mechanism,
-    n_processors = n_processors
+    n_processors = n_processors,
+    moi_override = moi_override
   )
   # write outputs: per-element (union) and per-guide (singleton)
   if (!is.null(results$union_test_results)) {

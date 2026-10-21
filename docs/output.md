@@ -52,6 +52,25 @@ When PerTurbo emits them, its per-pair CRT diagnostics also ride along in the lo
 
 Both catalog schemas are reconstructible from the regular analysis TSVs without opening MuData. For per-element data, outer-join the local SCEPTRE and global PerTurbo columns on `gene_id` plus the intended-target fields. For per-guide data, outer-join them on `(gene_id, guide_id)`; both input tables carry the complete catalog annotation columns.
 
+### Non-targeting calibration and the inference mode
+
+<details markdown="1">
+<summary>Output files</summary>
+
+- `pipeline_outputs/inference_mode.json`: the mode both methods received, settled once from the guide assignments: the declared and analysis MOI, the observed assignment counts, SCEPTRE's `control_group`, PerTurbo's `--crt-pool`, and how multi-guide cells are handled.
+- `pipeline_outputs/calibration/` (when `ENABLE_NTC_CALIBRATION` is on and both methods ran)
+  - `ntc_calibration_per_guide.tsv.gz`, `ntc_calibration_per_element.tsv.gz`: the matched non-targeting pairs with both methods' p-values and log2 fold changes, the pair set, the bucket, cell counts, and PerTurbo's `perturbo_crt_*` diagnostics when present. No q-values: the calibration family is not a discovery family.
+  - `ntc_calibration_summary.tsv`, `ntc_calibration_summary.json`: per level, pair set and method, pairs, pairs tested, fractions below 0.01/0.05/0.10, KS distance against the uniform, median p; plus `perturbo_global_all`, PerTurbo's non-targeting rows over every gene.
+  - `ntc_method_agreement.tsv`: Pearson on log10 p, Spearman on p, Jaccard at p<0.05 on the pairs both methods tested.
+  - `ntc_aucpr_summary.tsv`: direct-target rows against non-targeting rows on the same genes, scored by 1 minus p, AUPRC and AUROC for both methods at both levels, twice: with the negatives drawn 1:1 (`matched_1to1`, the controls evaluation's convention) and with every available negative (`all`), whose precision-recall baseline is the real positive rate. Both methods score the same pairs: a pair either method left without a p-value is dropped for both, and the 1:1 draw is made once and scored by both.
+  - `ntc_aucpr_pairs.tsv`: the pairs behind those numbers, per level: every direct-target pair and every non-targeting pair on the scored direct targets' genes, with both p-values, whether the pair was scored and whether it fell in the 1:1 draw.
+  - `ntc_cell_count_summary.tsv`, `ntc_calibration_notes.txt`: cells per guide and per element by role, with a warning when the non-targeting median falls outside 0.5x to 2x the targeting median; the regime, the reference pool and the self-inclusion share.
+  - Plots: `ntc_calibration_qq_{guide,element}.png`, `ntc_calibration_pvalue_hist_{guide,element}.png`, `ntc_method_scatter_{guide,element}.png`, `ntc_perturbo_global_qq.png`, `ntc_aucpr_curves_{guide,element}.png`, `ntc_cells_per_{guide,element}.png`.
+  - `ntc_calibration_skipped.txt` instead, when the screen has no non-targeting guides or, under `nt_cells`, no control-only cell.
+- `pipeline_dashboard/benchmark_output/calibration/`: a copy of the directory above.
+
+</details>
+
 ### Pipeline dashboard
 
 <details markdown="1">

@@ -112,7 +112,7 @@ def _frame(columns, n, pvalues):
         elif column.endswith(("_fc", "_se", "_value")):
             data[column] = rng.normal(size=n)
         elif column == "targeting":
-            data[column] = rng.random(n) > 0.5
+            data[column] = np.ones(n, dtype=bool)
         elif column in {
             "guide_start", "guide_end", "genomic_element_start", "genomic_element_end",
             "intended_target_start", "intended_target_end",
@@ -228,3 +228,39 @@ def test_collect_engine_keyword_matches_the_installed_polars():
     parameters = inspect.signature(pl.LazyFrame.collect).parameters
     for name in COLLECT_ENGINE:
         assert name in parameters, f"collect() has no {name!r} on polars {pl.__version__}"
+
+
+@pytest.mark.parametrize("module,builder_attr", BUILDERS)
+def test_fast_path_drops_control_rows(module, builder_attr, tmp_path):
+    """Control guides and non-targeting pseudo-elements never reach the catalog."""
+    kwargs = _fast_path_kwargs(module, builder_attr)
+    local, local_path, global_path, out_path = _inputs(tmp_path, kwargs)
+    glob = pd.read_parquet(global_path)
+    control_index = [0, 5, 9]
+    if "targeting" in glob.columns:
+        glob.loc[control_index, "targeting"] = False
+        control_ids = set(glob.loc[control_index, "guide_id"])
+        id_column = "guide_id"
+    else:
+        glob.loc[control_index, "intended_target_name"] = "non-targeting|1"
+        control_ids = {"non-targeting|1"}
+        id_column = "genomic_element_name"
+    # SCEPTRE's local table never holds control rows; drop those keys so the
+    # local-only check does not fire for the wrong reason.
+    local = local.drop(index=control_index)
+    local.to_parquet(local_path)
+    # A control row carries a p-value and no q: the adapter kept it out of the family.
+    glob.loc[control_index, "perturbo_q_value"] = np.nan
+    glob.to_parquet(global_path)
+
+    taken = streaming_catalog_io.try_write_enriched_parquet_catalog(
+        local_path=local_path,
+        global_path=global_path,
+        output_path=out_path,
+        **{k: v for k, v in kwargs.items()
+           if k not in {"local_path", "global_path", "output_path"}},
+    )
+    assert taken is True, "the catalog fell back to pandas"
+    written = pd.read_parquet(out_path)
+    assert len(written) == len(glob) - len(control_index)
+    assert not set(written[id_column].astype(str)) & control_ids

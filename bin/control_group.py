@@ -183,6 +183,139 @@ def resolve_control_group(
     }
 
 
+def resolve_from_observations(
+    setting: str | None,
+    declared_moi: str | None,
+    *,
+    observed_singleton: bool,
+    n_control_only_cells: int,
+    n_multi_guide_cells: int = 0,
+    perturbo_pool: str | None = None,
+    sceptre_group: str | None = None,
+) -> dict:
+    """The resolution both methods actually receive, settled from the data once.
+
+    ``resolve_control_group`` works from the parameters alone and, for ``auto``,
+    hands PerTurbo ``from-moi`` so the adapter can override the declared MOI
+    from the assignments it sees. SCEPTRE's driver applied the same rule to its
+    own view of the matrix, which is the cis subset, and never changed its
+    control group when it did: a screen declared high-MOI whose cells each
+    carry one guide ran PerTurbo control-anchored and SCEPTRE against the
+    complement. This function makes that decision once, from the full guide
+    matrix, and returns explicit values for both methods plus the MOI mode the
+    SCEPTRE driver must use, so neither method decides anything on its own.
+
+    ``analysis_moi`` is ``low`` when the screen was declared low or every cell
+    carries at most one guide, the rule both drivers already applied; otherwise
+    ``high``. Under ``auto`` the non-targeting contrast is chosen only when the
+    analysis is low-MOI and at least one cell carries nothing but control guides.
+    Explicit settings and per-method overrides pass through as before, except
+    that ``from-moi`` is replaced by the pool it maps to, so the adapter's own
+    override can no longer fire.
+    """
+    base = resolve_control_group(
+        setting, declared_moi, perturbo_pool=perturbo_pool, sceptre_group=sceptre_group
+    )
+    declared = base["moi"]
+    analysis_moi = "low" if (declared == "low" or observed_singleton) else "high"
+    controls_available = int(n_control_only_cells) > 0
+    nt_contrast = analysis_moi == "low" and controls_available
+    sceptre_from_data = "nt_cells" if nt_contrast else "complement"
+    perturbo_from_data = "control-anchored" if nt_contrast else "all-cells"
+
+    sceptre = base["sceptre_control_group"]
+    perturbo = base["perturbo_crt_pool"]
+    sceptre_provenance = base["sceptre_provenance"]
+    perturbo_provenance = base["perturbo_provenance"]
+    notes = list(base["notes"])
+    if base["setting"] == "auto":
+        if sceptre_provenance != "per-method-override":
+            sceptre = sceptre_from_data
+            sceptre_provenance = "observed"
+        if perturbo_provenance != "per-method-override":
+            perturbo = perturbo_from_data
+            perturbo_provenance = "observed"
+        if analysis_moi == "low" and not controls_available:
+            notes.append(
+                "the analysis is low-MOI but no cell carries only control guides, so "
+                "there is no non-targeting pool: both methods use the complement"
+            )
+        reason = (
+            f"auto, settled from the assignments: analysis MOI '{analysis_moi}' "
+            f"(declared '{declared}', every cell carries at most one guide: "
+            f"{'yes' if observed_singleton else 'no'}), "
+            f"{int(n_control_only_cells):,} control-only cell(s)"
+        )
+    else:
+        reason = base["reason"]
+    if perturbo == PERTURBO_HISTORICAL_DEFAULT:
+        perturbo = perturbo_from_data
+
+    if sceptre == "nt_cells" and analysis_moi != "low":
+        raise ControlGroupError(
+            "control group 'nt_cells' is not available for this screen: SCEPTRE's "
+            "non-targeting-cell contrast needs one perturbation per cell, and the "
+            f"assignments carry more than one guide in {int(n_multi_guide_cells):,} cell(s) "
+            f"with Multiplicity_of_infection='{declared}'. Use {SETTING_PARAM}='complement'."
+        )
+    if sceptre == "nt_cells" and not controls_available:
+        raise ControlGroupError(
+            "control group 'nt_cells' is not available for this screen: no cell carries "
+            f"only non-targeting guides, so there is no control population. Use "
+            f"{SETTING_PARAM}='complement' or 'auto'."
+        )
+
+    overrides = dict(base["overrides"])
+    if analysis_moi == "low":
+        handling = (
+            f"{int(n_multi_guide_cells):,} cell(s) carry more than one guide; SCEPTRE's "
+            "low-MOI QC sets them aside and "
+            + (
+                "PerTurbo's control-anchored pool sets them aside too."
+                if perturbo == "control-anchored"
+                else f"PerTurbo's '{perturbo}' pool keeps them."
+            )
+        )
+    else:
+        handling = "high-MOI analysis: multi-guide cells are kept by both methods."
+
+    line = (
+        f"Inference mode: declared MOI '{declared}', observed singleton assignments: "
+        f"{'yes' if observed_singleton else 'no'}, control-only cells: {int(n_control_only_cells):,}"
+        f" -> analysis MOI '{analysis_moi}', SCEPTRE control_group='{sceptre}', "
+        f"PerTurbo --crt-pool='{perturbo}' ({reason})."
+    )
+    if overrides:
+        which = ", ".join(f"{name}='{value}'" for name, value in sorted(overrides.items()))
+        line += (
+            f" {which} overrides the shared setting for that method only:"
+            " SCEPTRE and PerTurbo are now deliberately inconsistent and their calls"
+            " are not comparable."
+        )
+    else:
+        line += " Both methods contrast against the same cells."
+    line += " " + handling
+
+    return {
+        "setting": base["setting"],
+        "declared_moi": declared,
+        "analysis_moi": analysis_moi,
+        "observed_singleton": bool(observed_singleton),
+        "n_control_only_cells": int(n_control_only_cells),
+        "n_multi_guide_cells": int(n_multi_guide_cells),
+        "sceptre_control_group": sceptre,
+        "perturbo_crt_pool": perturbo,
+        "perturbo_pool_effective": perturbo,
+        "sceptre_provenance": sceptre_provenance,
+        "perturbo_provenance": perturbo_provenance,
+        "overrides": overrides,
+        "reason": reason,
+        "notes": notes,
+        "multi_guide_cell_handling": handling,
+        "log_line": line,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--setting", default="auto", help=f"{SETTING_PARAM} value")

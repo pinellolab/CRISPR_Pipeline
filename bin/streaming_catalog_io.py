@@ -91,6 +91,7 @@ def _write_enriched_parquet_catalog(
     local_alias_columns: Mapping[str, str] | None = None,
     derived_neglog10: Mapping[str, str] | None = None,
     require_fillable_q: Sequence[tuple[str, str]] = (),
+    exclude_rows: Mapping[str, str] | None = None,
     pvalue_floor: float = 1e-300,
 ) -> bool:
     """Write an enriched catalog without materializing all pairs in pandas.
@@ -126,6 +127,25 @@ def _write_enriched_parquet_catalog(
         return False
     if not global_required.issubset(global_schema):
         return False
+
+    # Control rows (non-targeting guides, non-targeting pseudo-elements) are
+    # tested and reported for the calibration check but are not catalog rows.
+    # The pandas path drops them after its metadata merge; here the columns are
+    # already on the enriched inputs, so drop them before anything is joined.
+    for column, rule in dict(exclude_rows or {}).items():
+        if rule == "is_false":
+            predicate = pl.col(column).cast(pl.Utf8).str.to_lowercase() == "false"
+        elif rule.startswith("startswith:"):
+            predicate = pl.col(column).cast(pl.Utf8).str.starts_with(rule[len("startswith:"):])
+        else:
+            raise ValueError(f"Unknown exclude_rows rule for {column!r}: {rule!r}")
+        if column in global_schema:
+            dropped = global_scan.filter(predicate).select(pl.len()).collect(**COLLECT_ENGINE).item()
+            if dropped:
+                print(f"Dropping {dropped:,} control row(s) from the catalog ({column}).", flush=True)
+            global_scan = global_scan.filter(~predicate.fill_null(False))
+        if column in local_schema:
+            local_scan = local_scan.filter(~predicate.fill_null(False))
 
     local_scan, global_scan = _normalize_join_keys(
         local_scan, global_scan, join_columns, pl
