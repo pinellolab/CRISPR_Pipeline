@@ -32,6 +32,7 @@ extract_function <- function(name) {
 
 eval(parse(text = extract_function("resolve_sceptre_control_group")))
 eval(parse(text = extract_function("write_control_group_metadata")))
+eval(parse(text = extract_function("count_non_targeting_cells")))
 
 failures <- character()
 check <- function(label, expr) {
@@ -102,6 +103,23 @@ check_error(
   resolve_sceptre_control_group("control-anchored", TRUE, 500L),
   "is not a SCEPTRE control group"
 )
+
+# --- the control population, counted on the matrix SCEPTRE receives ----------
+# Six cells: t1 only; nt1 only; nt1+nt2; t1+nt2; nothing; nt2 only. The cells
+# carrying only non-targeting gRNAs are the second, third and sixth.
+assignments <- Matrix::sparseMatrix(
+  i = c(1, 3, 3, 4, 1, 4, 4),
+  j = c(1, 2, 3, 3, 4, 4, 6),
+  x = 1,
+  dims = c(4, 6),
+  dimnames = list(c("t1", "t2", "nt1", "nt2"), paste0("cell", 1:6))
+)
+check("NT-only cells counted on a sparse matrix", count_non_targeting_cells(assignments, c("nt1", "nt2")) == 3L)
+check("NT-only cells counted on a dense matrix", count_non_targeting_cells(as.matrix(assignments), c("nt1", "nt2")) == 3L)
+check("the count is an integer", is.integer(count_non_targeting_cells(assignments, c("nt1", "nt2"))))
+check("no non-targeting gRNA -> no control cells", count_non_targeting_cells(assignments, character()) == 0L)
+check("an unknown gRNA id -> no control cells", count_non_targeting_cells(assignments, "absent") == 0L)
+check("every gRNA non-targeting -> every assigned cell", count_non_targeting_cells(assignments, rownames(assignments)) == 5L)
 
 # --- the recorded metadata -------------------------------------------------
 tmp <- tempfile(fileext = ".json")

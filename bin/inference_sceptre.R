@@ -224,6 +224,35 @@ prepare_extra_covariates <- function(mudata, remove_collinear_covariates = TRUE)
   retain_non_collinear_covariates(covariates)
 }
 
+# The gRNA matrix handed to SCEPTRE: the assignments when the MuData carries
+# them, the counts otherwise, with the gRNA ids as row names.
+extract_grna_matrix <- function(mudata) {
+  assays <- mudata@ExperimentList$guide@assays@data@listData
+  grna_matrix <- if (length(assays) == 1) assays[[1]] else assays[["guide_assignment"]]
+  if (is.null(grna_matrix)) {
+    stop("The guide modality carries several assays but none named guide_assignment.")
+  }
+  rownames(grna_matrix) <- rownames(SingleCellExperiment::rowData(mudata[["guide"]]))
+  grna_matrix
+}
+
+# How many cells carry a non-targeting gRNA and nothing else: the population
+# SCEPTRE's nt_cells contrast compares against (its low-MOI QC then sets aside
+# the few of them carrying more than one gRNA). Counted on the matrix the driver
+# hands SCEPTRE, not read back from the sceptre object: since sceptre 0.10 that
+# object keeps the matrix inside a list, and indexing it as a matrix raised an
+# error the driver used to swallow into NA, which the resolution read as "no
+# control population" and failed every nt_cells run with.
+count_non_targeting_cells <- function(grna_matrix, nt_ids) {
+  is_nt <- rownames(grna_matrix) %in% nt_ids
+  if (!any(is_nt)) {
+    return(0L)
+  }
+  nt_per_cell <- Matrix::colSums(grna_matrix[is_nt, , drop = FALSE] > 0)
+  targeting_per_cell <- Matrix::colSums(grna_matrix[!is_nt, , drop = FALSE] > 0)
+  as.integer(sum(nt_per_cell > 0 & targeting_per_cell == 0))
+}
+
 convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE, moi_override = NULL) {
   # extract information from MuData
   declared_moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
@@ -247,16 +276,8 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
     remove_collinear_covariates = remove_collinear_covariates
   )
 
-  # if guide assignments not present, then extract guide counts
-  if (length(guides_data@assays@data@listData) == 1) {
-    grna_matrix <- guides_data@assays@data@listData[["counts"]]
-    # otherwise, extract guide assignments
-  } else {
-    grna_matrix <- guides_data@assays@data@listData[["guide_assignment"]]
-  }
-
-  grna_ids <- rownames(SingleCellExperiment::rowData(mudata[["guide"]]))
-  rownames(grna_matrix) <- grna_ids
+  grna_matrix <- extract_grna_matrix(mudata)
+  grna_ids <- rownames(grna_matrix)
 
   gene_ids <- rownames(SingleCellExperiment::rowData(mudata[["gene"]]))
   rownames(response_matrix) <- gene_ids
@@ -505,12 +526,11 @@ inference_sceptre_m <- function(mudata, n_processors = NA, moi_override = NULL, 
   n_nt_cells <- tryCatch({
     targets <- sceptre_object@grna_target_data_frame
     nt_ids <- targets$grna_id[grepl("non-targeting", as.character(targets$grna_target))]
-    if (length(nt_ids) == 0) {
-      0L
-    } else {
-      sum(Matrix::colSums(sceptre_object@grna_matrix[nt_ids, , drop = FALSE] > 0) > 0)
-    }
-  }, error = function(e) NA_integer_)
+    count_non_targeting_cells(extract_grna_matrix(mudata), nt_ids)
+  }, error = function(e) {
+    message(sprintf("Could not count the cells carrying only non-targeting gRNAs: %s", conditionMessage(e)))
+    NA_integer_
+  })
 
   control_group_resolution <- resolve_sceptre_control_group(
     requested = if ("control_group" %in% names(args_list)) args_list$control_group else NULL,
