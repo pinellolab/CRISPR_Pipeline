@@ -1467,8 +1467,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--control-group-provenance",
         default=None,
-        choices=[None, "auto", "explicit", "per-method-override"],
-        help="How --crt-pool was decided: from the declared MOI, from an explicit shared setting, or from INFERENCE_PERTURBO_CRT_POOL overriding it",
+        choices=[None, "auto", "observed", "explicit", "per-method-override"],
+        help=(
+            "How --crt-pool was decided: from the declared MOI, from the pipeline's data-aware "
+            "resolution of 'auto' (observed), from an explicit shared setting, or from "
+            "INFERENCE_PERTURBO_CRT_POOL overriding it"
+        ),
     )
     parser.add_argument(
         "--crt-test-control-elements",

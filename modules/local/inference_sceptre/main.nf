@@ -3,11 +3,12 @@ process inference_sceptre {
 
     input:
     path mudata_fp
-    // The cells a perturbation is compared against: 'nt_cells' or 'complement',
-    // resolved once from params.INFERENCE_control_group in the inference
-    // subworkflow (modules/local/control_group) so PerTurbo's CRT pool and this
-    // are the same choice. The R driver honours it and refuses the one
-    // combination SCEPTRE cannot provide (nt_cells at high MOI).
+    // The inference mode settled once from the data in the inference subworkflow
+    // (modules/local/resolve_inference_mode): the cells a perturbation is
+    // compared against ('nt_cells' or 'complement') and the MOI mode ('low' or
+    // 'high'), the same values PerTurbo's CRT pool is derived from. The R driver
+    // honours both and refuses the one combination SCEPTRE cannot provide
+    // (nt_cells at high MOI).
     val control_group
 
     output:
@@ -27,9 +28,10 @@ process inference_sceptre {
     ${params.INFERENCE_SCEPTRE_side}
     ${params.INFERENCE_SCEPTRE_grna_integration_strategy}
     ${params.INFERENCE_SCEPTRE_resampling_approximation}
-    ${control_group}
+    ${control_group.sceptre_control_group}
     ${params.INFERENCE_SCEPTRE_resampling_mechanism}
     ${task.cpus}
+    ${control_group.analysis_moi}
     EOF
 
     export SCEPTRE_WRITE_MUDATA=${params.INFERENCE_SCEPTRE_WRITE_MUDATA}

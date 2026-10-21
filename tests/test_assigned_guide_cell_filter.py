@@ -355,7 +355,7 @@ def test_the_two_sides_agree_on_which_terms_sceptre_fits():
 def test_inference_sceptre_does_not_rely_on_the_auto_formula_builder():
     """It may remain only as the no-covariates-present fallback."""
     source = (BIN_DIR / "inference_sceptre.R").read_text()
-    assert "build_formula_object(sceptre_object@covariate_data_frame)" in source
+    assert "build_formula_object(sceptre_object@covariate_data_frame, requested)" in source
     # One call site, inside build_formula_object's fallback branch.
     assert source.count("sceptre:::auto_construct_formula_object(") == 1
 
