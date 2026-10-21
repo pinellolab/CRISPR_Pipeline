@@ -218,56 +218,159 @@ def test_qc_metrics_json_tolerates_a_mudata_written_before_the_filter():
     assert "note" in summary
 
 
-def test_the_derived_guide_umi_covariate_has_one_definition():
-    """The adapter must consume the upstream column, not recompute its own."""
+def test_each_method_gets_the_counts_on_the_scale_it_expects():
+    """SCEPTRE logs inside its formula; PerTurbo needs the log precomputed."""
     from inference_covariates import (
-        GUIDE_UMI_COVARIATE,
-        derive_guide_umi_covariate,
+        CANONICAL_COVARIATES,
         materialize_shared_covariates,
+        perturbo_log_name,
     )
+
+    prepared = mc.filter_cells_without_assigned_guide(
+        _mudata(guide_umis=[10, 0, 40, 0])
+    )
+    written = materialize_shared_covariates(prepared)
+
+    # SCEPTRE reads the top-level obs as colData and applies log() in the
+    # formula, so the untransformed counts land there.
+    assert "total_guide_umis" in written
+    np.testing.assert_allclose(
+        np.asarray(prepared.obs["total_guide_umis"], dtype=float), [10.0, 40.0]
+    )
+
+    # PerTurbo applies no transform, so it reads a precomputed log off the gene
+    # modality. Handing SCEPTRE both scales would be exactly collinear, so the
+    # log columns stay out of the top-level obs.
+    log_column = perturbo_log_name("total_guide_umis")
+    np.testing.assert_allclose(
+        np.asarray(prepared["gene"].obs[log_column], dtype=float),
+        np.log([10.0, 40.0]),
+    )
+    for covariate in CANONICAL_COVARIATES:
+        if covariate.kind == "count":
+            assert covariate.perturbo_name not in prepared.obs.columns
+            assert covariate.perturbo_name not in written
+
+
+def test_the_adapter_consumes_the_upstream_log_columns():
+    """The adapter must reuse them, not recompute its own."""
+    from inference_covariates import materialize_shared_covariates, perturbo_log_name
     import perturbo_v2_pipeline_adapter as adapter
 
     prepared = mc.filter_cells_without_assigned_guide(
         _mudata(guide_umis=[10, 0, 40, 0])
     )
     materialize_shared_covariates(prepared)
-    upstream = np.asarray(prepared["gene"].obs[GUIDE_UMI_COVARIATE], dtype=float)
+    log_column = perturbo_log_name("total_guide_umis")
+    upstream = np.asarray(prepared["gene"].obs[log_column], dtype=float)
 
-    # Centred over the analysed cells only.
-    expected = np.log1p([10.0, 40.0])
-    np.testing.assert_allclose(upstream, expected - expected.mean())
-
-    # The adapter leaves the upstream values alone ...
     adapter._ensure_covariates(prepared)
     np.testing.assert_allclose(
-        np.asarray(prepared["gene"].obs[GUIDE_UMI_COVARIATE], dtype=float), upstream
+        np.asarray(prepared["gene"].obs[log_column], dtype=float), upstream
     )
 
-    # ... and derives exactly the same numbers when it has to compute them.
+    # ... and derives the same numbers when it has to compute them itself.
     fresh = mc.filter_cells_without_assigned_guide(_mudata(guide_umis=[10, 0, 40, 0]))
     adapter._ensure_covariates(fresh)
     np.testing.assert_allclose(
-        np.asarray(fresh["gene"].obs[GUIDE_UMI_COVARIATE], dtype=float), upstream
-    )
-    assert derive_guide_umi_covariate(fresh) == GUIDE_UMI_COVARIATE
-
-
-def test_the_derived_covariate_is_not_one_either_method_conditions_on():
-    """It is written for provenance and the adapter's guard, not as a covariate."""
-    from inference_covariates import (
-        CANONICAL_COVARIATES,
-        GUIDE_UMI_COVARIATE,
-        materialize_shared_covariates,
+        np.asarray(fresh["gene"].obs[log_column], dtype=float), upstream
     )
 
-    assert GUIDE_UMI_COVARIATE not in {name for name, _kind, _aliases in CANONICAL_COVARIATES}
 
+def test_no_covariate_uses_a_name_sceptre_reserves():
+    """import_data() errors outright on its own five covariate names.
+
+    Verified against sceptre 0.10.3 in sjiang9/sceptre-igvf:0.2: "The covariate
+    names `response_n_nonzero`, `response_n_umis`, `response_p_mito`,
+    `grna_n_nonzero`, and `grna_n_umis` are reserved." This holds whatever
+    formula is later supplied, so it is the one naming constraint that survives
+    writing the formula out by hand.
+    """
+    from inference_covariates import CANONICAL_COVARIATES, SCEPTRE_RESERVED_NAMES
+
+    assert SCEPTRE_RESERVED_NAMES == {
+        "response_n_nonzero",
+        "response_n_umis",
+        "response_p_mito",
+        "grna_n_nonzero",
+        "grna_n_umis",
+    }
+    for covariate in CANONICAL_COVARIATES:
+        assert covariate.name not in SCEPTRE_RESERVED_NAMES
+        assert covariate.perturbo_name not in SCEPTRE_RESERVED_NAMES
+
+
+def test_percent_mito_is_not_conditioned_on_by_either_method():
+    from inference_covariates import CANONICAL_COVARIATES, materialize_shared_covariates
+
+    names = {c.name for c in CANONICAL_COVARIATES}
+    names |= {c.perturbo_name for c in CANONICAL_COVARIATES}
+    assert "percent_mito" not in names
+
+    # The fixture's gene modality carries percent_mito; it must not be picked up.
     prepared = mc.filter_cells_without_assigned_guide(_mudata(guide_umis=[10, 0, 40, 0]))
+    assert "percent_mito" in prepared["gene"].obs.columns
     written = materialize_shared_covariates(prepared)
+    assert "percent_mito" not in written
+    assert "percent_mito" not in prepared.obs.columns
 
-    # SCEPTRE reads the top-level obs as colData; the guide-UMI term is not there.
-    assert GUIDE_UMI_COVARIATE not in written
-    assert GUIDE_UMI_COVARIATE not in prepared.obs.columns
+
+def test_a_zero_count_fails_loudly_rather_than_producing_neg_inf():
+    """No filtered cell may have zero depth; log() of one would be -inf."""
+    import pytest
+
+    from inference_covariates import validate_positive
+
+    np.testing.assert_allclose(validate_positive([1.0, 2.0], "total_gene_umis"), [1.0, 2.0])
+    for bad in ([1.0, 0.0], [1.0, -3.0], [1.0, np.nan]):
+        with pytest.raises(ValueError, match="strictly positive"):
+            validate_positive(bad, "total_gene_umis")
+
+
+def test_the_two_sides_agree_on_which_terms_sceptre_fits():
+    """The R formula builder is written out; keep its term list in step."""
+    from inference_covariates import CANONICAL_COVARIATES, sceptre_formula_terms
+
+    all_names = [c.name for c in CANONICAL_COVARIATES]
+    assert sceptre_formula_terms(all_names) == [
+        "log(total_guide_umis)",
+        "log(total_gene_umis)",
+        "log(num_expressed_genes)",
+        "batch",
+    ]
+    # Absent covariates simply drop out.
+    assert sceptre_formula_terms(["batch"]) == ["batch"]
+
+    source = (BIN_DIR / "inference_sceptre.R").read_text()
+    counts = [c.name for c in CANONICAL_COVARIATES if c.kind == "count"]
+    categorical = [c.name for c in CANONICAL_COVARIATES if c.kind == "categorical"]
+    assert (
+        'COUNT_COVARIATES <- c("' + '", "'.join(counts) + '")'
+    ) in source
+    assert (
+        'CATEGORICAL_COVARIATES <- c("' + '", "'.join(categorical) + '")'
+    ) in source
+
+
+def test_inference_sceptre_does_not_rely_on_the_auto_formula_builder():
+    """It may remain only as the no-covariates-present fallback."""
+    source = (BIN_DIR / "inference_sceptre.R").read_text()
+    assert "build_formula_object(sceptre_object@covariate_data_frame)" in source
+    # One call site, inside build_formula_object's fallback branch.
+    assert source.count("sceptre:::auto_construct_formula_object(") == 1
+
+
+def test_perturbo_arguments_use_the_precomputed_log_columns():
+    from inference_covariates import CANONICAL_COVARIATES, perturbo_covariate_arguments
+
+    continuous, batch = perturbo_covariate_arguments(CANONICAL_COVARIATES)
+    assert continuous == [
+        "log_total_guide_umis",
+        "log_total_gene_umis",
+        "log_num_expressed_genes",
+    ]
+    assert batch == "batch"
+
 
 
 def _cis_subset_mudata():
@@ -299,15 +402,32 @@ def _cis_subset_mudata():
         ],
         dtype=np.uint16,
     )
+    # Raw guide UMIs, distinct per cell so that a depth computed over the wrong
+    # guide set is visible rather than washed out. cell2's UMIs sit entirely on
+    # g_untested, the guide the cis subset drops.
+    raw_counts = np.array(
+        [
+            [7, 0, 0],
+            [0, 11, 0],
+            [0, 0, 23],
+            [5, 0, 0],
+        ],
+        dtype=np.uint16,
+    )
     guide = anndata.AnnData(
-        X=sparse.csr_matrix(assignment),
+        X=sparse.csr_matrix(raw_counts),
         obs=pd.DataFrame(index=CELL_IDS),
         var=guide_var,
     )
     guide.layers["guide_assignment"] = sparse.csr_matrix(assignment)
 
+    # GENE2 is dropped by the cis subset, so its counts are exactly what a depth
+    # measured too late would lose. cell1 does not express it, which also keeps
+    # the detected-gene count from being constant.
     gene = anndata.AnnData(
-        X=sparse.csr_matrix(np.ones((len(CELL_IDS), 2), dtype=np.uint16)),
+        X=sparse.csr_matrix(
+            np.array([[5, 3], [7, 0], [11, 4], [6, 9]], dtype=np.uint16)
+        ),
         obs=pd.DataFrame({"percent_mito": [1.0, 2.0, 3.0, 4.0]}, index=CELL_IDS),
         var=pd.DataFrame(index=["GENE1", "GENE2"]),
     )
@@ -340,12 +460,78 @@ def test_prepare_inference_subsets_genes_and_guides_but_not_cells(tmp_path, monk
     assert prepared["gene"].n_obs == 4
     assert prepared["guide"].n_obs == 4
 
-    # The shared covariates are written here, over those same cells, and the
-    # derived guide-UMI column survives the write for the adapter to consume.
-    assert "percent_mito" in prepared.obs.columns
-    assert "log1p_total_guide_umis_centered" in prepared["gene"].obs.columns
+    # The shared covariates are written here, over those same cells: the plain
+    # counts where SCEPTRE reads them, the precomputed logs where PerTurbo does.
+    assert "total_guide_umis" in prepared.obs.columns
+    assert "log_total_guide_umis" in prepared["gene"].obs.columns
+
+    # Guide depth is measured over the whole guide matrix, before the cis subset
+    # narrows it. cell2's UMIs sit entirely on the untested guide that subset
+    # drops, so re-deriving the totals afterwards would report zero depth for it.
+    assert list(prepared.obs["total_guide_umis"]) == [7.0, 11.0, 23.0, 5.0]
+
+    # Same for the cell depth that replaces SCEPTRE's per-chunk response_n_umis:
+    # measured over both genes, not the cis subset's one. Computed after the
+    # subset these would be [5, 7, 11, 6] and [1, 1, 1, 1].
+    assert list(prepared.obs["total_gene_umis"]) == [8.0, 7.0, 15.0, 15.0]
+    assert list(prepared.obs["num_expressed_genes"]) == [2.0, 1.0, 2.0, 2.0]
+
+    np.testing.assert_allclose(
+        np.asarray(prepared["gene"].obs["log_total_gene_umis"], dtype=float),
+        np.log([8.0, 7.0, 15.0, 15.0]),
+    )
 
 
 def test_prepare_inference_no_longer_mentions_a_cell_filter():
     source = (BIN_DIR / "prepare_inference.py").read_text()
     assert "targeted_cells" not in source
+
+
+def test_mudata_concat_derives_the_inference_covariates_once():
+    """The covariates are written where the cell set is decided, not later.
+
+    Totals are pinned before the gene filter (so they cover every gene) and the
+    conditioned columns for both methods are written after it, so the cis
+    subset, SCEPTRE's chunking and both inference steps all inherit one set.
+    """
+    from inference_covariates import CANONICAL_COVARIATES
+
+    prepared = mc.apply_cell_and_gene_filters(
+        _cis_subset_mudata(), min_cells_fraction=0.0
+    )
+
+    # Every conditioned count is on SCEPTRE's frame with its log on PerTurbo's.
+    for covariate in CANONICAL_COVARIATES:
+        if covariate.kind != "count":
+            continue
+        assert covariate.name in prepared.obs.columns
+        assert covariate.perturbo_name in prepared["gene"].obs.columns
+        np.testing.assert_allclose(
+            np.asarray(prepared["gene"].obs[covariate.perturbo_name], dtype=float),
+            np.log(np.asarray(prepared.obs[covariate.name], dtype=float)),
+        )
+    # Depth over both genes and the whole guide matrix, as in the fixture.
+    assert list(prepared.obs["total_gene_umis"]) == [8.0, 7.0, 15.0, 15.0]
+    assert list(prepared.obs["num_expressed_genes"]) == [2.0, 1.0, 2.0, 2.0]
+    assert list(prepared.obs["total_guide_umis"]) == [7.0, 11.0, 23.0, 5.0]
+
+
+def test_prepare_inference_reuses_the_upstream_covariates(tmp_path, monkeypatch):
+    """Given a MuData that already carries the columns, nothing is re-derived."""
+    import prepare_inference
+
+    upstream = mc.apply_cell_and_gene_filters(_cis_subset_mudata(), min_cells_fraction=0.0)
+    mudata_path = tmp_path / "concat_mudata.h5mu"
+    upstream.write(mudata_path)
+    pairs_path = tmp_path / "pairs_to_test.csv"
+    pd.DataFrame({"guide_id": ["g1"], "gene_name": ["GENE1"]}).to_csv(pairs_path, index=False)
+
+    monkeypatch.chdir(tmp_path)
+    prepare_inference.main(str(pairs_path), str(mudata_path), subset_for_cis=True)
+    prepared = mudata.read_h5mu(tmp_path / "mudata_inference_input.h5mu")
+
+    for column in ("total_guide_umis", "total_gene_umis", "num_expressed_genes"):
+        np.testing.assert_allclose(
+            np.asarray(prepared.obs[column], dtype=float),
+            np.asarray(upstream.obs[column], dtype=float),
+        )

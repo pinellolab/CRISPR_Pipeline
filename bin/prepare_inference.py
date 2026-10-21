@@ -3,7 +3,7 @@
 import argparse
 import pandas as pd
 import mudata as mu
-from inference_covariates import materialize_shared_covariates
+from inference_covariates import ensure_inference_covariates, materialize_shared_covariates
 
 from analysis_output_formatting import make_h5mu_safe_dataframe
 from intended_target_key_utils import (
@@ -40,6 +40,11 @@ def main(guide_inference, mudata_path, subset_for_cis=False, covariate_config=No
 
     print(f"Reading mudata file from {mudata_path}...")
     mudata = mu.read_h5mu(mudata_path)
+    # The inference covariates are normally already here from mudata_concat.py.
+    # For a user-supplied MuData that skipped that step, derive them now, while
+    # the matrices are still whole: the cis subset below drops guides and genes,
+    # and a depth re-derived from a narrowed matrix would be wrong.
+    ensure_inference_covariates(mudata)
 
     if "gene" not in mudata.mod or "guide" not in mudata.mod:
         raise KeyError("Mudata file is missing 'gene' or 'guide' modality.")
@@ -153,6 +158,7 @@ def main(guide_inference, mudata_path, subset_for_cis=False, covariate_config=No
     # Both inference methods must condition on the same covariates, so write the
     # agreed set where both look: PerTurbo reads named modality columns, SCEPTRE
     # reads the top-level frame as colData.
+    # The cis rebuild above explicitly carries top-level obs and uns forward.
     mudata.write(output_file)
 
 
@@ -178,9 +184,9 @@ if __name__ == "__main__":
         "mito": args.cov_mito != "false",
         "batch": args.cov_batch != "false",
         "ribo": args.cov_ribo == "true",
-        "detected_genes": args.cov_detected_genes == "true",
+        "detected_genes": args.cov_detected_genes != "false",
         "guide_count": args.cov_guide_count == "true",
-        "guide_umis": args.cov_guide_umis == "true",
+        "guide_umis": args.cov_guide_umis != "false",
         "custom": args.cov_custom,
     }
     main(args.guide_inference, args.mudata_path, args.subset_for_cis, config)

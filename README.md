@@ -511,6 +511,7 @@ The local-analysis outputs report guide-gene or target-element-gene tests restri
 | `perturbo_cis_q_value` | PerTurbo's q-value over the requested (cis) pairs alone — the family `sceptre_q_value` is corrected over, so these two are directly comparable. `perturbo_q_value` is corrected over every pair in the screen and is therefore stricter. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
+| `perturbo_crt_*` | PerTurbo's per-pair CRT diagnostics, carried through as PerTurbo emits them: `perturbo_crt_low_information`, `perturbo_crt_observed_nonzero`, `perturbo_crt_expected_nonzero`, `perturbo_crt_saddlepoint_valid` and, from the PerTurbo release that adds the Chernoff tail fallback, `perturbo_crt_tail_failure_reason`, `perturbo_crt_used_chernoff`, `perturbo_crt_used_conservative_one` and `perturbo_crt_root_residual_null_sd`. Present when the PerTurbo version emitted them; none of them filters a row, and they are not carried into the catalog tables. |
 | `guide_sequence` | Guide spacer sequence from guide metadata. |
 | `guide_type` | Guide type from guide metadata. |
 | `targeting` | Whether the guide is annotated as targeting. |
@@ -545,12 +546,14 @@ The local-analysis outputs report guide-gene or target-element-gene tests restri
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this local-analysis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
+| `perturbo_crt_*` | PerTurbo's per-pair CRT diagnostics, carried through as PerTurbo emits them: `perturbo_crt_low_information`, `perturbo_crt_observed_nonzero`, `perturbo_crt_expected_nonzero`, `perturbo_crt_saddlepoint_valid` and, from the PerTurbo release that adds the Chernoff tail fallback, `perturbo_crt_tail_failure_reason`, `perturbo_crt_used_chernoff`, `perturbo_crt_used_conservative_one` and `perturbo_crt_root_residual_null_sd`. Present when the PerTurbo version emitted them; none of them filters a row, and they are not carried into the catalog tables. |
 | `genomic_element_id` | Element identifier (equal to `genomic_element_name` in this pipeline). |
 | `genomic_element_type` | Element type derived from guide metadata (`guide.var['type']`). |
 | `genomic_element_chr` | Element chromosome. |
 | `genomic_element_start` | Element start coordinate. |
 | `genomic_element_end` | Element end coordinate. |
 | `genomic_element_name` | Element name mapped from `intended_target_name`. |
+
 | `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
 | `num_guides` | Number of unique guides aggregated into the element result. |
 | `gene_name` | Gene symbol from local gene metadata when available. |
@@ -579,6 +582,7 @@ The global-analysis outputs report genome-wide, all-by-all PerTurbo tests.
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this global-analysis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
+| `perturbo_crt_*` | PerTurbo's per-pair CRT diagnostics, carried through as PerTurbo emits them: `perturbo_crt_low_information`, `perturbo_crt_observed_nonzero`, `perturbo_crt_expected_nonzero`, `perturbo_crt_saddlepoint_valid` and, from the PerTurbo release that adds the Chernoff tail fallback, `perturbo_crt_tail_failure_reason`, `perturbo_crt_used_chernoff`, `perturbo_crt_used_conservative_one` and `perturbo_crt_root_residual_null_sd`. Present when the PerTurbo version emitted them; none of them filters a row, and they are not carried into the catalog tables. |
 | `guide_sequence` | Guide spacer sequence from guide metadata. |
 | `guide_type` | Guide type from guide metadata. |
 | `targeting` | Whether the guide is annotated as targeting. |
@@ -608,12 +612,14 @@ The global-analysis outputs report genome-wide, all-by-all PerTurbo tests.
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this global-analysis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
+| `perturbo_crt_*` | PerTurbo's per-pair CRT diagnostics, carried through as PerTurbo emits them: `perturbo_crt_low_information`, `perturbo_crt_observed_nonzero`, `perturbo_crt_expected_nonzero`, `perturbo_crt_saddlepoint_valid` and, from the PerTurbo release that adds the Chernoff tail fallback, `perturbo_crt_tail_failure_reason`, `perturbo_crt_used_chernoff`, `perturbo_crt_used_conservative_one` and `perturbo_crt_root_residual_null_sd`. Present when the PerTurbo version emitted them; none of them filters a row, and they are not carried into the catalog tables. |
 | `genomic_element_id` | Element identifier (equal to `genomic_element_name` in this pipeline). |
 | `genomic_element_type` | Element type derived from guide metadata (`guide.var['type']`). |
 | `genomic_element_chr` | Element chromosome. |
 | `genomic_element_start` | Element start coordinate. |
 | `genomic_element_end` | Element end coordinate. |
 | `genomic_element_name` | Element name mapped from `intended_target_name`. |
+
 | `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
 | `num_guides` | Number of unique guides aggregated into the element result. |
 | `gene_name` | Gene symbol from local gene metadata when available. |

@@ -1,6 +1,6 @@
-# Samplesheet covariates (feature-branch pilot)
+# Samplesheet and checkpoint covariates (integration pilot)
 
-This feature is being tested on `feature/preinference-checkpoint-pilot`; it has not been merged into `dev` or validated as a production release.
+This integration is being tested on `feature/preinference-checkpoint-pilot` after merging PR #101. It is not yet validated as a production release.
 
 Add columns whose names begin with `cov_` to the usual CSV/TSV samplesheet. For example:
 
@@ -22,14 +22,16 @@ Available shared inference switches (all named `INFERENCE_COV_*`):
 
 | Switch | Default | Quantity |
 | --- | --- | --- |
-| `MITOCHONDRIAL` | `true` | Pre-feature-filter mitochondrial percentage |
+| `MITOCHONDRIAL` | `false` | Optional pre-feature-filter mitochondrial percentage |
 | `BATCH` | `true` | Measurement-set factor |
 | `RIBOSOMAL` | `false` | Pre-feature-filter ribosomal percentage; must exist in cell metadata |
-| `DETECTED_GENES` | `false` | Log1p detected RNA genes |
+| `DETECTED_GENES` | `true` | Log detected RNA genes from the full matrix; PR #101 default |
 | `GUIDE_COUNT` | `false` | Number of assigned guides from `guide_assignment` |
-| `GUIDE_UMIS` | `false` | Log1p total raw guide UMIs |
+| `GUIDE_UMIS` | `true` | Log total raw guide UMIs; PR #101 default |
 | `CUSTOM` | `'auto'` | All, none, or selected `cov_*` columns |
 
-Guide-count and guide-UMI terms are opt-in sensitivity adjustments, particularly for low-MOI data. RNA library size remains a model depth/offset term and is not disabled by these switches. The original [SCEPTRE paper](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-021-02545-2) considered RNA depth, detected genes, detected gRNAs, mitochondrial percentage, and batch; its [formula guidance](https://timothy-barry.github.io/sceptre-book/set-analysis-parameters.html#formula) notes that default covariates differ by MOI. Ribosomal fraction is an additional pipeline option, not a SCEPTRE-paper default.
+The PR #101 default design is log guide UMI depth, log RNA UMI depth, log detected genes, and batch. Disabling `DETECTED_GENES` or `GUIDE_UMIS` is a sensitivity analysis. Guide count is opt-in. RNA library size remains a model depth/offset term and is not disabled by these switches. The original [SCEPTRE paper](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-021-02545-2) considered RNA depth, detected genes, detected gRNAs, mitochondrial percentage, and batch; its [formula guidance](https://timothy-barry.github.io/sceptre-book/set-analysis-parameters.html#formula) notes that default covariates differ by MOI. Ribosomal fraction is an additional pipeline option, not a SCEPTRE-paper default.
 
-The isolated [chr8 test report](/data/pinello/lucas_logan/chr8_enhancer_screen/analysis/preinference_checkpoint_pilot_20261020/CUSTOM_COVARIATES_TEST_RESULTS.md) records the current verification and limitations.
+At the pre-inference checkpoint, per-cell numeric columns named `external_*` may be added to `gene.obs` and listed in `mdata.uns['external_covariates']`. On continuation they are validated, copied to top-level cell metadata, and included in both inference methods. The cell barcode index must match the checkpoint exactly; this does not change guide assignment or the count matrix. An `external_*` term must be finite and nonconstant. The pipeline checks the combined design for collinearity before fitting.
+
+The isolated [post-PR #101 chr8 fit report](/data/pinello/lucas_logan/chr8_enhancer_screen/analysis/preinference_checkpoint_pilot_20261020/covariate_pr101_fit_20261021/RESULTS.md) records current verification and limitations. The earlier [samplesheet smoke test](/data/pinello/lucas_logan/chr8_enhancer_screen/analysis/preinference_checkpoint_pilot_20261020/CUSTOM_COVARIATES_TEST_RESULTS.md) is historical, pre-merge evidence.
