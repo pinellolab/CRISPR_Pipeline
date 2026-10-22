@@ -1,0 +1,24 @@
+name: Documentation and plugin contract check
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install documentation builder and tests
+        run: python -m pip install 'mkdocs>=1.6,<2' 'pytest>=8,<9'
+      - name: Check source and documentation contracts
+        run: |
+          python scripts/check_docs_sync.py
+          python -m pytest -q tests/test_docs_site.py tests/test_docs_sync.py
+          mkdocs build --strict

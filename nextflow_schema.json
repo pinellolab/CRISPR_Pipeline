@@ -455,7 +455,7 @@
                 },
                 "GUIDE_MAPPING_QC_min_overlap_to_rna_fraction": {
                     "type": "number",
-                    "default": 0.5,
+                    "default": 0.3,
                     "minimum": 0,
                     "maximum": 1,
                     "description": "Minimum fraction of retained high-quality RNA cells sharing an exact barcode with the guide matrix, per measurement set."

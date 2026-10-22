@@ -10,6 +10,7 @@ theme:
 nav:
   - Home: index.md
   - Start here: usage.md
+  - Install live dashboard plugin: plugin-installation.md
   - Inputs:
       - Samplesheet: samplesheet.md
       - SeqSpec: seqspec.md

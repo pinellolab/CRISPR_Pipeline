@@ -7,7 +7,8 @@ after installing the bundled versioned archive into a shared
 `NXF_PLUGINS_DIR` using `bash run_support/install_dashboard_plugin.sh`.
 It remains opt-in until the same version is published and verified from a clean
 Nextflow Plugin Registry cache; a fresh clone alone does not install it. See
-the [plugin installation guide](https://github.com/pinellolab/CRISPR_Pipeline/blob/dev/plugins/nf-crispr-dashboard/README.md).
+the [plugin installation guide](plugin-installation.md) for exact commands,
+site-specific storage requirements, and verification steps.
 
 The advanced CRISPR Pipeline execution dashboard is the canonical dashboard
 both locally and in W&B. `bin/run_with_wandb.sh` renders the same self-contained

@@ -35,6 +35,10 @@ Before paying for a full run, verify that the SeqSpecs extract the intended cell
 
 After launch, inspect the live [execution dashboard](live_wandb_execution_dashboard.md). Each measurement set has its own mapping and preprocessing QC. The final [MuData dictionary](mudata_schema.md), [output guide](output.md) and [parameter reference](parameters.md) explain the resulting data.
 
+For an integrated live dashboard in a direct Nextflow run, first follow the
+[bundled plugin installation guide](plugin-installation.md). The plugin is
+currently opt-in and is not installed merely by cloning this repository.
+
 ## What happens next
 
 1. SeqSpec validation and reference preparation.

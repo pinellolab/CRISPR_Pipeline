@@ -16,6 +16,7 @@ DEST = ROOT / "build" / "docs-site"
 
 PAGES = (
     "usage.md",
+    "plugin-installation.md",
     "samplesheet.md",
     "seqspec.md",
     "guide-metadata.md",
