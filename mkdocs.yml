@@ -23,8 +23,10 @@ nav:
       - Post-concatenation QC: postconcat_embedding_qc.md
       - Inference and calibration: inference.md
       - Live dashboard: live_wandb_execution_dashboard.md
+      - Tools and modules: tool-and-module-map.md
   - Outputs:
       - Output files: output.md
+      - Real result examples: output-gallery.md
       - MuData fields: mudata_schema.md
       - Flat QC fields: qc_outputs.md
   - Reference:

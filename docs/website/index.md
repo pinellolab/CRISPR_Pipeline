@@ -12,6 +12,8 @@ This website documents the current `dev` pipeline: modality-aware input preparat
 | Stop before inference, filter cells, add covariates | [Pause, edit, continue](preinference_checkpoint_user_guide.md) |
 | Understand filters or method choices | [QC order](filtering_workflow.md), [covariates](samplesheet_covariates.md), [inference](inference.md) |
 | Interpret the outputs | [Output files](output.md), [all MuData fields](mudata_schema.md), [all parameters](parameters.md) |
+| See real plots and a completed dashboard | [Results gallery](output-gallery.md) and [Gary Hon dashboard package](https://www.synapse.org/Synapse:syn78349990) |
+| Understand the tools behind each stage | [Tools and modules](tool-and-module-map.md) |
 
 The source is [pinellolab/CRISPR_Pipeline](https://github.com/pinellolab/CRISPR_Pipeline/tree/dev). Documentation changes on `dev` are built and deployed by GitHub Actions. The field and parameter references are generated from the checked-in catalog and schema, so changes can be reviewed alongside code. Cite the exact commit recorded in each run's `pipeline_info` when reporting results.
 

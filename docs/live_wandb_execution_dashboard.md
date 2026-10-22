@@ -1,5 +1,8 @@
 # Live W&B execution dashboard
 
+For figures from actual QC, inference, and calibration results and a link to
+a completed interactive dashboard, see the [result gallery](output-gallery.md).
+
 The bundled `plugins/nf-crispr-dashboard` Nextflow observer starts the renderer
 inside Nextflow, updates it as processes finish, and can serve the HTML on a
 configurable local HTTP port. Enable it with `-c conf/dashboard_plugin.config`

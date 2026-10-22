@@ -27,7 +27,9 @@ PAGES = (
     "postconcat_embedding_qc.md",
     "inference.md",
     "live_wandb_execution_dashboard.md",
+    "tool-and-module-map.md",
     "output.md",
+    "output-gallery.md",
     "mudata_schema.md",
     "qc_outputs.md",
     "target_aware_gene_filter.md",
@@ -80,6 +82,7 @@ def main():
     for name in PAGES:
         shutil.copyfile(DOCS / name, DEST / name)
     shutil.copyfile(DOCS / "website" / "index.md", DEST / "index.md")
+    shutil.copytree(DOCS / "images" / "result_examples", DEST / "images" / "result_examples", dirs_exist_ok=True)
     shutil.copyfile(DOCS / "mudata_schema_catalog.tsv", DEST / "mudata_schema_catalog.tsv")
     (DEST / "parameters.md").write_text(render_parameters())
 

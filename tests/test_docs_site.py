@@ -15,6 +15,16 @@ def test_site_sources_and_schema_reference():
     site = ROOT / "build/docs-site"
     assert (site / "index.md").is_file()
     assert (site / "mudata_schema.md").is_file()
+    assert (site / "output-gallery.md").is_file()
+    assert (site / "tool-and-module-map.md").is_file()
+    for filename in (
+        "garyhon_rna_knee.png",
+        "huangfu_guide_mapping_overlap.png",
+        "garyhon_pca_by_measurement_set.png",
+        "garyhon_tf_benchmark.png",
+        "huangfu_ntc_aucpr_guide.png",
+    ):
+        assert (site / "images/result_examples" / filename).is_file()
     assert (site / "downloadable-examples/hashing_samplesheet.csv").is_file()
     schema = json.loads((ROOT / "nextflow_schema.json").read_text())
     expected = {name for section in schema["$defs"].values() for name in section.get("properties", {})}

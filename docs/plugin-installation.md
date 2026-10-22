@@ -79,3 +79,13 @@ The plugin is **not yet assumed available from the Nextflow Plugin Registry**.
 Do not remove this installation step or enable the plugin by default until a
 clean machine can resolve the published version. The source and publishing
 instructions are in `plugins/nf-crispr-dashboard/README.md`.
+
+## Clean-install verification
+
+On 22 October 2026, a fresh `dev` clone at commit `16a07e4` was tested with
+an isolated Nextflow home and plugin directory. The official launcher
+installed Nextflow 26.04.6; the bundled installer verified the archive and
+installed `nf-crispr-dashboard@0.1.0`; `nextflow config` resolved the plugin
+declaration and dashboard settings. No analysis workflow was launched. This
+checks reproducible installation and config parsing, **not** runtime observer
+startup, container access, or scientific results.
