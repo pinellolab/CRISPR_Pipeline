@@ -7,6 +7,7 @@ from pathlib import Path
 import anndata as ad
 import numpy as np
 import pandas as pd
+import pytest
 from scipy import sparse
 
 
@@ -139,7 +140,8 @@ def test_scrublet_pca_fallback_retries_only_dimension_error(monkeypatch):
     assert predicted.tolist() == [False, True]
 
 
-def test_scrublet_skip_policy_retains_preceding_qc_cells_and_records_error(tmp_path, monkeypatch):
+@pytest.mark.parametrize("missing_threshold", [False, True])
+def test_scrublet_skip_policy_retains_preceding_qc_cells_and_records_error(tmp_path, monkeypatch, missing_threshold):
     mapping = tmp_path / "B2_ks_transcripts_out"
     counts = mapping / "counts_unfiltered"
     counts.mkdir(parents=True)
@@ -156,6 +158,8 @@ def test_scrublet_skip_policy_retains_preceding_qc_cells_and_records_error(tmp_p
     ).to_csv(covariates, index=False)
 
     def fail_scrublet(*_args, **_kwargs):
+        if missing_threshold:
+            return types.SimpleNamespace(), np.array([0.1, 0.2]), np.array([False, False]), 30, False
         raise ZeroDivisionError("float division by zero")
 
     monkeypatch.setattr(MODULE, "run_scrublet_with_pca_fallback", fail_scrublet)
@@ -175,7 +179,9 @@ def test_scrublet_skip_policy_retains_preceding_qc_cells_and_records_error(tmp_p
     assert filtered.n_obs == 2
     audit = pd.read_csv(tmp_path / "B2_qc" / "measurement_set_qc_B2.tsv", sep="\t")
     assert audit.loc[0, "scrublet_status"] == "skipped_error"
-    assert "ZeroDivisionError" in audit.loc[0, "scrublet_skip_reason"]
+    assert (
+        "automatic doublet-score threshold" if missing_threshold else "ZeroDivisionError"
+    ) in audit.loc[0, "scrublet_skip_reason"]
     flow = pd.read_csv(tmp_path / "B2_qc" / "rna_qc_filter_flow_B2.tsv", sep="\t")
     scrublet = flow.loc[flow["filter_label"] == "Scrublet doublet removal"].iloc[0]
     assert not bool(scrublet["applied"])

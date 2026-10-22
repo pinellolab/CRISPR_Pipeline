@@ -574,6 +574,10 @@ def main(args):
                 args.scrublet_n_prin_comps,
                 args.scrublet_adaptive_pca_fallback,
             )
+            resolved_threshold = getattr(scrub, "threshold_", None)
+            if resolved_threshold is None or not np.isfinite(resolved_threshold):
+                raise ValueError("Scrublet did not resolve an automatic doublet-score threshold")
+            threshold = float(resolved_threshold)
         except Exception as error:
             if args.scrublet_failure_policy == "error":
                 raise
@@ -601,7 +605,6 @@ def main(args):
             })
         else:
             scrublet_status = "applied"
-            threshold = float(scrub.threshold_) if scrub.threshold_ is not None else np.nan
             adata.obs["doublet_scores"] = np.nan
             adata.obs.iloc[selected, adata.obs.columns.get_loc("doublet_scores")] = scores
             adata.obs["predicted_doublets"] = False
