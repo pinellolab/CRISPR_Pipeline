@@ -1,0 +1,50 @@
+name: Documentation website
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'docs/**'
+      - 'example_data/**'
+      - 'nextflow_schema.json'
+      - 'mkdocs.yml'
+      - 'scripts/build_docs_site.py'
+      - '.github/workflows/documentation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install documentation builder
+        run: python -m pip install 'mkdocs>=1.6,<2'
+      - name: Assemble and validate website
+        run: |
+          python scripts/build_docs_site.py
+          mkdocs build --strict
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/site
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,6 +1,6 @@
-# Samplesheet and checkpoint covariates (integration pilot)
+# Samplesheet and checkpoint covariates
 
-This integration is being tested on `feature/preinference-checkpoint-pilot` after merging PR #101. It is not yet validated as a production release.
+These options are included in the current `dev` pipeline. The two paths serve different scopes: `cov_*` columns describe an entire measurement set; `external_*` columns introduced at a checkpoint describe individual retained cells.
 
 Add columns whose names begin with `cov_` to the usual CSV/TSV samplesheet. For example:
 
@@ -34,4 +34,4 @@ The PR #101 default design is log guide UMI depth, log RNA UMI depth, log detect
 
 At the pre-inference checkpoint, per-cell numeric columns named `external_*` may be added to `gene.obs` and listed in `mdata.uns['external_covariates']`. On continuation they are validated, copied to top-level cell metadata, and included in both inference methods. The cell barcode index must match the checkpoint exactly; this does not change guide assignment or the count matrix. An `external_*` term must be finite and nonconstant. The pipeline checks the combined design for collinearity before fitting.
 
-The isolated [post-PR #101 chr8 fit report](/data/pinello/lucas_logan/chr8_enhancer_screen/analysis/preinference_checkpoint_pilot_20261020/covariate_pr101_fit_20261021/RESULTS.md) records current verification and limitations. The earlier [samplesheet smoke test](/data/pinello/lucas_logan/chr8_enhancer_screen/analysis/preinference_checkpoint_pilot_20261020/CUSTOM_COVARIATES_TEST_RESULTS.md) is historical, pre-merge evidence.
+For a runnable checkpoint example, including the TSV keyed by full cell IDs and the validation rules, see [pause, edit, continue](preinference_checkpoint_user_guide.md). The same covariate design is passed to both methods; always review the resolved inference config and report the model design with the result.

@@ -91,3 +91,6 @@ plugins/nf-crispr-dashboard/build/
 .dashboard-plugin-smoke-results/
 .dashboard-plugin-smoke-work/
 .nextflow-bundle-test/
+/build/docs-site/
+/build/site/
+/.docs-venv/

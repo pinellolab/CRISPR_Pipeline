@@ -1,10 +1,9 @@
 # Pause before inference, edit cells or covariates, then continue
 
-This guide is for the `feature/preinference-checkpoint-pilot` branch. It uses
+This guide applies to the current `dev` pipeline. It uses
 **two ordinary Nextflow invocations**, not a custom run wrapper. The first
 ends successfully at a pre-inference MuData checkpoint; the second starts
-inference from that checkpoint. This is a pilot interface, not yet the `dev`
-branch's normal run path.
+inference from that checkpoint. `checkpoint` is the default `ANALYSIS_mode`; explicitly select `full` for unattended inference.
 
 ## The distinction that matters
 
@@ -23,7 +22,7 @@ branch's normal run path.
 
 ## 1. Prerequisites
 
-Have a clean checkout of this feature branch, Nextflow, the dataset's existing
+Have a clean checkout of the pinned pipeline commit, Nextflow, the dataset's existing
 params file, its samplesheet with accessible local paths, any resource config,
 and the same reference GTF for both stages. Pin container images in the
 dataset config. Review assay-specific parameters before the first launch.
@@ -237,14 +236,14 @@ server; remote SLURM/cloud nodes need their own accessible storage paths.
 
 ## Current limitations
 
-- This branch's continuation runs inference/evaluation but does **not**
+- The continuation runs inference/evaluation but does **not**
   reconstruct the parent mapping/QC HTML dashboard or publish a combined
   before/after cell-flow card to W&B. The external-MuData report is the
   authoritative count comparison for now.
 - The edited-H5MU validator loads both MuData objects into memory; for very
   large experiments, use an allowlist/covariate TSV when possible and plan
   sufficient memory for validation.
-- Only numeric external covariates are supported in this first pilot.
+- Only numeric external covariates are supported by this continuation interface.
 - This is not an automatic human-in-the-loop pause within one Nextflow
   session. It is a deliberate successful checkpoint run followed by a
   separately launched continuation.

@@ -13,6 +13,8 @@
 
 # CRISPR Pipeline
 
+Current documentation: [CRISPR Pipeline website](https://pinellolab.github.io/CRISPR_Pipeline/) — [start here](docs/usage.md), [run recipes](docs/run-recipes.md), [samplesheet](docs/samplesheet.md), [SeqSpec](docs/seqspec.md), [guide metadata](docs/guide-metadata.md), [checkpoint continuation](docs/preinference_checkpoint_user_guide.md), and [MuData field reference](docs/mudata_schema.md). The default `ANALYSIS_mode` is `checkpoint`; specify `full` for an uninterrupted inference run.
+
 Temporary normalization, PCA/UMAP and pre/post-clone measurement-set QC are
 documented in [Post-concatenation embedding QC](docs/postconcat_embedding_qc.md).
 

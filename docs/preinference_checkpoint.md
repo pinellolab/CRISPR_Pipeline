@@ -1,4 +1,4 @@
-# Pre-inference checkpoint pilot
+# Pre-inference checkpoint
 
 For a wrapper-free, step-by-step user procedure, see
 `docs/preinference_checkpoint_user_guide.md`.
@@ -33,6 +33,6 @@ never overwritten. `-resume` retries tasks within a given invocation; changing
 an edited H5MU in place is not a supported cache-invalidation mechanism.
 
 `--ANALYSIS_mode full` explicitly opts into the previous uninterrupted path.
-This remains a feature-branch pilot: the continuation does not yet reconstruct
+Current limitation: the continuation does not yet reconstruct
 the full mapping/assignment HTML dashboard from parent-run artifacts, and the
 edited-H5MU validation currently reads the entire object into memory.

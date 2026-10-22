@@ -1,12 +1,13 @@
 # Live W&B execution dashboard
 
-An in-repository Nextflow observer plugin is under validation in
-`plugins/nf-crispr-dashboard`. It starts this same renderer from Nextflow
-itself and can serve the live HTML on a configurable local HTTP port.
-`conf/dashboard_plugin.config` is opt-in until the versioned plugin has been
-published to the Nextflow Plugin Registry and tested from a clean plugin
-cache. Do not make an unpublished plugin mandatory in the default config:
-that would prevent fresh users from starting the scientific workflow.
+The bundled `plugins/nf-crispr-dashboard` Nextflow observer starts the renderer
+inside Nextflow, updates it as processes finish, and can serve the HTML on a
+configurable local HTTP port. Enable it with `-c conf/dashboard_plugin.config`
+after installing the bundled versioned archive into a shared
+`NXF_PLUGINS_DIR` using `bash run_support/install_dashboard_plugin.sh`.
+It remains opt-in until the same version is published and verified from a clean
+Nextflow Plugin Registry cache; a fresh clone alone does not install it. See
+the [plugin installation guide](https://github.com/pinellolab/CRISPR_Pipeline/blob/dev/plugins/nf-crispr-dashboard/README.md).
 
 The advanced CRISPR Pipeline execution dashboard is the canonical dashboard
 both locally and in W&B. `bin/run_with_wandb.sh` renders the same self-contained
@@ -16,13 +17,13 @@ scientific report is retained as `pipeline_dashboard/legacy_dashboard.html`
 only as an input source for final tables and figures. Do not link the legacy
 report as the supported dashboard.
 
-The wrapper always renders the local dashboard, even without credentials.
+The wrapper remains an alternative when the plugin is not installed. It always renders the local dashboard, even without credentials.
 With `WANDB_ENABLED=true` (default), `WB_IGVF` and a working W&B Python
 environment additionally publish the live view online. If either is missing,
 the pipeline and local HTML still work. Set `WANDB_ENABLED=false` for an
 explicit local-HTML-only run. The direct `nextflow run` entry point remains
-usable, but without the wrapper it only produces the older static report as a
-fallback; use the wrapper for the supported live dashboard.
+usable. With the observer config it produces the live dashboard without a wrapper;
+without either observer or wrapper, only the static report is available.
 
 ## Required default behavior
 
