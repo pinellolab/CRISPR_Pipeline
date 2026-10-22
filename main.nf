@@ -19,6 +19,7 @@ include { CRISPR_PIPELINE }  from './workflows/crispr_pipeline'
 include { inference_pipeline } from './subworkflows/local/inference_pipeline'
 include { PIPELINE_INITIALISATION } from './subworkflows/local/utils_nfcore_crispr_pipeline'
 include { PIPELINE_COMPLETION     } from './subworkflows/local/utils_nfcore_crispr_pipeline'
+include { PACKAGE_EXISTING_IGVF_RESULTS } from './subworkflows/local/utils_nfcore_crispr_pipeline'
 include { skipGTFDownload } from './modules/local/skipGTFDownload'
 include { downloadGTF } from './modules/local/downloadGTF'
 include { remove_clonal_cells } from './modules/local/remove_clonal_cells'
@@ -150,6 +151,12 @@ workflow CONTINUE_FROM_CHECKPOINT {
 workflow {
 
     main:
+    if (params.OUTPUT_IGVF_PACKAGE && params.ANALYSIS_mode == 'full' && params.INFERENCE_method == 'default' && !params.INFERENCE_input_mudata && !params.DASHBOARD_PLUGIN?.enabled) {
+        error 'OUTPUT_IGVF_PACKAGE requires the bundled nf-crispr-dashboard plugin (DASHBOARD_PLUGIN.enabled=true).'
+    }
+    if (params.OUTPUT_IGVF_PACKAGE && params.ANALYSIS_mode == 'full' && params.INFERENCE_method != 'default') {
+        log.warn('IGVF upload package skipped: four canonical local/global tables require INFERENCE_method=default.')
+    }
     if (!(params.ANALYSIS_mode in ['checkpoint', 'continue', 'full'])) {
         error "ANALYSIS_mode must be checkpoint, continue, or full."
     }

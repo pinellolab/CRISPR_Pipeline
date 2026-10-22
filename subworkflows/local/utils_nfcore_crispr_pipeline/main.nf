@@ -195,6 +195,9 @@ See DEMO_MODE_WARNING.txt in the output directory.
         completionSummary(monochrome_logs)
         writePipelineManifest(outdir)
         copyNextflowLog(outdir)
+        if (workflow.success && params.OUTPUT_IGVF_PACKAGE && params.ANALYSIS_mode == 'full' && params.INFERENCE_method == 'default' && !params.INFERENCE_input_mudata) {
+            packageIgvfResults(outdir)
+        }
         if (hook_url) {
             imNotification(summary_params, hook_url)
         }
@@ -213,6 +216,115 @@ See DEMO_MODE_WARNING.txt in the output directory.
         }
         log.error "Pipeline failed. Please refer to troubleshooting docs: https://nf-co.re/docs/usage/troubleshooting"
     }
+}
+
+// Organize published artifacts without copying the large MuData. The four TSVs
+// are produced inside the pinned base container by export_igvf_inference_tsv.
+def packageIgvfResults(outdir) {
+    def Files = java.nio.file.Files
+    def root = new File(outdir.toString()).toPath().toAbsolutePath().normalize()
+    def results = root.resolve('results')
+    def upload = results.resolve('pipeline_results')
+    def extras = results.resolve('results_extra_files')
+    Files.createDirectories(upload)
+    Files.createDirectories(extras)
+
+    def sheet = ['original_samplesheet.csv', 'original_samplesheet.tsv'].find {
+        Files.isRegularFile(root.resolve('pipeline_info').resolve(it))
+    }
+    if (!sheet) throw new IllegalStateException('IGVF package is missing the original samplesheet')
+    ['inference_mudata.h5mu', 'pipeline_qc_metrics.json', 'nextflow.log', sheet].each { String name ->
+        def source = name == 'inference_mudata.h5mu' ? root.resolve('pipeline_outputs').resolve(name) :
+            name == 'nextflow.log' || name == 'original_samplesheet.csv' ? root.resolve('pipeline_info').resolve(name) : root.resolve(name)
+        if (!Files.isRegularFile(source)) throw new IllegalStateException("IGVF package missing ${source}")
+        def target = upload.resolve(name == sheet ? name.replace('original_', '') : name)
+        if (Files.exists(target)) Files.delete(target)
+        Files.createLink(target, source)
+    }
+    if (params.OUTPUT_IGVF_TSV) {
+        ['local_analysis_per_element_output', 'local_analysis_per_guide_output',
+         'global_analysis_per_element_output', 'global_analysis_per_guide_output'].each { String stem ->
+            if (!Files.isRegularFile(upload.resolve("${stem}.tsv"))) {
+                throw new IllegalStateException("IGVF TSV export missing: ${stem}.tsv")
+            }
+        }
+    }
+
+    def html = root.resolve('pipeline_dashboard/execution_dashboard.html')
+    if (!Files.isRegularFile(html) || Files.size(html) == 0) {
+        throw new IllegalStateException("The required plugin execution dashboard is missing: ${html}")
+    }
+    def archive = upload.resolve('execution_dashboard.zip')
+    def temporary = upload.resolve('execution_dashboard.zip.part')
+    new java.util.zip.ZipOutputStream(Files.newOutputStream(temporary)).withCloseable { zip ->
+        zip.putNextEntry(new java.util.zip.ZipEntry('execution_dashboard.html'))
+        Files.copy(html, zip)
+        zip.closeEntry()
+    }
+    Files.move(temporary, archive, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+
+    String manifestContent = Files.readString(root.resolve('pipeline_info/pipeline_manifest.config'))
+    def manifestValue = { String key ->
+        String line = manifestContent.readLines().find { it.trim().startsWith(key + ' = ') || it.trim().startsWith('// ' + key + ' = ') }
+        line ? line.substring(line.indexOf('=') + 1).trim().replaceAll(/^['"]|['"]$/, '') : 'unavailable'
+    }
+    def paramsFiles = root.resolve('pipeline_info').toFile().listFiles().findAll { it.name ==~ /params_.*\.json/ }
+    if (!paramsFiles) throw new IllegalStateException('IGVF package is missing the executed resolved-parameters JSON')
+    def runParams = new groovy.json.JsonSlurper().parse(paramsFiles.max { it.lastModified() })
+    def configSources = [:]
+    root.resolve('pipeline_info').toFile().listFiles().findAll { it.isDirectory() }.each { folder ->
+        def provenance = new File(folder, 'repository_provenance.json')
+        if (provenance.isFile()) {
+            def record = new groovy.json.JsonSlurper().parse(provenance)
+            record.launch_artifacts?.each { label, artifact ->
+                if (artifact.path?.toString()?.endsWith('.config')) {
+                    def source = new File(artifact.path.toString())
+                    def digest = source.isFile() ? java.security.MessageDigest.getInstance('SHA-256').digest(Files.readAllBytes(source.toPath())).encodeHex().toString() : null
+                    boolean unchanged = digest != null && digest == artifact.sha256
+                    configSources[label] = [path: artifact.path, sha256_at_launch: artifact.sha256,
+                        current_sha256: digest, matches_launch_sha256: unchanged,
+                        content: unchanged ? source.readLines().collect { line ->
+                            line ==~ /(?i).*\b(token|secret|password|credential|api[_-]?key)\s*=.*/ ? '[REDACTED CREDENTIAL SETTING]' : line
+                        }.join('\n') : null]
+                }
+            }
+        }
+    }
+    def config = [
+        pipeline_name: manifestValue('name'),
+        pipeline_repository: manifestValue('homePage'),
+        pipeline_commit: manifestValue('full_commit'),
+        pipeline_branch: manifestValue('defaultBranch'),
+        nextflow_version: manifestValue('nextflow_version'),
+        pipeline_command: manifestValue('pipeline_command'),
+        run_name: manifestValue('run_name'),
+        completed_at: manifestValue('completed_at'),
+        resolved_parameters: runParams,
+        source_manifest: manifestContent,
+        project_nextflow_config: Files.readString(root.resolve('pipeline_info/nextflow.config')),
+        run_config_sources: configSources,
+        igvf_tsv_conversion: params.OUTPUT_IGVF_TSV
+    ]
+    Files.writeString(upload.resolve('full_run_config.json'), groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(config)) + '\n')
+
+    // Compatibility paths stay in place while the alternate tree provides a
+    // single organized view of everything else, without duplicating data.
+    Files.list(root).withCloseable { stream ->
+        stream.forEach { source ->
+            if (source.fileName.toString() != 'results') {
+                Path link = extras.resolve(source.fileName.toString())
+                if (!Files.exists(link)) Files.createSymbolicLink(link, source)
+            }
+        }
+    }
+    log.info("IGVF upload package ready: ${upload}")
+}
+
+// Packaging-only entry for validating or reconstructing the upload directory
+// from a completed run. It performs no mapping or inference.
+workflow PACKAGE_EXISTING_IGVF_RESULTS {
+    main:
+    packageIgvfResults(params.outdir)
 }
 
 // The sidecar tails this tiny file and performs network I/O outside Nextflow.

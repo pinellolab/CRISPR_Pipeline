@@ -6,6 +6,47 @@ This document describes the output produced by the pipeline.
 
 All paths are relative to the directory supplied with `--outdir`.
 
+## IGVF upload layout (opt-in)
+
+`OUTPUT_IGVF_PACKAGE=true` is the default for a complete `ANALYSIS_mode=full`
+run with `INFERENCE_method=default`.
+The bundled `nf-crispr-dashboard` plugin is required and is loaded by the pipeline's
+default configuration. `OUTPUT_IGVF_TSV=true` (default) streams the four canonical
+inference tables from Parquet or compressed TSV to plain TSV inside the pinned base
+container. This does not change the inference or its Parquet working outputs.
+
+At successful completion, `results/pipeline_results/` contains exactly the upload
+artifacts: `execution_dashboard.zip` (the self-contained plugin HTML, including
+embedded figures), `inference_mudata.h5mu`, four local/global per-element/per-guide
+`*_output.tsv` tables, `nextflow.log`, `samplesheet.csv`,
+`full_run_config.json` (resolved parameters, Nextflow version, pipeline Git
+commit/branch, command and source manifest), and `pipeline_qc_metrics.json`.
+It also embeds the launch configuration sources when their current SHA-256 still
+matches the recorded run provenance; credential-setting lines are redacted.
+Review any user-supplied parameter values and command-line arguments for
+sensitive information before uploading this JSON publicly.
+Catalog tables are not part of this upload set. The MuData, log, samplesheet and QC
+JSON are hard-linked from their original locations, so they consume no second copy
+of the file content. `results/results_extra_files/` contains symlinks to all the
+other published top-level result directories/files, preserving existing paths and
+avoiding duplication. Upload `pipeline_results/` rather than the symlinked extra
+tree. If `OUTPUT_IGVF_TSV=false`, the upload package is incomplete by design;
+the original Parquet tables remain available under `pipeline_outputs/`.
+Checkpoint runs stop before inference; the current continuation-only and
+MuData-only entry paths do not assemble the complete final QC/dashboard bundle,
+so they do not claim to create an upload-ready package. Other inference methods
+likewise do not have the four canonical local/global tables. These modes retain
+their usual outputs without an IGVF package.
+
+For a previously completed run, generate the four TSVs with the pinned base
+container, then use `-entry PACKAGE_EXISTING_IGVF_RESULTS --outdir <completed-outdir>`
+to create only the package; no mapping or inference runs. On Nextflow 26.04.6,
+set `NXF_SYNTAX_PARSER=v1` for the named entry, load the local plugin, and use
+`run_support/nextflow_with_storage.sh` so the normal container-storage policy
+still applies. The smoke-test config `tests/igvf_packaging_smoke.config` disables
+the live observer only for packaging an already-final dashboard; normal runs
+keep it enabled.
+
 The final inference artifacts are written once, under `pipeline_outputs/`. The dashboard directory contains visualization files and supporting assets; it does not include duplicate copies of the final MuData or local/global result tables. See the [real result gallery](output-gallery.md) for annotated plots and a completed dashboard package.
 
 See the [MuData field reference](mudata_schema.md) for the internal schema of

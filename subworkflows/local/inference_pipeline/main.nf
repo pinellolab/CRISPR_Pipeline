@@ -11,6 +11,7 @@ include { inference_perturbo } from '../../../modules/local/inference_perturbo'
 include { mergedResults } from '../../../modules/local/mergedResults'
 include { publishFiles } from '../../../modules/local/publishFiles'
 include { mergeMudata } from '../../../modules/local/mergeMudata'
+include { export_igvf_inference_tsv } from '../../../modules/local/export_igvf_inference_tsv'
 include { buildCatalogElement } from '../../../modules/local/buildCatalogElement'
 include { buildCatalogGuide } from '../../../modules/local/buildCatalogGuide'
 include { resolveControlGroupFromParams } from '../../../modules/local/control_group'
@@ -210,6 +211,14 @@ workflow inference_pipeline {
             PerturboResults.global_per_element_output,
             PrepareInferenceGlobal.mudata_inference_input,
         )
+        if (params.OUTPUT_IGVF_PACKAGE && params.OUTPUT_IGVF_TSV && params.ANALYSIS_mode == 'full' && !params.INFERENCE_input_mudata) {
+            export_igvf_inference_tsv(
+                MergedInference.local_analysis_per_element_output,
+                MergedInference.local_analysis_per_guide_output,
+                MergedInference.global_analysis_per_element_output,
+                MergedInference.global_analysis_per_guide_output,
+            )
+        }
         // Catalog construction is intentionally independent from mergeMudata:
         // each large table is cacheable and resumable on its own.
         buildCatalogElement(

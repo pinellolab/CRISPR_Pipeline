@@ -35,6 +35,7 @@ include { collect_benchmark_outputs } from '../../modules/local/collect_benchmar
 
 include { dashboard_pipeline_HASHING } from '../../subworkflows/local/dashboard_pipeline_HASHING'
 include { dashboard_pipeline } from '../../subworkflows/local/dashboard_pipeline'
+include { check_igvf_dashboard } from '../../modules/local/check_igvf_dashboard'
 include { softwareVersionsToYAML } from '../../subworkflows/nf-core/utils_nfcore_pipeline'
 include { methodsDescriptionText } from '../../subworkflows/local/utils_nfcore_crispr_pipeline'
 
@@ -270,7 +271,7 @@ workflow CRISPR_PIPELINE {
         // calibration check rides along under benchmark_output/calibration/.
         benchmark_output_dir = collect_benchmark_outputs(benchmark_output_dir, Inference.calibration_output).collected
 
-        dashboard_pipeline_HASHING (
+        Dashboard = dashboard_pipeline_HASHING (
             seqSpecCheck_pipeline_HASHING.out.guide_seqSpecCheck_plots,
             seqSpecCheck_pipeline_HASHING.out.guide_position_table,
             seqSpecCheck_pipeline_HASHING.out.hashing_seqSpecCheck_plots,
@@ -292,6 +293,9 @@ workflow CRISPR_PIPELINE {
             benchmark_output_dir
 
             )
+        if (params.OUTPUT_IGVF_PACKAGE && params.INFERENCE_method == 'default' && params.ANALYSIS_mode == 'full') {
+            check_igvf_dashboard(Dashboard.dashboard_archive)
+        }
         }
     }
     else {
@@ -381,7 +385,7 @@ workflow CRISPR_PIPELINE {
         // calibration check rides along under benchmark_output/calibration/.
         benchmark_output_dir = collect_benchmark_outputs(benchmark_output_dir, Inference.calibration_output).collected
 
-        dashboard_pipeline (
+        Dashboard = dashboard_pipeline (
             seqSpecCheck_pipeline.out.guide_seqSpecCheck_plots,
             seqSpecCheck_pipeline.out.guide_position_table,
             Preprocessing.adata_rna,
@@ -396,6 +400,9 @@ workflow CRISPR_PIPELINE {
             evaluation_pipeline.out.control_output_dir,
             benchmark_output_dir
             )
+        if (params.OUTPUT_IGVF_PACKAGE && params.INFERENCE_method == 'default' && params.ANALYSIS_mode == 'full') {
+            check_igvf_dashboard(Dashboard.dashboard_archive)
+        }
         }
     }
 

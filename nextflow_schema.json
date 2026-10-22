@@ -49,6 +49,16 @@
                     "default": "./pipeline_outputs",
                     "description": "Directory where final pipeline outputs are published."
                 },
+                "OUTPUT_IGVF_PACKAGE": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "For complete full runs with default four-table inference, create results/pipeline_results for IGVF upload and results/results_extra_files for the remaining outputs. Enabled by default. Checkpoint and inference-only continuation paths do not create a final package."
+                },
+                "OUTPUT_IGVF_TSV": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "When OUTPUT_IGVF_PACKAGE is enabled, stream the four canonical local/global inference tables to uncompressed TSV in the pinned base container. Disable only when TSV export is too large or not needed."
+                },
                 "DEMO_MODE": {
                     "type": "boolean",
                     "default": false,
