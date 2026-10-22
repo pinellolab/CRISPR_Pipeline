@@ -254,14 +254,12 @@ def packageIgvfResults(outdir) {
     if (!Files.isRegularFile(html) || Files.size(html) == 0) {
         throw new IllegalStateException("The required plugin execution dashboard is missing: ${html}")
     }
-    def archive = upload.resolve('execution_dashboard.zip')
-    def temporary = upload.resolve('execution_dashboard.zip.part')
-    new java.util.zip.ZipOutputStream(Files.newOutputStream(temporary)).withCloseable { zip ->
-        zip.putNextEntry(new java.util.zip.ZipEntry('execution_dashboard.html'))
-        Files.copy(html, zip)
-        zip.closeEntry()
-    }
-    Files.move(temporary, archive, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    def dashboard = upload.resolve('execution_dashboard.html')
+    if (Files.exists(dashboard)) Files.delete(dashboard)
+    Files.createLink(dashboard, html)
+    // Remove the obsolete ZIP when repackaging a completed run.
+    Files.deleteIfExists(upload.resolve('execution_dashboard.zip'))
+    Files.deleteIfExists(upload.resolve('execution_dashboard.zip.part'))
 
     String manifestContent = Files.readString(root.resolve('pipeline_info/pipeline_manifest.config'))
     def manifestValue = { String key ->

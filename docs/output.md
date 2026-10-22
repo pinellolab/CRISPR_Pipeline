@@ -16,7 +16,7 @@ inference tables from Parquet or compressed TSV to plain TSV inside the pinned b
 container. This does not change the inference or its Parquet working outputs.
 
 At successful completion, `results/pipeline_results/` contains exactly the upload
-artifacts: `execution_dashboard.zip` (the self-contained plugin HTML, including
+artifacts: `execution_dashboard.html` (the self-contained plugin HTML, including
 embedded figures), `inference_mudata.h5mu`, four local/global per-element/per-guide
 `*_output.tsv` tables, `nextflow.log`, `samplesheet.csv`,
 `full_run_config.json` (resolved parameters, Nextflow version, pipeline Git
