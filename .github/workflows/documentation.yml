@@ -3,17 +3,6 @@ name: Documentation website
 on:
   push:
     branches: [dev]
-    paths:
-      - 'docs/**'
-      - 'example_data/**'
-      - 'nextflow_schema.json'
-      - 'conf/dashboard_plugin.config'
-      - 'run_support/install_dashboard_plugin.sh'
-      - 'plugins/nf-crispr-dashboard/**'
-      - 'mkdocs.yml'
-      - 'scripts/build_docs_site.py'
-      - 'scripts/check_docs_sync.py'
-      - '.github/workflows/documentation.yml'
   workflow_dispatch:
 
 permissions:
