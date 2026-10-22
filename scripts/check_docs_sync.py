@@ -27,13 +27,21 @@ def main():
     require(listed == expected, f"Site navigation differs from copied pages: missing={expected-listed}, extra={listed-expected}")
     require(all((DOCS / name).is_file() for name in PAGES), "A site source page is missing")
     require("| `ANALYSIS_mode` |" in render_parameters(), "Generated parameter reference lacks ANALYSIS_mode")
+    config_text = (ROOT / "nextflow.config").read_text()
     gate = "GUIDE_MAPPING_QC_min_overlap_to_rna_fraction"
-    configured = capture(rf"^\s*{gate}\s*=\s*([0-9.]+)$", (ROOT / "nextflow.config").read_text(), "guide overlap default")
+    configured = capture(rf"^\s*{gate}\s*=\s*([0-9.]+)$", config_text, "guide overlap default")
     schema = json.loads((ROOT / "nextflow_schema.json").read_text())
     schema_defaults = [spec["default"] for section in schema["$defs"].values()
                        for name, spec in section.get("properties", {}).items() if name == gate]
     require(len(schema_defaults) == 1 and float(configured) == schema_defaults[0], "Guide overlap default differs from schema")
     require(f"defaults to {configured}" in (DOCS / "guide_mapping_overlap_qc.md").read_text(), "Guide overlap guide has stale default")
+    for name, page in (("ANALYSIS_mode", "usage.md"),
+                       ("INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT", "output.md")):
+        configured_value = capture(rf"^\s*{name}\s*=\s*'([^']+)'$", config_text, f"{name} default")
+        values = [spec["default"] for section in schema["$defs"].values()
+                  for key, spec in section.get("properties", {}).items() if key == name]
+        require(len(values) == 1 and configured_value == values[0], f"{name} default differs from schema")
+        require(configured_value in (DOCS / page).read_text(), f"{page} does not mention {name} default")
 
     installer = (ROOT / "run_support/install_dashboard_plugin.sh").read_text()
     config = (ROOT / "conf/dashboard_plugin.config").read_text()
