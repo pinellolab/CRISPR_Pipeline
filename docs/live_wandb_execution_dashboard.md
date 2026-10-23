@@ -18,6 +18,13 @@ does not load external scripts. Plot data and image resolution are unchanged;
 enlarging a raster image cannot create additional detail. Embedded viewers that
 strip JavaScript may not support the interactive controls.
 
+The same viewer is built into the original static dashboard generators
+(`create_dashboard.py` and `create_dashboard_HASHING.py`), including the default
+and hashing Nextflow branches. Their figure buttons open the full plot, not its
+SVG icon. This works without the live observer plugin or W&B wrapper. Static
+reports do not establish the final Nextflow lifecycle status; completed-run
+error classification requires the advanced report's recorded status and trace.
+
 These are presentation-only changes. **Do not rerun mapping, filtering or
 inference just to update the interface.** The renderer applies them to future
 reports; existing advanced HTML reports can be updated while preserving the

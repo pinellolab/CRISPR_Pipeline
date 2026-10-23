@@ -51,3 +51,11 @@ def test_unknown_status_is_not_assumed_successful():
     result = presentation.enhance_dashboard_html(report('unknown'))
     assert 'class="failure-evidence"' in result
     assert 'id="execution-history"' not in result
+
+
+def test_v1_upgrade_keeps_one_viewer_and_is_idempotent():
+    old = presentation.enhance_dashboard_html(report('completed')).replace(presentation.MARKER, '<!-- dashboard-presentation-v1 -->')
+    updated = presentation.enhance_dashboard_html(old)
+    assert updated.count('<dialog id="plot-viewer"') == 1
+    assert updated.count('id="execution-history"') == 1
+    assert presentation.enhance_dashboard_html(updated) == updated

@@ -6,6 +6,8 @@ evaluation sections. These are static snapshots, not live server connections.
 They are **not a final manuscript benchmark release**.
 
 Click any plot to enlarge it, then use **+ / −**, **Fit**, or **Actual size**.
+These controls are also included in newly generated original pipeline reports,
+with or without hashing; they are not a Pages-only modification.
 For a successfully completed workflow, earlier execution errors are retained
 under the collapsed **Execution history & diagnostics** section at the end.
 Biological QC and skipped-analysis warnings remain in their original sections.

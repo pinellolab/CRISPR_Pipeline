@@ -5,7 +5,7 @@ import argparse
 import re
 from pathlib import Path
 
-MARKER = '<!-- dashboard-presentation-v1 -->'
+MARKER = '<!-- dashboard-presentation-v2 -->'
 
 VIEWER = r'''
 <style id="dashboard-presentation-style">
@@ -60,12 +60,12 @@ figure img { cursor: zoom-in; }
    label.value=Math.round(scale*100)+'%';
  }
  function fit() { zoom(Math.min(1,(viewport.clientWidth-16)/image.naturalWidth,(viewport.clientHeight-16)/image.naturalHeight)); viewport.scrollTo(0,0); }
- function openPlot(plot) {
+ function openPlot(plot,source=null,title=null) {
    opener=plot;
-   document.getElementById('plot-viewer-title').textContent=plot.alt || 'Plot';
-   image.alt=plot.alt || 'Expanded plot';
+   document.getElementById('plot-viewer-title').textContent=title || plot.alt || 'Plot';
+   image.alt=title || plot.alt || 'Expanded plot';
    image.onload=fit;
-   image.src=plot.currentSrc || plot.src;
+   image.src=source || plot.currentSrc || plot.src;
    document.getElementById('plot-download').href=image.src;
    if (!dialog.open) dialog.showModal();
    if (image.complete && image.naturalWidth) fit();
@@ -77,6 +77,18 @@ figure img { cursor: zoom-in; }
    plot.addEventListener('click',() => openPlot(plot));
    plot.addEventListener('keydown',event => { if (event.key==='Enter' || event.key===' ') { event.preventDefault(); openPlot(plot); } });
  });
+ // The original static report stores full plot paths on figure buttons;
+ // its child SVG is only an icon. Capture before the legacy inline onclick
+ // so one click opens the full plot here, not two competing modals.
+ document.addEventListener('click',event => {
+   const button=event.target.closest('button[data-imgsrc]');
+   if(!button) return;
+   const source=button.getAttribute('data-imgsrc');
+   if(!source) return;
+   event.preventDefault(); event.stopImmediatePropagation();
+   const title=button.closest('.card')?.querySelector('h3')?.textContent || 'Plot';
+   openPlot(button,source,title);
+ },true);
  dialog.addEventListener('click',event => {
    const action=event.target.dataset.plotAction;
    if(action==='in') zoom(scale*1.25);
@@ -98,6 +110,8 @@ def enhance_dashboard_html(document, run_status=None):
     """Retain all evidence and scientific warnings; change only its presentation."""
     if MARKER in document:
         return document
+    # Upgrade previously enhanced copies without duplicating dialogs/scripts.
+    document = re.sub(r'<!-- dashboard-presentation-v1 -->.*?(?=</body>)', '', document, flags=re.S)
     if run_status is None:
         match = re.search(r'class="live\s+([^" ]+)', document)
         run_status = match.group(1) if match else 'unknown'

@@ -6,6 +6,7 @@ import argparse
 import pandas as pd
 import numpy as np
 import pickle
+from dashboard_presentation import enhance_dashboard_html
 
 def generate_html_content(df, svg_mapping):
     html = '<div class="dashboard-container">'
@@ -250,7 +251,7 @@ def df_to_html_side_tabs(df, svg_mapping):
         </html>
         '''
 
-        return full_html
+        return enhance_dashboard_html(full_html)
 
     except Exception as e:
         error_html = f'''
