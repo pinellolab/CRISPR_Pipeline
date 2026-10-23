@@ -1,5 +1,35 @@
 # Live W&B execution dashboard
 
+## Completed-run execution history and plot inspection
+
+When the recorded workflow status is completed, earlier execution errors are
+retained in a separate, collapsed **Execution history & diagnostics** section
+after the scientific categories. They are not presented as an active pipeline
+failure. Task exceptions remain recorded; workflow completion alone does not
+prove that a failed or ignored task recovered. Result-quality warnings, skipped
+Scrublet sets, missing analyses and calibration caveats stay visible in their
+scientific categories. Failed or interrupted workflows retain prominent failure
+evidence.
+
+In a standalone browser or GitHub Pages, click any figure to open its full-size
+image. The viewer provides zoom in/out, fit-to-window, actual size, scrolling,
+download, keyboard activation and Escape to close. It is self-contained and
+does not load external scripts. Plot data and image resolution are unchanged;
+enlarging a raster image cannot create additional detail. Embedded viewers that
+strip JavaScript may not support the interactive controls.
+
+These are presentation-only changes. **Do not rerun mapping, filtering or
+inference just to update the interface.** The renderer applies them to future
+reports; existing advanced HTML reports can be updated while preserving the
+original:
+
+```bash
+python bin/dashboard_presentation.py old_dashboard.html updated_dashboard.html
+```
+
+The temporary Pages deployment applies the same transformation to its five
+report snapshots at build time; original server and Drive copies are unchanged.
+
 For figures from actual QC, inference, and calibration results and a link to
 a completed interactive dashboard, see the [result gallery](output-gallery.md).
 

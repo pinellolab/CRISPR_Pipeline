@@ -5,6 +5,11 @@ for review. Open a report to browse its QC, guide assignment, inference, and
 evaluation sections. These are static snapshots, not live server connections.
 They are **not a final manuscript benchmark release**.
 
+Click any plot to enlarge it, then use **+ / −**, **Fit**, or **Actual size**.
+For a successfully completed workflow, earlier execution errors are retained
+under the collapsed **Execution history & diagnostics** section at the end.
+Biological QC and skipped-analysis warnings remain in their original sections.
+
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin:24px 0">
 <article style="border:1px solid #ccd6e0;border-radius:10px;padding:18px"><h2>Gary Hon</h2><p>Completed calibration dashboard.</p><p><a href="../temporary-dashboards-20261023/GaryHonDataset.html" target="_blank" rel="noopener">Open dashboard ↗</a></p></article>
 <article style="border:1px solid #ccd6e0;border-radius:10px;padding:18px"><h2>Engreitz cc-Perturb-seq</h2><p>Completed October 23 dashboard.</p><p><a href="../temporary-dashboards-20261023/Engreitz_ccPerturb.html" target="_blank" rel="noopener">Open dashboard ↗</a></p></article>

@@ -10,10 +10,14 @@ import hashlib
 import html
 import json
 import re
+import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from dashboard_presentation import enhance_dashboard_html
 
 
 FAMILIES = [
@@ -1265,7 +1269,7 @@ def render(args: argparse.Namespace) -> str:
     failures = failure_content(
         trace_rows, getattr(args, "nextflow_log", None), getattr(args, "tail_lines", 30)
     )
-    return f'''<!doctype html>
+    document = f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CRISPR Pipeline · {html.escape(args.run_name)}</title>
 <style>
@@ -1293,6 +1297,7 @@ details.measurement-card{{border-color:var(--line);border-radius:12px;padding:0;
 <div class="graph-card"><div class="graph-head"><div><span class="eyebrow">Live dependency view</span><h2>Pipeline execution</h2></div><p>Click a family to inspect its QC and tasks</p></div><nav class="graph">{"".join(graph_nodes)}</nav></div>
 {failures}<div class="family-panels">{"".join(sections)}</div><footer>Generated {generated} · Self-contained W&amp;B HTML media · No credentials, FASTQs or unbounded task logs embedded</footer></div>
 </body></html>'''
+    return enhance_dashboard_html(document, args.status)
 
 
 def main() -> int:

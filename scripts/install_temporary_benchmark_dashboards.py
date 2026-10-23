@@ -5,7 +5,11 @@ import argparse
 import hashlib
 import json
 import tarfile
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'bin'))
+from dashboard_presentation import enhance_dashboard_html
 
 DIGEST = "286583b6948b424a1b7f911afc669f19acac306ab950021fc4a5b4142ec3703c"
 FILES = {
@@ -34,6 +38,7 @@ def install(archive_path, site_dir):
             payload = archive.extractfile(member).read()
             if b'<html' not in payload[:1024].lower():
                 raise ValueError(f'Not an HTML dashboard: {member.name}')
+            payload = enhance_dashboard_html(payload.decode('utf-8')).encode('utf-8')
             (target / member.name).write_bytes(payload)
             manifest.append(dict(file=member.name, bytes=len(payload), sha256=hashlib.sha256(payload).hexdigest()))
         (target / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
