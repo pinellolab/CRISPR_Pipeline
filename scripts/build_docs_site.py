@@ -15,6 +15,7 @@ DOCS = ROOT / "docs"
 DEST = ROOT / "build" / "docs-site"
 
 PAGES = (
+    "temporary-benchmarks.md",
     "usage.md",
     "plugin-installation.md",
     "samplesheet.md",

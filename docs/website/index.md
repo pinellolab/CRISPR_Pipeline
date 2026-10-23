@@ -4,6 +4,12 @@ From raw RNA/guide/HTO reads to auditable perturbation results.
 
 This website documents the current `dev` pipeline: modality-aware input preparation, per-measurement-set QC, guide calling, checkpoint and external-MuData continuation, SCEPTRE/PerTurbo inference, non-targeting calibration, final MuData, and the live execution dashboard.
 
+## Temporary benchmark dashboards
+
+[Open the five completed benchmark dashboards](temporary-benchmarks.md).
+These October 23, 2026 snapshots are temporarily public for review and are not
+a permanent benchmark release. The HTV2 and gemX v3 links use the MAD-off reruns.
+
 | If you want to… | Start with… |
 |---|---|
 | Prepare a new experiment | [Samplesheet](samplesheet.md), [SeqSpec](seqspec.md), [guide metadata](guide-metadata.md) |

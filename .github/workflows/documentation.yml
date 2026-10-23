@@ -29,6 +29,16 @@ jobs:
           python scripts/check_docs_sync.py
           python scripts/build_docs_site.py
           mkdocs build --strict
+      - name: Install temporary benchmark dashboards (remove after review)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/temporary-benchmark-dashboards"
+          gh release download temporary-benchmark-dashboards-20261023 \
+            --pattern dashboards.tar.gz --dir "$RUNNER_TEMP/temporary-benchmark-dashboards"
+          python scripts/install_temporary_benchmark_dashboards.py \
+            "$RUNNER_TEMP/temporary-benchmark-dashboards/dashboards.tar.gz"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

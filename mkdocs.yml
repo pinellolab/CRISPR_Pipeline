@@ -9,6 +9,7 @@ theme:
   name: readthedocs
 nav:
   - Home: index.md
+  - Temporary benchmark dashboards: temporary-benchmarks.md
   - Start here: usage.md
   - Install live dashboard plugin: plugin-installation.md
   - Inputs:
