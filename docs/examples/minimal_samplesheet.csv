@@ -1,0 +1,3 @@
+R1_path,R2_path,file_modality,measurement_sets,sequencing_run,lane,seqspec,barcode_onlist,guide_design,barcode_hashtag_map,cov_day
+/data/SET1_RNA_R1.fastq.gz,/data/SET1_RNA_R2.fastq.gz,scRNA,SET1,RUN1,1,/refs/rna_seqspec.yml,/refs/barcodes.txt,/refs/guide_metadata.tsv,,0
+/data/SET1_GUIDE_R1.fastq.gz,/data/SET1_GUIDE_R2.fastq.gz,gRNA,SET1,RUN1,1,/refs/guide_seqspec.yml,/refs/barcodes.txt,/refs/guide_metadata.tsv,,0

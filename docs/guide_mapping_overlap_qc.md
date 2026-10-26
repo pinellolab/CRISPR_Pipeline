@@ -3,8 +3,15 @@
 The default recovery gate uses `overlap_cells / rna_cells`: the fraction of
 high-quality RNA cells represented in the guide matrix, calculated separately
 for each measurement set. `GUIDE_MAPPING_QC_min_overlap_to_rna_fraction`
-defaults to 0.5. Minimum overlapping cells (20) and expected guide-feature
+defaults to 0.3. Minimum overlapping cells (20) and expected guide-feature
 recovery (0.5) remain independently enforced.
+
+The 30% default lets the two Gersbach HTV2 measurement sets with 34.7% and
+32.9% exact RNA–guide barcode overlap proceed; it does not improve their
+guide-capture rate or guarantee usable guide assignments. Inspect the
+per-measurement-set overlap, guide assignment, and downstream QC before
+interpreting this assay. Assays requiring higher recovery can set a stricter
+value in their dataset config.
 
 RNA has already undergone cell calling and RNA QC at this stage. The raw guide
 matrix may still contain many uncalled droplets. Dividing the shared barcodes

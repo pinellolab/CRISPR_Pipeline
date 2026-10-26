@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -112,7 +113,9 @@ def test_final_update_keeps_advanced_execution_dashboard(tmp_path):
     assert "Pipeline execution" in result
     assert "Pipeline family" in result
     assert "data:image/png;base64," in result
-    assert result != dashboard.read_text(encoding="utf-8")
+    assert result == dashboard.read_text(encoding="utf-8")
+    assert result == (dashboard_dir / "execution_dashboard.html").read_text(encoding="utf-8")
+    assert "data-imgsrc" in (dashboard_dir / "legacy_dashboard.html").read_text(encoding="utf-8")
 
 
 def test_wrapper_preserves_nextflow_exit_when_telemetry_is_unavailable(tmp_path):
@@ -133,7 +136,63 @@ def test_wrapper_preserves_nextflow_exit_when_telemetry_is_unavailable(tmp_path)
     assert json.loads((state / "status.json").read_text(encoding="utf-8")) == {
         "status": "failed", "exit_code": 7,
     }
-    assert "pipeline continues without W&B" in completed.stderr
+    assert "publishing local HTML only" in completed.stderr
+    assert (tmp_path / "results" / "pipeline_dashboard" / "execution_dashboard.html").exists()
+
+
+def test_wrapper_local_mode_keeps_official_html_without_wandb(tmp_path):
+    fake_nextflow = tmp_path / "nextflow"
+    fake_nextflow.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    fake_nextflow.chmod(0o755)
+    state = tmp_path / "state"
+    env = os.environ.copy()
+    env.pop("WB_IGVF", None)
+    env.update({
+        "WANDB_ENABLED": "false",
+        "WANDB_OUTDIR": str(tmp_path / "results"),
+        "WANDB_STATE_DIR": str(state),
+        "WANDB_PYTHON": sys.executable,
+    })
+    completed = subprocess.run(
+        [str(BIN / "run_with_wandb.sh"), str(fake_nextflow), "run", "main.nf"],
+        env=env, text=True, capture_output=True, check=False,
+    )
+    assert completed.returncode == 0
+    assert (tmp_path / "results" / "pipeline_dashboard" / "execution_dashboard.html").exists()
+    assert (tmp_path / "results" / "pipeline_dashboard" / "dashboard.html").read_bytes() == (
+        tmp_path / "results" / "pipeline_dashboard" / "execution_dashboard.html"
+    ).read_bytes()
+    assert "Pipeline execution" in (state / "pipeline_execution.html").read_text(encoding="utf-8")
+
+
+def test_local_dashboard_is_available_while_nextflow_is_running(tmp_path):
+    fake_nextflow = tmp_path / "nextflow"
+    fake_nextflow.write_text("#!/usr/bin/env bash\nsleep 2\n", encoding="utf-8")
+    fake_nextflow.chmod(0o755)
+    env = os.environ.copy()
+    env.pop("WB_IGVF", None)
+    env.update({
+        "WANDB_ENABLED": "false",
+        "WANDB_OUTDIR": str(tmp_path / "results"),
+        "WANDB_STATE_DIR": str(tmp_path / "state"),
+        "WANDB_PYTHON": sys.executable,
+        "WANDB_POLL_SECONDS": "0.05",
+    })
+    process = subprocess.Popen(
+        [str(BIN / "run_with_wandb.sh"), str(fake_nextflow), "run", "main.nf"],
+        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    dashboard = tmp_path / "results" / "pipeline_dashboard" / "execution_dashboard.html"
+    try:
+        deadline = time.monotonic() + 1.5
+        while not dashboard.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert dashboard.exists()
+        assert process.poll() is None
+        assert "Pipeline execution" in dashboard.read_text(encoding="utf-8")
+    finally:
+        stdout, stderr = process.communicate(timeout=5)
+    assert process.returncode == 0, (stdout, stderr)
 
 
 def test_wrapper_can_disable_wandb_without_python_or_credentials(tmp_path):
@@ -145,6 +204,7 @@ def test_wrapper_can_disable_wandb_without_python_or_credentials(tmp_path):
     env.pop("WB_IGVF", None)
     env.update({
         "WANDB_ENABLED": "false",
+        "WANDB_OUTDIR": str(tmp_path / "results"),
         "WANDB_PYTHON": str(tmp_path / "missing-python"),
         "WANDB_STATE_DIR": str(state),
     })

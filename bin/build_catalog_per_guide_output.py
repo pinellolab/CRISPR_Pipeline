@@ -110,6 +110,24 @@ def _assert_unique_keys(df: pd.DataFrame, keys: List[str], label: str) -> None:
         )
 
 
+def _is_false(values: pd.Series) -> pd.Series:
+    """``targeting == False`` whether the column arrived as bool or as text."""
+    if values.dtype == bool:
+        return ~values
+    return values.map(lambda v: isinstance(v, (bool, np.bool_)) and not v or str(v).strip().lower() == "false")
+
+
+def _drop_control_rows(merged: pd.DataFrame) -> pd.DataFrame:
+    """Non-targeting guides are tested, and reported for the calibration check,
+    but they are not catalog rows: a control guide has no genomic target."""
+    if "targeting" not in merged.columns:
+        return merged
+    control = _is_false(merged["targeting"]).to_numpy(dtype=bool)
+    if control.any():
+        print(f"Dropping {int(control.sum()):,} control-guide row(s) from the per-guide catalog.", flush=True)
+    return merged.loc[~control].reset_index(drop=True)
+
+
 def _build_guide_metadata(guide) -> pd.DataFrame:
     guide_var = guide.var.copy()
     if "guide_id" not in guide_var.columns:
@@ -285,6 +303,7 @@ def create_catalog_per_guide(
         for column in ("perturbo_cis_log2_fc", "_perturbo_cis_p_value", "perturbo_cis_q_value", "perturbo_cis_fc_se"):
             merged[column] = np.nan
     merged = merged.merge(_build_guide_metadata(mdata["guide"]), on="guide_id", how="left")
+    merged = _drop_control_rows(merged)
 
     for method in ("sceptre", "perturbo", "perturbo_cis"):
         raw = merged[f"_{method}_p_value"]
@@ -345,6 +364,7 @@ def build_catalog_per_guide_output(
         },
         derived_neglog10={"perturbo_cis_negLog10p": "perturbo_cis_p_value"},
         require_fillable_q=(("perturbo_cis_q_value", "perturbo_cis_p_value"),),
+        exclude_rows={"targeting": "is_false"},
         pvalue_floor=pvalue_floor,
     ):
         return None

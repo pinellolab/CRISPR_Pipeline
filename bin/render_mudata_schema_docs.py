@@ -38,7 +38,9 @@ def main() -> None:
         "",
         "Fields marked **Always** are part of the current pipeline contract. Optional fields depend on hashing, Scrublet, guide-assignment method, inference method, or available metadata. The pipeline deliberately preserves additional `guide.var` columns from the input guide metadata; therefore dataset-specific columns may appear beyond the currently observed extensions documented below. Current output keys use `local_analysis_*` and `global_analysis_*`; `cis_*` and `trans_*` are legacy aliases retained for interpretation of older files.",
         "",
-        "The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62aa45c6b35bffa2` and completed SCEPTRE, CLEANSER, enhancer-screen, Gasperini, and Replogle outputs.",
+        "The catalog began with an audit of `dev` commit `33d068dad7f8163c313bd6fa62aa45c6b35bffa2` and completed SCEPTRE, CLEANSER, enhancer-screen, Gasperini, and Replogle outputs. It is maintained against the current source; optional fields are not guaranteed in every assay. For a particular run, inspect its H5MU and recorded pipeline commit.",
+        "",
+        "Samplesheet `cov_*` fields are measurement-set-level annotations. Checkpoint `external_*` fields are per-cell numeric annotations. The selected inference design is recorded in `MuData.uns`; review it before comparing runs.",
         "",
     ]
     for section, group in sections.items():

@@ -1,0 +1,54 @@
+name: Documentation website
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install documentation builder
+        run: python -m pip install 'mkdocs>=1.6,<2'
+      - name: Assemble and validate website
+        run: |
+          python scripts/check_docs_sync.py
+          python scripts/build_docs_site.py
+          mkdocs build --strict
+      - name: Install temporary benchmark dashboards (remove after review)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/temporary-benchmark-dashboards"
+          gh release download temporary-benchmark-dashboards-20261023 \
+            --pattern dashboards.tar.gz --dir "$RUNNER_TEMP/temporary-benchmark-dashboards"
+          python scripts/install_temporary_benchmark_dashboards.py \
+            "$RUNNER_TEMP/temporary-benchmark-dashboards/dashboards.tar.gz"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/site
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -22,6 +22,7 @@ include { guide_mapping_qc_gate } from '../../modules/local/guide_mapping_qc_gat
 include { filter_hto_post_clone } from '../../modules/local/filter_hto_post_clone'
 include { postconcat_embedding_qc as embedding_before_clone } from '../../modules/local/postconcat_embedding_qc'
 include { postconcat_embedding_qc as embedding_after_clone } from '../../modules/local/postconcat_embedding_qc'
+include { preinference_checkpoint } from '../../modules/local/preinference_checkpoint'
 
 // Import hashing-specific modules
 include { CreateMuData } from '../../modules/local/CreateMuData'
@@ -30,9 +31,11 @@ include { filter_hashing } from '../../modules/local/filter_hashing'
 include { hashing_concat } from '../../modules/local/hashing_concat'
 include { evaluation_pipeline } from '../../subworkflows/local/evaluation_pipeline'
 include { tf_benchmark } from '../../modules/local/tf_benchmark'
+include { collect_benchmark_outputs } from '../../modules/local/collect_benchmark_outputs'
 
 include { dashboard_pipeline_HASHING } from '../../subworkflows/local/dashboard_pipeline_HASHING'
 include { dashboard_pipeline } from '../../subworkflows/local/dashboard_pipeline'
+include { check_igvf_dashboard } from '../../modules/local/check_igvf_dashboard'
 include { softwareVersionsToYAML } from '../../subworkflows/nf-core/utils_nfcore_pipeline'
 include { methodsDescriptionText } from '../../subworkflows/local/utils_nfcore_crispr_pipeline'
 
@@ -50,6 +53,7 @@ workflow CRISPR_PIPELINE {
 
     take:
     ch_samplesheet // channel: samplesheet read in from --input
+    ch_samplesheet_file
 
     main:
     ch_versions = Channel.empty()
@@ -128,7 +132,7 @@ workflow CRISPR_PIPELINE {
         seqSpecCheck_pipeline(ch_guide.first(), ch_guide_design)
     }
 
-    prepare_mapping_pipeline(ch_samples)
+    prepare_mapping_pipeline(ch_samples, ch_samplesheet_file)
 
     // Run mapping pipelines for each modality
     mapping_rna_pipeline(
@@ -250,6 +254,9 @@ workflow CRISPR_PIPELINE {
         } else {
             embedding_dirs = file("${workflow.projectDir}/assets/embedding_qc_empty")
         }
+        if (params.ANALYSIS_mode == 'checkpoint') {
+            preinference_checkpoint(mudata_for_inference, Preprocessing.gencode_gtf)
+        } else {
         Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
 
         evaluation_pipeline (
@@ -278,8 +285,11 @@ workflow CRISPR_PIPELINE {
         } else {
             benchmark_output_dir = Channel.value(file("${workflow.projectDir}/assets/benchmark_empty"))
         }
+        // The dashboard copies benchmark_output/ as it is; the non-targeting
+        // calibration check rides along under benchmark_output/calibration/.
+        benchmark_output_dir = collect_benchmark_outputs(benchmark_output_dir, Inference.calibration_output).collected
 
-        dashboard_pipeline_HASHING (
+        Dashboard = dashboard_pipeline_HASHING (
             seqSpecCheck_pipeline_HASHING.out.guide_seqSpecCheck_plots,
             seqSpecCheck_pipeline_HASHING.out.guide_position_table,
             seqSpecCheck_pipeline_HASHING.out.hashing_seqSpecCheck_plots,
@@ -301,6 +311,10 @@ workflow CRISPR_PIPELINE {
             benchmark_output_dir
 
             )
+        if (params.OUTPUT_IGVF_PACKAGE && params.INFERENCE_method == 'default' && params.ANALYSIS_mode == 'full') {
+            check_igvf_dashboard(Dashboard.dashboard_archive)
+        }
+        }
     }
     else {
         // Create MuData without hashing
@@ -356,6 +370,9 @@ workflow CRISPR_PIPELINE {
         } else {
             embedding_dirs = file("${workflow.projectDir}/assets/embedding_qc_empty")
         }
+        if (params.ANALYSIS_mode == 'checkpoint') {
+            preinference_checkpoint(mudata_for_inference, Preprocessing.gencode_gtf)
+        } else {
         Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
 
         evaluation_pipeline (
@@ -384,8 +401,11 @@ workflow CRISPR_PIPELINE {
         } else {
             benchmark_output_dir = Channel.value(file("${workflow.projectDir}/assets/benchmark_empty"))
         }
+        // The dashboard copies benchmark_output/ as it is; the non-targeting
+        // calibration check rides along under benchmark_output/calibration/.
+        benchmark_output_dir = collect_benchmark_outputs(benchmark_output_dir, Inference.calibration_output).collected
 
-        dashboard_pipeline (
+        Dashboard = dashboard_pipeline (
             seqSpecCheck_pipeline.out.guide_seqSpecCheck_plots,
             seqSpecCheck_pipeline.out.guide_position_table,
             Preprocessing.adata_rna,
@@ -400,6 +420,10 @@ workflow CRISPR_PIPELINE {
             evaluation_pipeline.out.control_output_dir,
             benchmark_output_dir
             )
+        if (params.OUTPUT_IGVF_PACKAGE && params.INFERENCE_method == 'default' && params.ANALYSIS_mode == 'full') {
+            check_igvf_dashboard(Dashboard.dashboard_archive)
+        }
+        }
     }
 
 

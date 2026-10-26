@@ -41,13 +41,23 @@
                     "mimetype": "text/csv",
                     "pattern": "^\\S+\\.(csv|tsv)$",
                     "description": "Path to the pipeline samplesheet.",
-                    "help_text": "The samplesheet provides modality-specific FASTQ paths and metadata used by the pipeline, including R1_path, R2_path, file_modality, measurement_sets, seqspec, barcode_onlist, guide_design, and barcode_hashtag_map when hashing is enabled."
+                    "help_text": "The samplesheet provides modality-specific FASTQ paths and metadata. Optional cov_* columns (for example cov_day, cov_replicate, cov_pool) are measurement-set covariates shared across rows of a set; unrelated extra columns are accepted but not modeled."
                 },
                 "outdir": {
                     "type": "string",
                     "format": "directory-path",
                     "default": "./pipeline_outputs",
                     "description": "Directory where final pipeline outputs are published."
+                },
+                "OUTPUT_IGVF_PACKAGE": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "For complete full runs with default four-table inference, create results/pipeline_results for IGVF upload and results/results_extra_files for the remaining outputs. Enabled by default. Checkpoint and inference-only continuation paths do not create a final package."
+                },
+                "OUTPUT_IGVF_TSV": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "When OUTPUT_IGVF_PACKAGE is enabled, stream the four canonical local/global inference tables to uncompressed TSV in the pinned base container. Disable only when TSV export is too large or not needed."
                 },
                 "DEMO_MODE": {
                     "type": "boolean",
@@ -157,7 +167,7 @@
                         "string",
                         "null"
                     ],
-                    "default": "GAGTACATGGGG",
+                    "default": "",
                     "description": "Recommended 12 bp sequence immediately upstream of the guide spacer.",
                     "help_text": "Use this when the guide spacer is preceded by a constant adapter/tag sequence. A 12 bp tag is recommended because it is usually specific enough to anchor the guide read while still tolerating normal read quality. When provided, mappingGuide preserves the guide read ID from the seqspec but resets the guide feature start/end to 0,0 so kb can search the whole guide read for the tagged spacer. Set null or an empty string to rely strictly on the feature coordinates encoded in the guide seqspec."
                 },
@@ -455,7 +465,7 @@
                 },
                 "GUIDE_MAPPING_QC_min_overlap_to_rna_fraction": {
                     "type": "number",
-                    "default": 0.5,
+                    "default": 0.3,
                     "minimum": 0,
                     "maximum": 1,
                     "description": "Minimum fraction of retained high-quality RNA cells sharing an exact barcode with the guide matrix, per measurement set."
@@ -544,6 +554,13 @@
                     "description": "Inference method to run.",
                     "help_text": "default runs local SCEPTRE, local PerTurbo, global PerTurbo, and writes the merged local/global output tables. sceptre runs SCEPTRE only. perturbo runs PerTurbo only. sceptre,perturbo runs both methods on the same cis pair set."
                 },
+                "INFERENCE_COV_MITOCHONDRIAL": {"type": "boolean", "default": false, "description": "Optionally condition both inference methods on the pre-feature-filter mitochondrial fraction."},
+                "INFERENCE_COV_BATCH": {"type": "boolean", "default": true, "description": "Condition both methods on measurement-set batch; set false only after considering confounding."},
+                "INFERENCE_COV_RIBOSOMAL": {"type": "boolean", "default": false, "description": "Condition on ribosomal fraction when available; fail if missing."},
+                "INFERENCE_COV_DETECTED_GENES": {"type": "boolean", "default": true, "description": "Condition on log detected RNA genes, enabled by PR #101."},
+                "INFERENCE_COV_GUIDE_COUNT": {"type": "boolean", "default": false, "description": "Condition on the number of assigned guides per cell; opt-in sensitivity analysis."},
+                "INFERENCE_COV_GUIDE_UMIS": {"type": "boolean", "default": true, "description": "Condition on log total guide UMIs, enabled by PR #101."},
+                "INFERENCE_COV_CUSTOM": {"type": "string", "default": "auto", "description": "auto selects all cov_* samplesheet columns; none disables them; alternatively give comma-separated cov_* names. Requested but collinear terms fail before inference."},
                 "INFERENCE_input_mudata": {
                     "type": [
                         "string",
@@ -552,6 +569,32 @@
                     "format": "file-path",
                     "default": null,
                     "description": "Input MuData file for -entry INFERENCE_FROM_MUDATA runs."
+                },
+                "ANALYSIS_mode": {
+                    "type": "string",
+                    "default": "checkpoint",
+                    "enum": ["checkpoint", "continue", "full"],
+                    "description": "Checkpoint before inference by default; continue explicitly from the published MuData, or opt into an unattended full run."
+                },
+                "ANALYSIS_parent_manifest": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Published preinference_manifest.json required by ANALYSIS_mode=continue."
+                },
+                "ANALYSIS_input_mudata": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Optional edited copy of the parent pre-inference H5MU; raw counts, guides, and guide assignments must remain unchanged."
+                },
+                "ANALYSIS_keep_cells_tsv": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Optional external cell allowlist with one cell_id column."
+                },
+                "ANALYSIS_covariates_tsv": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Optional cell_id-keyed numeric covariates; names must begin with external_."
                 },
                 "INFERENCE_target_guide_pairing_strategy": {
                     "type": "string",
@@ -683,6 +726,27 @@
                     "type": "string",
                     "default": "normal",
                     "description": "Perturbation-effect prior passed to PerTurbo v2."
+                },
+                "ENABLE_NTC_CALIBRATION": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run the non-targeting calibration pass after inference and publish pipeline_outputs/calibration/.",
+                    "help_text": "A second, small SCEPTRE run tests the non-targeting pseudo-elements (the non-targeting|N buckets) as ordinary targets on three matched pair sets, and the report joins them to PerTurbo's global rows for QQ plots, empirical rates at 0.01/0.05/0.10, method agreement and the direct-target-versus-NTC AUPRC and AUROC for both methods. Under the nt_cells contrast the NT-only cells are duplicated as the reference so SCEPTRE's test mirrors PerTurbo's self-included control test. Requires INFERENCE_method 'default' or 'sceptre,perturbo'; the main run's pairs, BH families and tables are not changed."
+                },
+                "NTC_CALIBRATION_max_local_pairs": {
+                    "type": "integer",
+                    "default": 10000,
+                    "description": "Cap on element-level pairs in the local calibration set (the main local pairs with each targeting element swapped for a random non-targeting bucket); 0 removes the cap."
+                },
+                "NTC_CALIBRATION_max_global_pairs": {
+                    "type": "integer",
+                    "default": 10000,
+                    "description": "Cap on element-level pairs in the global calibration set (every non-targeting bucket against a sample of all genes); 0 removes the cap."
+                },
+                "NTC_CALIBRATION_seed": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Seed for the bucket substitution and gene sampling of the calibration pair sets."
                 },
                 "INFERENCE_PERTURBO_WRITE_MUDATA": {
                     "type": "boolean",

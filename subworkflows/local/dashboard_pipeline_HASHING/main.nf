@@ -28,7 +28,7 @@ workflow dashboard_pipeline_HASHING {
     main:
 
     if (params.INFERENCE_method == 'default') {
-        createDashboard_HASHING_default(
+        DashboardProcess = createDashboard_HASHING_default(
             guide_seqSpecCheck_plots,
             guide_position_table,
             hashing_seqSpecCheck_plots,
@@ -53,7 +53,7 @@ workflow dashboard_pipeline_HASHING {
             benchmark_output_dir
         )
     } else {
-        createDashboard_HASHING(
+        DashboardProcess = createDashboard_HASHING(
             guide_seqSpecCheck_plots,
             guide_position_table,
             hashing_seqSpecCheck_plots,
@@ -78,5 +78,8 @@ workflow dashboard_pipeline_HASHING {
             benchmark_output_dir
         )
     }
+
+    emit:
+    dashboard_archive = DashboardProcess.dashboard_archive
 
 }

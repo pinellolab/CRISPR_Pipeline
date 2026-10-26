@@ -13,6 +13,12 @@
 
 # CRISPR Pipeline
 
+Current documentation: [CRISPR Pipeline website](https://pinellolab.github.io/CRISPR_Pipeline/) — [start here](docs/usage.md), [run recipes](docs/run-recipes.md), [samplesheet](docs/samplesheet.md), [SeqSpec](docs/seqspec.md), [guide metadata](docs/guide-metadata.md), [checkpoint continuation](docs/preinference_checkpoint_user_guide.md), and [MuData field reference](docs/mudata_schema.md). The default `ANALYSIS_mode` is `checkpoint`; specify `full` for an uninterrupted inference run.
+
+The optional integrated dashboard plugin is currently bundled with this
+repository but requires a one-time local installation before use. See the
+[plugin installation guide](docs/plugin-installation.md).
+
 Temporary normalization, PCA/UMAP and pre/post-clone measurement-set QC are
 documented in [Post-concatenation embedding QC](docs/postconcat_embedding_qc.md).
 
@@ -229,6 +235,10 @@ The complete machine-readable QC output catalog is available as
 | `INFERENCE_PERTURBO_LIKELIHOOD` | `negbin` | PerTurbo likelihood name | Likelihood family passed to PerTurbo v2. |
 | `INFERENCE_PERTURBO_PRIOR` | `normal` | PerTurbo prior name | Perturbation-effect prior passed to PerTurbo v2. |
 | `INFERENCE_PERTURBO_CRT_POOL` | `from-moi` | `from-moi`, `auto`, `all-cells`, `control-anchored` | Per-method override for PerTurbo only. `from-moi` is the historical default and counts as unset, so `INFERENCE_control_group` decides; any other value overrides the shared setting for PerTurbo alone and the pipeline logs that the two methods are then deliberately inconsistent. |
+| `ENABLE_NTC_CALIBRATION` | `true` | `true`, `false` | Run the non-targeting calibration pass after inference: a second, small SCEPTRE run on the non-targeting pseudo-elements, joined to PerTurbo's global rows for calibration curves, method agreement and the direct-target-versus-NTC AUPRC of both methods, published to `pipeline_outputs/calibration/`. Needs `INFERENCE_method` `default` or `sceptre,perturbo`. See [Non-targeting calibration](#non-targeting-calibration). |
+| `NTC_CALIBRATION_max_local_pairs` | `10000` | integer | Cap on element-level pairs in the local calibration set (the main local pairs with each targeting element swapped for a random non-targeting bucket). `0` removes the cap. |
+| `NTC_CALIBRATION_max_global_pairs` | `10000` | integer | Cap on element-level pairs in the global calibration set (every non-targeting bucket against a sample of all genes). `0` removes the cap. |
+| `NTC_CALIBRATION_seed` | `0` | integer | Seed for the bucket substitution and gene sampling of the calibration pair sets. |
 | `INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT` | `parquet` | `tsv.gz`, `parquet` | Serialization used for the global-analysis (all-by-all) PerTurbo v2 result tables and the final local/global/catalog result tables. Requires `pyarrow` in the base image (pinned by default); set `tsv.gz` for compatibility with older images. |
 | `INFERENCE_control_group` | `auto` | `auto`, `nt_cells`, `complement` | The cells a perturbation is compared against, for **both** SCEPTRE and PerTurbo, in SCEPTRE's vocabulary. `nt_cells` compares each perturbation with the non-targeting cells (PerTurbo's control-anchored pool); `complement` compares it with every other cell (PerTurbo's all-cells pool); `auto` takes whichever `Multiplicity_of_infection` implies (`low` -> `nt_cells`, `high` -> `complement`), and when the MOI is neither, PerTurbo measures the design while SCEPTRE falls back to `complement`. `nt_cells` is unavailable for a high-MOI screen and the run fails rather than substituting. See [Control group](#control-group). |
 | `INFERENCE_SCEPTRE_side` | `both` | `both`, `left`, `right` | Alternative-hypothesis side passed to SCEPTRE inference. |
@@ -379,8 +389,10 @@ behaviour is unchanged.
 The resolution is logged once, at the start of the inference subworkflow, as a
 single line naming the declared MOI, the setting, what each method resolved to,
 and why. It is also recorded beside the results: `control_group_resolution.json`
-and a `pipeline_control_group` block inside PerTurbo's `crt_metadata.json`, and
-`sceptre_control_group.json` on the SCEPTRE side.
+at the top of PerTurbo's `perturbo_v2_outputs/`, and `sceptre_control_group.json`
+on the SCEPTRE side. PerTurbo's own `crt_metadata.json` files are left untouched:
+they are hashed into the conversion manifest, and a conversion-only recovery
+verifies those hashes.
 
 ### When `auto` is wrong: check where the control cells sit
 
@@ -418,6 +430,59 @@ change.** High-MOI screens are unaffected, and PerTurbo's behaviour is unchanged
 for both. To reproduce the old low-MOI SCEPTRE behaviour, set
 `INFERENCE_control_group = 'complement'` — which also switches PerTurbo to the
 all-cells pool — or override SCEPTRE alone as described above.
+
+### The mode both methods receive is settled from the data
+
+`auto` is only half decided by the parameters: whether a screen is low-MOI and
+whether it has a control pool are properties of the assignments. Before
+inference, `resolve_inference_mode` measures the full guide matrix once (the
+largest number of guides in any cell, the multi-guide cells, the cells carrying
+only control guides) and writes `pipeline_outputs/inference_mode.json` with
+explicit values for both methods: SCEPTRE's `control_group` and MOI mode, and
+PerTurbo's `--crt-pool`, never `from-moi`. Under `auto` the non-targeting
+contrast is chosen when the analysis is low-MOI (declared low, or every cell
+carries at most one guide) and at least one cell carries only control guides;
+otherwise both methods use the complement. Previously the PerTurbo adapter made
+that switch on its own while the SCEPTRE driver kept the complement it had
+been handed, so a screen declared high-MOI whose cells each carry one guide ran
+the two methods against different cells. One residual difference remains and is
+recorded in the JSON: under an explicit `complement` on a low-MOI screen,
+SCEPTRE's low-MOI QC sets multi-guide cells aside while PerTurbo's all-cells
+pool keeps them.
+
+## Non-targeting calibration
+
+Both methods test the non-targeting pseudo-elements (`non-targeting|N`, the
+buckets `annotate_intended_target_groups` builds), but until now only PerTurbo
+reported them: SCEPTRE tests only the pairs it is handed and, under the
+non-targeting contrast, refuses non-targeting targets outright. With
+`ENABLE_NTC_CALIBRATION` (default on) the pipeline runs SCEPTRE once more on a
+small input in which those buckets are ordinary targets named
+`ntc_calibration|N`, on three pair sets matched to PerTurbo's rows: the main
+local pairs with each targeting element swapped for a random bucket (`local`),
+every bucket against a sample of all genes (`global`, capped by
+`NTC_CALIBRATION_max_global_pairs`), and every bucket against the screen's
+direct-target genes (`direct_target`). Under the `nt_cells` contrast the
+NT-only cells are duplicated once more as the reference population, so SCEPTRE
+tests each bucket against a pool that contains its own cells, which is what
+PerTurbo's control-element test does under the control-anchored pool; both are
+then mildly conservative, by about the bucket's share of the pool, and the
+report states that share. Under `complement` nothing is duplicated.
+
+`pipeline_outputs/calibration/` holds the joined per-guide and per-element
+tables, a calibration summary (pairs tested, fractions below 0.01, 0.05 and
+0.10, a KS distance, per level, pair set and method), the method agreement on
+the same pairs, the direct-target-versus-NTC AUPRC and AUROC the controls
+evaluation has always reported for PerTurbo, now for both methods on the same
+pairs, both with negatives drawn 1:1 (one draw, shared) and with every
+available negative, QQ and precision-recall plots, and a cells-per-guide and cells-per-element comparison
+between non-targeting and targeting sets. The same directory is copied into the
+dashboard under `benchmark_output/calibration/`. The main run is unchanged:
+its pairs table, its BH families and its tables do not see the calibration
+pairs. PerTurbo's non-targeting rows stay in the global tables with their
+p-values but carry no q-value, because control elements are no longer part of
+the transcriptome-wide BH family, and the catalog tables no longer contain
+control guides or control pseudo-elements.
 
 ## 🎯 Resource Sizing Guidelines
 
@@ -511,6 +576,7 @@ The local-analysis outputs report guide-gene or target-element-gene tests restri
 | `perturbo_cis_q_value` | PerTurbo's q-value over the requested (cis) pairs alone — the family `sceptre_q_value` is corrected over, so these two are directly comparable. `perturbo_q_value` is corrected over every pair in the screen and is therefore stricter. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
+| `perturbo_crt_*` | PerTurbo's per-pair CRT diagnostics, carried through as PerTurbo emits them: `perturbo_crt_low_information`, `perturbo_crt_observed_nonzero`, `perturbo_crt_expected_nonzero`, `perturbo_crt_saddlepoint_valid` and, from the PerTurbo release that adds the Chernoff tail fallback, `perturbo_crt_tail_failure_reason`, `perturbo_crt_used_chernoff`, `perturbo_crt_used_conservative_one` and `perturbo_crt_root_residual_null_sd`. Present when the PerTurbo version emitted them; none of them filters a row, and they are not carried into the catalog tables. |
 | `guide_sequence` | Guide spacer sequence from guide metadata. |
 | `guide_type` | Guide type from guide metadata. |
 | `targeting` | Whether the guide is annotated as targeting. |
@@ -545,12 +611,14 @@ The local-analysis outputs report guide-gene or target-element-gene tests restri
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this local-analysis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
-| `element_id` | Element identifier (equal to `element_name` in this pipeline). |
-| `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
-| `element_chr` | Element chromosome. |
-| `element_start` | Element start coordinate. |
-| `element_end` | Element end coordinate. |
-| `element_name` | Element name mapped from `intended_target_name`. |
+| `perturbo_crt_*` | PerTurbo's per-pair CRT diagnostics, carried through as PerTurbo emits them: `perturbo_crt_low_information`, `perturbo_crt_observed_nonzero`, `perturbo_crt_expected_nonzero`, `perturbo_crt_saddlepoint_valid` and, from the PerTurbo release that adds the Chernoff tail fallback, `perturbo_crt_tail_failure_reason`, `perturbo_crt_used_chernoff`, `perturbo_crt_used_conservative_one` and `perturbo_crt_root_residual_null_sd`. Present when the PerTurbo version emitted them; none of them filters a row, and they are not carried into the catalog tables. |
+| `genomic_element_id` | Element identifier (equal to `genomic_element_name` in this pipeline). |
+| `genomic_element_type` | Element type derived from guide metadata (`guide.var['type']`). |
+| `genomic_element_chr` | Element chromosome. |
+| `genomic_element_start` | Element start coordinate. |
+| `genomic_element_end` | Element end coordinate. |
+| `genomic_element_name` | Element name mapped from `intended_target_name`. |
+
 | `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
 | `num_guides` | Number of unique guides aggregated into the element result. |
 | `gene_name` | Gene symbol from local gene metadata when available. |
@@ -579,6 +647,7 @@ The global-analysis outputs report genome-wide, all-by-all PerTurbo tests.
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this global-analysis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
+| `perturbo_crt_*` | PerTurbo's per-pair CRT diagnostics, carried through as PerTurbo emits them: `perturbo_crt_low_information`, `perturbo_crt_observed_nonzero`, `perturbo_crt_expected_nonzero`, `perturbo_crt_saddlepoint_valid` and, from the PerTurbo release that adds the Chernoff tail fallback, `perturbo_crt_tail_failure_reason`, `perturbo_crt_used_chernoff`, `perturbo_crt_used_conservative_one` and `perturbo_crt_root_residual_null_sd`. Present when the PerTurbo version emitted them; none of them filters a row, and they are not carried into the catalog tables. |
 | `guide_sequence` | Guide spacer sequence from guide metadata. |
 | `guide_type` | Guide type from guide metadata. |
 | `targeting` | Whether the guide is annotated as targeting. |
@@ -608,12 +677,14 @@ The global-analysis outputs report genome-wide, all-by-all PerTurbo tests.
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value, computed within this global-analysis output table. |
 | `perturbo_fc_se` | PerTurbo posterior standard error for the log2 fold-change estimate. |
 | `perturbo_negLog10p` | PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. |
-| `element_id` | Element identifier (equal to `element_name` in this pipeline). |
-| `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
-| `element_chr` | Element chromosome. |
-| `element_start` | Element start coordinate. |
-| `element_end` | Element end coordinate. |
-| `element_name` | Element name mapped from `intended_target_name`. |
+| `perturbo_crt_*` | PerTurbo's per-pair CRT diagnostics, carried through as PerTurbo emits them: `perturbo_crt_low_information`, `perturbo_crt_observed_nonzero`, `perturbo_crt_expected_nonzero`, `perturbo_crt_saddlepoint_valid` and, from the PerTurbo release that adds the Chernoff tail fallback, `perturbo_crt_tail_failure_reason`, `perturbo_crt_used_chernoff`, `perturbo_crt_used_conservative_one` and `perturbo_crt_root_residual_null_sd`. Present when the PerTurbo version emitted them; none of them filters a row, and they are not carried into the catalog tables. |
+| `genomic_element_id` | Element identifier (equal to `genomic_element_name` in this pipeline). |
+| `genomic_element_type` | Element type derived from guide metadata (`guide.var['type']`). |
+| `genomic_element_chr` | Element chromosome. |
+| `genomic_element_start` | Element start coordinate. |
+| `genomic_element_end` | Element end coordinate. |
+| `genomic_element_name` | Element name mapped from `intended_target_name`. |
+
 | `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
 | `num_guides` | Number of unique guides aggregated into the element result. |
 | `gene_name` | Gene symbol from local gene metadata when available. |
@@ -633,12 +704,12 @@ The global-analysis outputs report genome-wide, all-by-all PerTurbo tests.
 | `perturbo_q_value` | BH-adjusted PerTurbo p-value from global-analysis per-element results. |
 | `perturbo_fc_se` | PerTurbo posterior standard error from global-analysis per-element results. |
 | `perturbo_negLog10p` | Catalog-facing PerTurbo significance score: `-log10(max(perturbo_p_value, 1e-300))`. Prefer this for catalog/export consumers that should avoid extremely small raw p-values. |
-| `element_id` | Element identifier (equal to `element_name` in this pipeline). |
-| `element_type` | Element type derived from guide metadata (`guide.var['type']`). |
-| `element_chr` | Element chromosome. |
-| `element_start` | Element start coordinate. |
-| `element_end` | Element end coordinate. |
-| `element_name` | Element name mapped from `intended_target_name`. |
+| `genomic_element_id` | Element identifier (equal to `genomic_element_name` in this pipeline). |
+| `genomic_element_type` | Element type derived from guide metadata (`guide.var['type']`). |
+| `genomic_element_chr` | Element chromosome. |
+| `genomic_element_start` | Element start coordinate. |
+| `genomic_element_end` | Element end coordinate. |
+| `genomic_element_name` | Element name mapped from `intended_target_name`. |
 | `guide_ids` | Sorted unique guide IDs for the element, separated by `;`. |
 | `num_guides` | Number of unique guides aggregated into the element result. |
 | `gene_name` | Gene symbol from local gene metadata when available. |
@@ -929,7 +1000,7 @@ write a small local handoff consumed by the sidecar. All Axiom HTTP and dashboar
 errors are warnings: the wrapper returns the Nextflow exit code and telemetry
 cannot terminate an otherwise healthy pipeline.
 
-### Optional live W&B execution dashboard
+### Official live execution dashboard (local HTML and optional W&B)
 
 `bin/render_wandb_pipeline_dashboard.py` is the advanced white execution dashboard
 used for the recent Gary Hon and H9 reviews. It groups tasks into Input QC,
@@ -937,7 +1008,9 @@ SeqSpec, Mapping, Preprocessing, MuData, Guide assignment, Post-concatenation QC
 Inference, Evaluation, and Final dashboard. The family tabs work inside W&B's
 HTML viewer without JavaScript. Measurement-set cards, filter flows, live task
 states, mapping/guide QC, and published plots appear as their source artifacts
-become available. The final pipeline dashboard remains a separate local report.
+become available. The same advanced page is the supported local and W&B
+dashboard; the older report is retained only as a bounded source of final
+tables and as a direct-Nextflow fallback.
 
 ```bash
 python bin/render_wandb_pipeline_dashboard.py \
@@ -986,12 +1059,14 @@ instead of a Step selector containing stale copies. The
 interface retains its dependency graph, process-family panels, searchable task
 tables, bounded failure evidence, QC metrics, and image galleries while it is
 running and after it finishes. Live refreshes use the cumulative
-`WANDB_MAX_BYTES` budget (400 MB by default), while the completed dashboard has
+`WANDB_MAX_BYTES` budget (2 GB by default), while the completed dashboard has
 a separate reserved upload allowance.
 
-The pipeline's ordinary `pipeline_dashboard/dashboard.html` is used only as a
-bounded source of final inference rows and evaluation artifacts. It never
-replaces the advanced execution dashboard. `WANDB_MAX_FINAL_HTML_BYTES`
+During the run the advanced page is saved to
+`pipeline_dashboard/execution_dashboard.html`. On completion it also replaces
+`pipeline_dashboard/dashboard.html`; the older report is retained as
+`pipeline_dashboard/legacy_dashboard.html` for bounded final inference rows
+and evaluation artifacts. `WANDB_MAX_FINAL_HTML_BYTES`
 controls the per-file HTML limit and defaults to 100 MB. The final snapshot is
 attempted independently of the live-refresh byte budget. Live replacement is
 enabled by default; set `WANDB_PUBLISH_LIVE_HTML=false` only to suppress
@@ -1028,11 +1103,12 @@ bin/run_with_wandb.sh nextflow \
   -resume
 ```
 
-Set `WANDB_ENABLED=false` on the same wrapper command to run Nextflow without
-starting W&B or requiring its Python package or credentials. The wrapper
-always returns the Nextflow exit code; W&B import, authentication, rendering,
-network and upload failures only produce warnings. Preserve the local
-`current_dashboard.html` and `wandb.log` in the run's provenance directory.
+Set `WANDB_ENABLED=false` on the same wrapper command for the official local
+HTML dashboard without online W&B upload. If `WB_IGVF` or the W&B package is
+missing, the wrapper falls back to that local HTML automatically. The wrapper
+always returns the Nextflow exit code; W&B authentication, network and upload
+failures only produce warnings. Preserve the local advanced HTML and the
+telemetry state directory alongside run provenance.
 Run the wrapper in a detached session for long local runs.
 
 ### Troubleshooting

@@ -5,6 +5,7 @@ import anndata as ad
 import h5py
 import mudata as mu
 import numpy as np
+import pytest
 import pandas as pd
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -82,6 +83,9 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
             "guide_id": ["g1", "g2"],
             "log2_fc": [0.5, -0.5],
             "p_value": [0.01, 0.2],
+            # The adapter's per-pair CRT diagnostics ride along for debugging.
+            "perturbo_crt_low_information": [True, False],
+            "perturbo_crt_observed_nonzero": [0, 15],
         }
     )
     perturbo_element = pd.DataFrame(
@@ -93,6 +97,7 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
             "intended_target_end": [150, 250],
             "log2_fc": [0.5, -0.5],
             "p_value": [0.01, 0.2],
+            "perturbo_crt_low_information": [False, True],
         }
     )
 
@@ -121,6 +126,12 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
 
     guide_out = pd.read_csv(tmp_path / "per_guide_output.tsv.gz", sep="\t")
     element_out = pd.read_csv(tmp_path / "per_element_output.tsv.gz", sep="\t")
+
+    assert list(guide_out.sort_values("guide_id")["perturbo_crt_low_information"]) == [True, False]
+    assert list(guide_out.sort_values("guide_id")["perturbo_crt_observed_nonzero"]) == [0, 15]
+    # The element merge reorders through a fixed preferred list; the diagnostics
+    # must survive that too (they were lost here on the first TAP-seq head run).
+    assert list(element_out.sort_values("gene_id")["perturbo_crt_low_information"]) == [False, True]
 
     for observed in (guide_out, element_out):
         assert "sceptre_q_value" in observed.columns
@@ -157,13 +168,13 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
     assert np.isclose(guide_out.loc[0, "perturbo_negLog10p"], 2.0)
     assert guide_out.loc[0, "gene_name"] == "SYM1"
     assert guide_out.loc[0, "nPerturbedCells"] == 2
-    assert "element_id" in element_out.columns
-    assert "element_type" in element_out.columns
+    assert "genomic_element_id" in element_out.columns
+    assert "genomic_element_type" in element_out.columns
     assert "guide_ids" in element_out.columns
     assert "num_guides" in element_out.columns
     assert "gene_name" in element_out.columns
     assert "nPerturbedCells" in element_out.columns
-    assert element_out.loc[0, "element_id"] == "target1"
+    assert element_out.loc[0, "genomic_element_id"] == "target1"
     assert element_out.loc[0, "guide_ids"] == "g1"
     assert element_out.loc[0, "num_guides"] == 1
     assert element_out.loc[0, "gene_name"] == "SYM1"
@@ -174,7 +185,7 @@ def test_merge_method_results_preserves_sceptre_se_and_adds_q_values(tmp_path, m
     assert "perturbo_q_value" in stored.columns
     assert "sceptre_negLog10p" in stored.columns
     assert "perturbo_negLog10p" in stored.columns
-    assert "element_id" in stored.columns
+    assert "genomic_element_id" in stored.columns
     assert "num_guides" in stored.columns
     assert "nPerturbedCells" in stored.columns
 
@@ -321,8 +332,8 @@ def test_merge_local_global_results_writes_q_columns_to_outputs_and_mudata(
         "perturbo_fc_se", "perturbo_negLog10p",
     ]
     element_columns = [
-        "element_id", "element_type", "element_chr", "element_start",
-        "element_end", "element_name", "guide_ids", "num_guides", "gene_name",
+        "genomic_element_id", "genomic_element_type", "genomic_element_chr", "genomic_element_start",
+        "genomic_element_end", "genomic_element_name", "guide_ids", "num_guides", "gene_name",
         "nPerturbedCells",
     ]
     intended_target_columns = [
@@ -367,16 +378,16 @@ def test_merge_local_global_results_writes_q_columns_to_outputs_and_mudata(
     assert "sceptre_negLog10p" in cis_guide_observed.columns
     assert "perturbo_negLog10p" in cis_guide_observed.columns
     assert "perturbo_negLog10p" in trans_guide_observed.columns
-    assert "element_id" in cis_observed.columns
-    assert "element_type" in cis_observed.columns
+    assert "genomic_element_id" in cis_observed.columns
+    assert "genomic_element_type" in cis_observed.columns
     assert "guide_ids" in cis_observed.columns
     assert "num_guides" in cis_observed.columns
     assert "gene_name" in cis_observed.columns
     assert "nPerturbedCells" in cis_observed.columns
-    assert "element_id" in trans_observed.columns
+    assert "genomic_element_id" in trans_observed.columns
     assert "guide_ids" in trans_observed.columns
     assert "num_guides" in trans_observed.columns
-    assert cis_observed.loc[0, "element_id"] == "target1"
+    assert cis_observed.loc[0, "genomic_element_id"] == "target1"
     assert cis_observed.loc[0, "gene_name"] == "SYM1"
     assert np.isclose(cis_observed.loc[0, "sceptre_negLog10p"], 2.0)
     assert np.isclose(trans_observed.loc[0, "perturbo_negLog10p"], -np.log10(0.05))
@@ -390,7 +401,7 @@ def test_merge_local_global_results_writes_q_columns_to_outputs_and_mudata(
     assert "perturbo_q_value" in stored_trans.columns
     assert "sceptre_negLog10p" in stored_cis.columns
     assert "perturbo_negLog10p" in stored_trans.columns
-    assert "element_id" in stored_cis.columns
+    assert "genomic_element_id" in stored_cis.columns
 
 
 def test_merge_local_global_results_uses_fast_parquet_path(tmp_path, monkeypatch):
@@ -432,6 +443,9 @@ def test_merge_local_global_results_uses_fast_parquet_path(tmp_path, monkeypatch
             "perturbo_fc_se": np.array([0.1, 0.2], dtype=np.float32),
             "p_value": np.array([0.05, 0.5], dtype=np.float32),
             "perturbo_q_value": [0.1, 0.5],
+            # The adapter's per-pair CRT diagnostics must survive the streaming path.
+            "perturbo_crt_low_information": [True, False],
+            "perturbo_crt_used_chernoff": [False, True],
         }
     )
     global_element = pd.DataFrame(
@@ -481,14 +495,15 @@ def test_merge_local_global_results_uses_fast_parquet_path(tmp_path, monkeypatch
         "guide_start", "guide_end", "guide_strand", "pam",
         "intended_target_name", "intended_target_chr",
         "intended_target_start", "intended_target_end", "gene_name",
-        "nPerturbedCells",
+        "nPerturbedCells", "perturbo_crt_low_information", "perturbo_crt_used_chernoff",
     ]
+    assert list(observed_guide.sort_values("guide_id")["perturbo_crt_used_chernoff"]) == [False, True]
     assert list(observed_element.columns) == [
         "gene_id", "intended_target_name", "intended_target_chr",
         "intended_target_start", "intended_target_end", "perturbo_log2_fc",
         "perturbo_p_value", "perturbo_q_value", "perturbo_fc_se",
-        "perturbo_negLog10p", "element_id", "element_type", "element_chr",
-        "element_start", "element_end", "element_name", "guide_ids",
+        "perturbo_negLog10p", "genomic_element_id", "genomic_element_type", "genomic_element_chr",
+        "genomic_element_start", "genomic_element_end", "genomic_element_name", "guide_ids",
         "num_guides", "gene_name", "nPerturbedCells",
     ]
     assert np.allclose(
@@ -534,3 +549,44 @@ def test_coordinates_typed_differently_on_the_two_sides_still_merge(tmp_path):
     assert len(matched) == 1 and matched["intended_target_name_s"].iloc[0] == "E1"
     assert left["__merge_intended_target_start"].tolist() == ["100", "200"]
     assert right["__merge_intended_target_start"].tolist() == ["100", "__NA__"]
+
+
+def test_add_perturbo_columns_leaves_a_missing_q_where_the_adapter_left_it():
+    """A missing q beside a present p marks a control row; it is never refilled."""
+    frame = pd.DataFrame(
+        {
+            "gene_id": ["GENE1", "GENE2", "GENE3"],
+            "guide_id": ["g1", "nt1", "g2"],
+            "log2_fc": [0.4, 0.0, -0.4],
+            "p_value": [0.05, 0.001, 0.5],
+            "perturbo_q_value": [0.1, np.nan, 0.5],
+        }
+    )
+    out = merge_local_global_results._add_perturbo_columns(frame)
+    assert np.isnan(out.loc[1, "perturbo_q_value"])
+    assert list(out.loc[[0, 2], "perturbo_q_value"]) == [0.1, 0.5]
+
+    # Without any q column the family is still computed here, as before.
+    legacy = merge_local_global_results._add_perturbo_columns(frame.drop(columns="perturbo_q_value"))
+    assert legacy["perturbo_q_value"].notna().all()
+
+
+def test_fast_enrichment_accepts_a_missing_q_beside_a_present_p(tmp_path):
+    pytest.importorskip("polars")
+    import fast_result_enrichment
+
+    source = tmp_path / "global.parquet"
+    pd.DataFrame(
+        {
+            "gene_id": ["GENE1", "GENE2"],
+            "guide_id": ["g1", "nt1"],
+            "log2_fc": np.array([0.4, 0.0], dtype=np.float32),
+            "perturbo_fc_se": np.array([0.1, 0.1], dtype=np.float32),
+            "p_value": np.array([0.05, 0.001], dtype=np.float32),
+            "perturbo_q_value": [0.1, np.nan],
+        }
+    ).to_parquet(source, index=False)
+    scan = fast_result_enrichment._prepare_scan(source)  # used to raise here
+    frame = scan.collect().to_pandas()
+    assert np.isnan(frame.loc[1, "perturbo_q_value"])
+    assert np.isclose(frame.loc[1, "perturbo_p_value"], 0.001)

@@ -23,7 +23,7 @@ workflow dashboard_pipeline {
     main:
 
     if (params.INFERENCE_method == 'default') {
-        createDashboard_default(
+        DashboardProcess = createDashboard_default(
             guide_seqSpecCheck_plots,
             guide_position_table,
             mdata,
@@ -42,7 +42,7 @@ workflow dashboard_pipeline {
             benchmark_output_dir
         )
     } else {
-        createDashboard(
+        DashboardProcess = createDashboard(
             guide_seqSpecCheck_plots,
             guide_position_table,
             mdata,
@@ -61,5 +61,8 @@ workflow dashboard_pipeline {
             benchmark_output_dir
         )
     }
+
+    emit:
+    dashboard_archive = DashboardProcess.dashboard_archive
 
 }

@@ -3,7 +3,7 @@
 import argparse
 import pandas as pd
 import mudata as mu
-from inference_covariates import materialize_shared_covariates
+from inference_covariates import ensure_inference_covariates, materialize_shared_covariates
 
 from analysis_output_formatting import make_h5mu_safe_dataframe
 from intended_target_key_utils import (
@@ -33,13 +33,18 @@ def _normalize_pairs_schema(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def main(guide_inference, mudata_path, subset_for_cis=False):
+def main(guide_inference, mudata_path, subset_for_cis=False, covariate_config=None):
     print(f"Reading guide inference file from {guide_inference}...")
     guide_inference_df = pd.read_csv(guide_inference)
     guide_inference_df = _normalize_pairs_schema(guide_inference_df)
 
     print(f"Reading mudata file from {mudata_path}...")
     mudata = mu.read_h5mu(mudata_path)
+    # The inference covariates are normally already here from mudata_concat.py.
+    # For a user-supplied MuData that skipped that step, derive them now, while
+    # the matrices are still whole: the cis subset below drops guides and genes,
+    # and a depth re-derived from a narrowed matrix would be wrong.
+    ensure_inference_covariates(mudata)
 
     if "gene" not in mudata.mod or "guide" not in mudata.mod:
         raise KeyError("Mudata file is missing 'gene' or 'guide' modality.")
@@ -91,6 +96,9 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
     # through .uns as pandas categoricals -- both anndata and R's MuData package
     # preserve this encoding, and it's far more compact on disk than plain strings.
     mudata.uns["pairs_to_test"] = make_h5mu_safe_dataframe(subset)
+    # Resolve on the full guide/gene feature universe before cis feature subsetting.
+    # Otherwise guide-count and guide-UMI covariates depend on tested-pair selection.
+    materialize_shared_covariates(mudata, config=covariate_config)
 
     if subset_for_cis:
         print("Subsetting mudata for cis analysis...")
@@ -142,6 +150,7 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
 
         mudata_new = mu.MuData(mdata_dict)
         mudata_new.uns = mudata.uns.copy()
+        mudata_new.obs = mudata.obs.copy()
         mudata = mudata_new
 
     output_file = "mudata_inference_input.h5mu"
@@ -149,7 +158,7 @@ def main(guide_inference, mudata_path, subset_for_cis=False):
     # Both inference methods must condition on the same covariates, so write the
     # agreed set where both look: PerTurbo reads named modality columns, SCEPTRE
     # reads the top-level frame as colData.
-    materialize_shared_covariates(mudata)
+    # The cis rebuild above explicitly carries top-level obs and uns forward.
     mudata.write(output_file)
 
 
@@ -166,6 +175,18 @@ if __name__ == "__main__":
         action="store_true",
         help="Subset mudata to only genes found in pairs_to_test for cis analysis",
     )
+    for option in ("mito", "batch", "ribo", "detected-genes", "guide-count", "guide-umis"):
+        parser.add_argument(f"--cov-{option}", choices=("true", "false"), default=None)
+    parser.add_argument("--cov-custom", default="auto")
 
     args = parser.parse_args()
-    main(args.guide_inference, args.mudata_path, args.subset_for_cis)
+    config = {
+        "mito": args.cov_mito != "false",
+        "batch": args.cov_batch != "false",
+        "ribo": args.cov_ribo == "true",
+        "detected_genes": args.cov_detected_genes != "false",
+        "guide_count": args.cov_guide_count == "true",
+        "guide_umis": args.cov_guide_umis != "false",
+        "custom": args.cov_custom,
+    }
+    main(args.guide_inference, args.mudata_path, args.subset_for_cis, config)

@@ -1,10 +1,70 @@
 # Live W&B execution dashboard
 
-The advanced CRISPR Pipeline execution dashboard is the canonical W&B view for
-a pipeline run. It is not the same document as
-`pipeline_dashboard/dashboard.html`. The latter is the local scientific report
-and is used as an input source for final tables and figures; it must never
-replace the advanced execution interface.
+## Completed-run execution history and plot inspection
+
+When the recorded workflow status is completed, earlier execution errors are
+retained in a separate, collapsed **Execution history & diagnostics** section
+after the scientific categories. They are not presented as an active pipeline
+failure. Task exceptions remain recorded; workflow completion alone does not
+prove that a failed or ignored task recovered. Result-quality warnings, skipped
+Scrublet sets, missing analyses and calibration caveats stay visible in their
+scientific categories. Failed or interrupted workflows retain prominent failure
+evidence.
+
+In a standalone browser or GitHub Pages, click any figure to open its full-size
+image. The viewer provides zoom in/out, fit-to-window, actual size, scrolling,
+download, keyboard activation and Escape to close. It is self-contained and
+does not load external scripts. Plot data and image resolution are unchanged;
+enlarging a raster image cannot create additional detail. Embedded viewers that
+strip JavaScript may not support the interactive controls.
+
+The same viewer is built into the original static dashboard generators
+(`create_dashboard.py` and `create_dashboard_HASHING.py`), including the default
+and hashing Nextflow branches. Their figure buttons open the full plot, not its
+SVG icon. This works without the live observer plugin or W&B wrapper. Static
+reports do not establish the final Nextflow lifecycle status; completed-run
+error classification requires the advanced report's recorded status and trace.
+
+These are presentation-only changes. **Do not rerun mapping, filtering or
+inference just to update the interface.** The renderer applies them to future
+reports; existing advanced HTML reports can be updated while preserving the
+original:
+
+```bash
+python bin/dashboard_presentation.py old_dashboard.html updated_dashboard.html
+```
+
+The temporary Pages deployment applies the same transformation to its five
+report snapshots at build time; original server and Drive copies are unchanged.
+
+For figures from actual QC, inference, and calibration results and a link to
+a completed interactive dashboard, see the [result gallery](output-gallery.md).
+
+The bundled `plugins/nf-crispr-dashboard` Nextflow observer starts the renderer
+inside Nextflow, updates it as processes finish, and can serve the HTML on a
+configurable local HTTP port. Enable it with `-c conf/dashboard_plugin.config`
+after installing the bundled versioned archive into a shared
+`NXF_PLUGINS_DIR` using `bash run_support/install_dashboard_plugin.sh`.
+It remains opt-in until the same version is published and verified from a clean
+Nextflow Plugin Registry cache; a fresh clone alone does not install it. See
+the [plugin installation guide](plugin-installation.md) for exact commands,
+site-specific storage requirements, and verification steps.
+
+The advanced CRISPR Pipeline execution dashboard is the canonical dashboard
+both locally and in W&B. `bin/run_with_wandb.sh` renders the same self-contained
+HTML continuously to `pipeline_dashboard/execution_dashboard.html`. On a
+completed run, it also becomes `pipeline_dashboard/dashboard.html`; the older
+scientific report is retained as `pipeline_dashboard/legacy_dashboard.html`
+only as an input source for final tables and figures. Do not link the legacy
+report as the supported dashboard.
+
+The wrapper remains an alternative when the plugin is not installed. It always renders the local dashboard, even without credentials.
+With `WANDB_ENABLED=true` (default), `WB_IGVF` and a working W&B Python
+environment additionally publish the live view online. If either is missing,
+the pipeline and local HTML still work. Set `WANDB_ENABLED=false` for an
+explicit local-HTML-only run. The direct `nextflow run` entry point remains
+usable. With the observer config it produces the live dashboard without a wrapper;
+without either observer or wrapper, only the static report is available.
 
 ## Required default behavior
 
@@ -19,8 +79,8 @@ Runs launched with `bin/run_with_wandb.sh` use these defaults:
 - every visible series member contains exactly one
   `pipeline/main_execution` media row, so no Step selector contains stale
   dashboard copies; and
-- W&B remains fail-open: telemetry cannot change the Nextflow exit status or
-  scientific outputs.
+- W&B remains fail-open: upload errors cannot change the Nextflow exit status
+  or scientific outputs, and the same advanced HTML remains available locally.
 
 Live refreshes share a cumulative upload budget (`WANDB_MAX_BYTES`, 400 MB by
 default). The completed dashboard does not consume that live budget and is
@@ -106,7 +166,8 @@ flowchart TD
 
 At completion, the same advanced interface is rendered with final inference
 and evaluation tables and all available QC images. Completion does not switch
-to a different dashboard design.
+to a different dashboard design. It is saved under the results directory even
+after the wrapper and W&B upload process exit.
 
 ## Verification
 

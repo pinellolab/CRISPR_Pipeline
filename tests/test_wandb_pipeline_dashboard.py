@@ -1,5 +1,6 @@
 import argparse
 import importlib.util
+import json
 from pathlib import Path
 
 
@@ -15,6 +16,39 @@ def test_special_qc_processes_are_routed_to_expected_categories():
     assert dashboard.family_for("workflow:sequencing_saturation") == "evaluation"
     assert dashboard.family_for("workflow:remove_clonal_cells") == "postconcat_qc"
     assert dashboard.image_family(Path("measurement_set_qc/rna_qc_filter_flow_B1.png")) == "preprocessing"
+    assert dashboard.family_for("pipeline:ntc_calibration_pipeline:ntc_calibration_report") == "inference"
+    assert dashboard.family_for("pipeline:resolve_inference_mode") == "inference"
+    assert dashboard.image_family(Path("pipeline_outputs/calibration/ntc_cells_per_guide.png")) == "inference"
+    assert dashboard.image_family(Path("pipeline_dashboard/benchmark_output/calibration/ntc_calibration_qq_guide.png")) == "inference"
+
+
+def test_non_targeting_calibration_is_shown_in_inference(tmp_path):
+    calibration = tmp_path / "pipeline_outputs" / "calibration"
+    calibration.mkdir(parents=True)
+    summary = {
+        "status": "ok",
+        "calibration": [{"level": "guide", "pair_set": "local", "method": "sceptre",
+                         "n_tested": 100, "frac_p_lt_0.05": 0.05, "ks_statistic": 0.07}],
+        "auprc": [{"level": "guide", "method": "sceptre", "negatives": "matched_1to1",
+                   "n_direct_target": 48, "n_ntc_used": 48, "positive_rate": 0.5,
+                   "auprc": 0.846, "auroc": 0.752}],
+        "notes": ["Calibration used the complement contrast."],
+    }
+    (calibration / "ntc_calibration_summary.json").write_text(json.dumps(summary), encoding="utf-8")
+    (calibration / "ntc_calibration_qq_guide.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    content = dashboard.calibration_artifact_content(tmp_path)
+    assert "Non-targeting calibration" in content
+    assert "0.050" in content
+    assert "0.846" in content
+    assert "matched_1to1" in content
+    assert "complement contrast" in content
+    images = dashboard.collect_images(tmp_path)
+    assert len(images["inference"]) == 1
+    assert "data:image/png;base64," in dashboard.image_gallery(images["inference"])
+
+    (calibration / "ntc_calibration_summary.json").unlink()
+    (calibration / "ntc_calibration_skipped.txt").write_text("No non-targeting guides", encoding="utf-8")
+    assert "No non-targeting guides" in dashboard.calibration_artifact_content(tmp_path)
 
 
 def test_render_builds_clickable_family_dashboard(tmp_path):

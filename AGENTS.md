@@ -24,3 +24,11 @@ For every prepared or resumed dataset run:
 Never hardcode the repository's current commit in a tracked config file. The
 commit changes when that file is committed; generate commit-specific metadata
 at run time instead.
+
+## Pipeline/documentation/site synchronization
+
+When changing a public pipeline parameter, input or output contract, plugin,
+dashboard, or run behavior, follow `skills/sync-pipeline-docs/SKILL.md` in the
+same change. Update the canonical documentation and GitHub Pages navigation as
+needed, then run `python scripts/check_docs_sync.py` and the strict site build.
+The skill supplies the semantic review; CI checks mechanical consistency.

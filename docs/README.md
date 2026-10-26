@@ -1,4 +1,8 @@
-# nf-core/crispr: Documentation
+# CRISPR Pipeline documentation
+
+The [GitHub Pages website](https://pinellolab.github.io/CRISPR_Pipeline/) is built from these checked-in pages and the pipeline schema. Its entry points are [start here](usage.md), [samplesheet](samplesheet.md), [SeqSpec](seqspec.md), [guide metadata](guide-metadata.md), [run recipes](run-recipes.md), and [pause/edit/continue](preinference_checkpoint_user_guide.md). The complete [MuData field dictionary](mudata_schema.md) is generated from `mudata_schema_catalog.tsv`; the website's parameter index is generated from `nextflow_schema.json`.
+
+To build the website locally: `python3 scripts/build_docs_site.py && mkdocs build --strict`. GitHub Actions runs the same checks on `dev` and deploys to Pages. Do not edit generated `build/docs-site` or `build/site` files.
 
 The nf-core/crispr documentation is split into the following pages:
 

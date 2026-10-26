@@ -8,7 +8,9 @@ The canonical multi-tab field dictionary is also available as a [Google Sheet](h
 
 Fields marked **Always** are part of the current pipeline contract. Optional fields depend on hashing, Scrublet, guide-assignment method, inference method, or available metadata. The pipeline deliberately preserves additional `guide.var` columns from the input guide metadata; therefore dataset-specific columns may appear beyond the currently observed extensions documented below. Current output keys use `local_analysis_*` and `global_analysis_*`; `cis_*` and `trans_*` are legacy aliases retained for interpretation of older files.
 
-The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62aa45c6b35bffa2` and completed SCEPTRE, CLEANSER, enhancer-screen, Gasperini, and Replogle outputs.
+The catalog began with an audit of `dev` commit `33d068dad7f8163c313bd6fa62aa45c6b35bffa2` and completed SCEPTRE, CLEANSER, enhancer-screen, Gasperini, and Replogle outputs. It is maintained against the current source; optional fields are not guaranteed in every assay. For a particular run, inspect its H5MU and recorded pipeline commit.
+
+Samplesheet `cov_*` fields are measurement-set-level annotations. Checkpoint `external_*` fields are per-cell numeric annotations. The selected inference design is recorded in `MuData.uns`; review it before comparing runs.
 
 ## Structure
 
@@ -45,8 +47,7 @@ The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62a
 | gene.obs | batch | categorical | Always | Input or mapping batch label for each cell. | RNA mapping |
 | gene.obs | concat_batch | categorical | After concatenation | Measurement-set/source label added during concatenation. | concatenation |
 | gene.obs | batch_number | integer | Always | One-based numeric encoding of batch used as an inference/QC covariate. | preprocess_adata.py |
-| gene.obs | n_counts | integer | Always | Number of detected genes; renamed from n_genes_by_counts during MuData creation. | Scanpy QC/create_mdata.py |
-| gene.obs | num_expressed_genes | integer | Version/input dependent | Number of genes with a nonzero count in the cell; legacy/input alias retained when supplied. | RNA preprocessing/create_mdata.py |
+| gene.obs | num_expressed_genes | integer | Always | Number of genes with at least one UMI in the cell; renamed from Scanpy's n_genes_by_counts during MuData creation, over every gene in the count matrix before any GTF restriction. Conditioned on by both inference methods. | Scanpy QC/create_mdata.py |
 | gene.obs | total_gene_umis | integer | Always | Total RNA UMI count for the cell; renamed from total_counts. | Scanpy QC/create_mdata.py |
 | gene.obs | log1p_n_genes_by_counts | float | Always | Natural log of one plus the number of detected genes. | Scanpy QC |
 | gene.obs | log1p_total_counts | float | Always | Natural log of one plus total RNA counts. | Scanpy QC |
@@ -75,9 +76,17 @@ The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62a
 | hashing.obs | hto_type | string/categorical | Hashing after demultiplexing | HTO identity or demultiplexing class associated with cluster_id. | demultiplex_filter.py |
 | hashing.obs | hto_type_split | string/categorical | Hashing after demultiplexing | Normalized HTO class; multi-HTO labels are collapsed to multiplets and negatives remain negative. | demultiplex_filter.py |
 | hashing.obs | gmm_demux_confidence | float | Hashing after demultiplexing | GMM-Demux confidence for the selected deterministic fit. This is retained for QC but is not itself used as a cell filter. | demultiplex_filter.py |
-| hashing.uns | gmm_demux_qc_json_by_input | JSON string | Hashing after concatenation | Per-measurement-set audit of attempted seeds, rejected HTO fits, rejection reasons, and selected seed. | demultiplex_filter.py; hashing_concat.py |
 | hashing.obs | hto_positive_cells_post_clone | integer | Hashing after clone filtering | Number of positive singlet cells supporting this cell's HTO within its measurement set, recalculated after guide and clone filtering. | filter_hto_post_clone.py |
 | hashing.obs | hto_called_post_clone | boolean | Hashing after clone filtering | True when the cell is a positive singlet for an HTO meeting HTO_min_positive_cells in its measurement set. | filter_hto_post_clone.py |
+| gene.obs | cov_* | numeric or categorical | When supplied in samplesheet | Measurement-set-level custom annotations copied to RNA cells and available as PCA/UMAP colors; optional for inference. | parse_covariate.py |
+| gene.obs | external_* | finite numeric | Checkpoint continuation with covariates | Per-cell custom covariate keyed by the exact retained cell ID; passed to both inference methods after validation. | prepare_external_mudata.py |
+| MuData.obs | external_* | finite numeric | Checkpoint continuation with covariates | Top-level copy of validated per-cell external covariate for shared inference. | prepare_external_mudata.py |
+
+## Unstructured metadata
+
+| Path | Field | Type | Availability | Description | Producer/source |
+|---|---|---|---|---|---|
+| hashing.uns | gmm_demux_qc_json_by_input | JSON string | Hashing after concatenation | Per-measurement-set audit of attempted seeds, rejected HTO fits, rejection reasons, and selected seed. | demultiplex_filter.py; hashing_concat.py |
 
 ## Gene fields
 
@@ -191,6 +200,11 @@ The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62a
 | MuData.uns | pairs_to_test | DataFrame | Inference preparation only | Requested guide-gene pairs with guide_id and gene_id; used by SCEPTRE and native PerTurbo local/cis inference. | prepare_inference.py |
 | MuData.uns | guide_assignment_cell_filter | dictionary | After guide-assignment QC | Threshold and aggregate before/after cell counts for the maximum-assigned-guide filter. | filter_guide_assignment_qc.py |
 | MuData.uns | hto_post_clone_filter | dictionary | Hashing after clone filtering | Post-clone HTO support threshold, singlet policy, and aggregate before/after cell counts. | filter_hto_post_clone.py |
+| MuData.uns | external_covariates | list of strings | Checkpoint continuation | Names of validated external_* covariates included in the continued MuData. | prepare_external_mudata.py |
+| MuData.uns | preinference_parent_sha256 | SHA-256 string | Checkpoint continuation | Hash of the immutable parent checkpoint MuData used for this continuation. | prepare_external_mudata.py |
+| MuData.uns | inference_continuous_covariates | list of strings | Configured default inference | Continuous covariate columns passed to PerTurbo after shared design validation. | inference_covariates.py |
+| MuData.uns | inference_batch_covariate | string | Configured default inference | Batch factor passed to PerTurbo; empty when disabled. | inference_covariates.py |
+| MuData.uns | inference_covariate_config | list of strings | Configured default inference | Resolved INFERENCE_COV_* options used to build the shared SCEPTRE/PerTurbo design. | inference_covariates.py |
 | MuData.uns | local_analysis_per_guide_results | DataFrame | Current final default inference | Merged local/cis guide-gene results and annotations. | merge_local_global_results.py |
 | MuData.uns | local_analysis_per_element_results | DataFrame | Current final default inference | Merged local/cis target-element-gene results aggregated across guides. | merge_local_global_results.py |
 | MuData.uns | global_analysis_per_guide_results | DataFrame | Current final default inference | Global/trans all-by-all PerTurbo guide-gene results and annotations. | merge_local_global_results.py |
@@ -236,11 +250,11 @@ The catalog was audited against `dev` source commit `33d068dad7f8163c313bd6fa62a
 | per-guide annotations | intended_target_end | integer nullable | Current annotated tables | Intended-target end coordinate. | analysis_output_formatting.py |
 | shared annotations | gene_name | string nullable | Current annotated tables | Human-readable tested-gene symbol. | analysis_output_formatting.py |
 | shared annotations | nPerturbedCells | integer nullable | Current annotated tables | Number of cells assigned to the tested guide or element under guide_assignment. | analysis_output_formatting.py |
-| per-element annotations | element_id | string | Current annotated element tables | Catalog-facing canonical element identifier. | build_catalog_per_element_output.py |
-| per-element annotations | element_type | string | Current annotated element tables | Catalog-facing element class. | build_catalog_per_element_output.py |
-| per-element annotations | element_chr | string nullable | Current annotated element tables | Catalog-facing element chromosome. | build_catalog_per_element_output.py |
-| per-element annotations | element_start | integer nullable | Current annotated element tables | Catalog-facing element start coordinate. | build_catalog_per_element_output.py |
-| per-element annotations | element_end | integer nullable | Current annotated element tables | Catalog-facing element end coordinate. | build_catalog_per_element_output.py |
-| per-element annotations | element_name | string | Current annotated element tables | Human-readable/catalog element name. | build_catalog_per_element_output.py |
+| per-element annotations | genomic_element_id | string | Current annotated element tables | Catalog-facing canonical element identifier. | build_catalog_per_element_output.py |
+| per-element annotations | genomic_element_type | string | Current annotated element tables | Catalog-facing element class. | build_catalog_per_element_output.py |
+| per-element annotations | genomic_element_chr | string nullable | Current annotated element tables | Catalog-facing element chromosome. | build_catalog_per_element_output.py |
+| per-element annotations | genomic_element_start | integer nullable | Current annotated element tables | Catalog-facing element start coordinate. | build_catalog_per_element_output.py |
+| per-element annotations | genomic_element_end | integer nullable | Current annotated element tables | Catalog-facing element end coordinate. | build_catalog_per_element_output.py |
+| per-element annotations | genomic_element_name | string | Current annotated element tables | Human-readable/catalog element name. | build_catalog_per_element_output.py |
 | per-element annotations | guide_ids | delimited string | Current annotated element tables | Guide identifiers aggregated into the element. | analysis_output_formatting.py |
 | per-element annotations | num_guides | integer | Current annotated element tables | Number of guides represented by the element. | analysis_output_formatting.py |

@@ -73,8 +73,13 @@ make_model_matrix_data <- function(covariates_df) {
       covariates_df,
       function(column) {
         if (is.factor(column)) {
-          # Keep missing values explicit for model-matrix construction.
-          return(stats::relevel(addNA(column), ref = levels(addNA(column))[1]))
+          # Keep missing values explicit for model-matrix construction -- but
+          # only when there are any. addNA() with the default ifany = FALSE
+          # adds an empty NA level to every factor, whose dummy column is all
+          # zeros, so the rank check below failed for any complete factor and
+          # the collinearity filter silently dropped it (batch, on TAP-seq).
+          with_na <- droplevels(addNA(column, ifany = TRUE))
+          return(stats::relevel(with_na, ref = levels(with_na)[1]))
         }
         if (all(is.na(column))) {
           return(rep(0, length(column)))
@@ -108,9 +113,93 @@ retain_non_collinear_covariates <- function(covariates_df) {
   }
 
   if (length(dropped) > 0) {
+    # message() as well as warning(): warnings from a top-level call are
+    # deferred to the end of the script, so the log would not show which
+    # covariates went missing until the run was over.
+    message(sprintf("Dropping collinear covariates: %s", paste(dropped, collapse = ", ")))
     warning(sprintf("Dropping collinear covariates: %s", paste(dropped, collapse = ", ")))
   }
   covariates_df[, kept, drop = FALSE]
+}
+
+# SCEPTRE's formula is written out rather than produced by
+# sceptre:::auto_construct_formula_object. That builder drops any covariate whose
+# name does not match n_umis|n_nonzero once it takes >= 15 distinct values
+# (MAX_N_LEVELS_ALLOWED, applied with no type check, so continuous covariates are
+# caught too), and it derives the response depth from whatever matrix it was
+# handed -- which, under bin/chunk_mudata_sceptre.py, is a single gene chunk. Its
+# response_n_umis is then a per-chunk partial sum and response_n_nonzero saturates
+# at the chunk size.
+#
+# The covariates below come from bin/inference_covariates.py, are measured over
+# the full matrices before any subsetting or chunking, and are log-transformed
+# here. SCEPTRE fits an explicit formula without complaint: it goes straight to
+# model.matrix, a continuous term enters as one numeric column, and
+# convert_covariate_df_to_design_matrix still rank-checks the result, so a
+# redundant formula raises rather than being silently pruned.
+#
+# Keep this in step with CANONICAL_COVARIATES in bin/inference_covariates.py.
+COUNT_COVARIATES <- c("total_guide_umis", "total_gene_umis", "num_expressed_genes")
+CATEGORICAL_COVARIATES <- c("batch")
+
+# SCEPTRE's own depth covariates are excluded by construction: the response_* pair
+# is per chunk, and at inference time the gRNA matrix is the binary assignment
+# layer, so grna_n_umis is the number of assigned guides per cell -- identical to
+# grna_n_nonzero, and constant at 1 under low MOI.
+build_formula_object <- function(covariate_df, requested = character(0)) {
+  present <- colnames(covariate_df)
+  missing <- setdiff(requested, present)
+  if (length(missing)) {
+    stop(sprintf("SCEPTRE lost configured covariates: %s", paste(missing, collapse = ", ")))
+  }
+  terms_vec <- character(0)
+
+  for (covariate in COUNT_COVARIATES) {
+    if (!(covariate %in% present)) next
+    values <- covariate_df[[covariate]]
+    if (any(!is.finite(values)) || any(values <= 0, na.rm = TRUE)) {
+      stop(sprintf(
+        paste0("Covariate `%s` must be strictly positive to be log-transformed; ",
+               "found %d non-positive or non-finite values. This is enforced ",
+               "upstream in bin/inference_covariates.py, so reaching here means ",
+               "the covariates were not prepared by that step."),
+        covariate, sum(!is.finite(values) | values <= 0)
+      ))
+    }
+    terms_vec <- c(terms_vec, sprintf("log(%s)", covariate))
+  }
+
+  for (covariate in CATEGORICAL_COVARIATES) {
+    if (!(covariate %in% present)) next
+    n_levels <- length(unique(covariate_df[[covariate]]))
+    if (n_levels >= 15L) {
+      # auto_construct_formula_object would have dropped this silently. Fit it,
+      # but say so: a screen with this many batches spends real degrees of
+      # freedom here, and PerTurbo is conditioning on the same column.
+      warning(sprintf(
+        "Categorical covariate `%s` has %d levels; fitting it as %d dummy columns.",
+        covariate, n_levels, n_levels - 1L
+      ))
+    }
+    terms_vec <- c(terms_vec, covariate)
+  }
+
+  terms_vec <- c(terms_vec, setdiff(requested, c(COUNT_COVARIATES, CATEGORICAL_COVARIATES)))
+
+  if (length(terms_vec) == 0) {
+    # Nothing prepared upstream. Fall back to sceptre's own behaviour rather than
+    # fitting an intercept-only model.
+    warning(paste0(
+      "None of the expected covariates (", paste(c(COUNT_COVARIATES, CATEGORICAL_COVARIATES), collapse = ", "),
+      ") are present; falling back to sceptre's automatic formula."
+    ))
+    return(sceptre:::auto_construct_formula_object(
+      cell_covariates = covariate_df, include_grna_covariates = FALSE
+    ))
+  }
+
+  message(sprintf("SCEPTRE formula: ~ %s", paste(terms_vec, collapse = " + ")))
+  stats::as.formula(paste0("~ ", paste(terms_vec, collapse = " + ")))
 }
 
 prepare_extra_covariates <- function(mudata, remove_collinear_covariates = TRUE) {
@@ -134,7 +223,8 @@ prepare_extra_covariates <- function(mudata, remove_collinear_covariates = TRUE)
   }
   retain_non_collinear_covariates(covariates)
 }
-convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE) {
+
+convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covariates = FALSE, moi_override = NULL) {
   # extract information from MuData
   declared_moi <- MultiAssayExperiment::metadata(mudata[["guide"]])$moi
   if (is.null(SummarizedExperiment::assayNames(mudata[["gene"]]))) {
@@ -202,12 +292,26 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
   observed_singleton <- length(guides_per_cell) > 0 && max(guides_per_cell) <= 1
   declared_low <- !is.null(declared_moi) && tolower(trimws(as.character(declared_moi)[1])) == "low"
   observed_low_moi <- observed_singleton || declared_low
+  # The pipeline's inference-mode resolution (bin/resolve_inference_mode.py)
+  # applies the same rule to the full guide matrix and hands the answer down, so
+  # SCEPTRE and PerTurbo settle the MOI mode on the same cells. This object may
+  # be a cis subset or a gene chunk, which is why its own reading is advisory
+  # once the pipeline has spoken.
+  fixed_moi <- if (is.null(moi_override) || length(moi_override) == 0) NA_character_ else tolower(trimws(as.character(moi_override)[1]))
+  if (!is.na(fixed_moi) && nzchar(fixed_moi)) {
+    if (!(fixed_moi %in% c("low", "high"))) {
+      stop(sprintf("moi_override must be 'low' or 'high', got '%s'.", fixed_moi))
+    }
+    observed_low_moi <- fixed_moi == "low"
+  }
   moi <- if (observed_low_moi) "low" else "high"
   message(sprintf(
-    "MOI: declared '%s', observed max %s gRNA(s) per cell (%d of %d cells carry more than one) -> using '%s'.",
+    "MOI: declared '%s', observed max %s gRNA(s) per cell (%d of %d cells carry more than one)%s -> using '%s'.",
     if (is.null(declared_moi)) "unset" else as.character(declared_moi),
     if (length(guides_per_cell)) max(guides_per_cell) else NA,
-    sum(guides_per_cell > 1), length(guides_per_cell), moi
+    sum(guides_per_cell > 1), length(guides_per_cell),
+    if (!is.na(fixed_moi) && nzchar(fixed_moi)) sprintf(", fixed to '%s' by the pipeline's inference-mode resolution", fixed_moi) else "",
+    moi
   ))
 
   if (!observed_low_moi && any(guide_row_data$intended_target_name == "non-targeting", na.rm = TRUE)) {
@@ -373,9 +477,9 @@ write_control_group_metadata <- function(resolved, requested, provenance, is_low
 }
 
 
-inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
+inference_sceptre_m <- function(mudata, n_processors = NA, moi_override = NULL, ...) {
   # convert MuData object to sceptre object
-  sceptre_object <- convert_mudata_to_sceptre_object_v1(mudata, remove_collinear_covariates = TRUE)
+  sceptre_object <- convert_mudata_to_sceptre_object_v1(mudata, remove_collinear_covariates = TRUE, moi_override = moi_override)
   guide_lookup <- SingleCellExperiment::rowData(mudata[["guide"]]) |>
     as.data.frame() |>
     tibble::rownames_to_column(var = "grna_id")
@@ -485,10 +589,8 @@ inference_sceptre_m <- function(mudata, n_processors = NA, ...) {
 
   # construct formula excluding gRNA covariates to avoid multicollinearity
   # (gRNA assignments are binary, making grna_n_nonzero and grna_n_umis identical)
-  formula_object <- sceptre:::auto_construct_formula_object(
-    cell_covariates = sceptre_object@covariate_data_frame,
-    include_grna_covariates = FALSE
-  )
+  requested <- colnames(SummarizedExperiment::colData(mudata))
+  formula_object <- build_formula_object(sceptre_object@covariate_data_frame, requested)
   args_list[["formula_object"]] <- formula_object
 
   # We'll run two analyses on the same sceptre_object to exploit caching:
@@ -635,6 +737,10 @@ if (!exists(".sourced_from_test")) {
   control_group <- args[5]
   resampling_mechanism <- args[6]
   n_processors <- if (length(args) >= 7) suppressWarnings(as.integer(args[7])) else NA
+  # Optional eighth line: the MOI mode ('low' or 'high') from the pipeline's
+  # inference-mode resolution. Absent on a direct invocation, in which case the
+  # driver reads the mode from the assignments as before.
+  moi_override <- if (length(args) >= 8 && nzchar(trimws(args[8]))) trimws(args[8]) else NULL
 
   # read MuData
   mudata_in <- MuData::readH5MU(mudata_fp)
@@ -647,7 +753,8 @@ if (!exists(".sourced_from_test")) {
     resampling_approximation = resampling_approximation,
     control_group = control_group,
     resampling_mechanism = resampling_mechanism,
-    n_processors = n_processors
+    n_processors = n_processors,
+    moi_override = moi_override
   )
   # write outputs: per-element (union) and per-guide (singleton)
   if (!is.null(results$union_test_results)) {

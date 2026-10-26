@@ -39,12 +39,12 @@ OUTPUT_COLUMNS = [
     "perturbo_q_value",
     "perturbo_fc_se",
     "perturbo_negLog10p",
-    "element_id",
-    "element_type",
-    "element_chr",
-    "element_start",
-    "element_end",
-    "element_name",
+    "genomic_element_id",
+    "genomic_element_type",
+    "genomic_element_chr",
+    "genomic_element_start",
+    "genomic_element_end",
+    "genomic_element_name",
     "guide_ids",
     "num_guides",
     "gene_name",
@@ -159,6 +159,25 @@ def _collapse_unique_strings(values: pd.Series) -> str:
     if not cleaned:
         return pd.NA
     return ";".join(cleaned)
+
+
+CONTROL_ELEMENT_TYPES = {"non-targeting", "safe-targeting", "negative control"}
+CONTROL_ELEMENT_PREFIX = "non-targeting|"
+
+
+def _drop_control_rows(merged: pd.DataFrame) -> pd.DataFrame:
+    """Control pseudo-elements are tested, and reported for the calibration
+    check, but they are not catalog rows: they have no genomic coordinates."""
+    name = merged["intended_target_name"].astype("string").fillna("")
+    control = name.str.startswith(CONTROL_ELEMENT_PREFIX) | name.eq("non-targeting")
+    type_column = next((c for c in ("element_type", "genomic_element_type") if c in merged.columns), None)
+    if type_column is not None:
+        kind = merged[type_column].astype("string").fillna("").str.strip().str.lower()
+        control = control | kind.isin(CONTROL_ELEMENT_TYPES)
+    control = control.to_numpy(dtype=bool)
+    if control.any():
+        print(f"Dropping {int(control.sum()):,} control-element row(s) from the per-element catalog.", flush=True)
+    return merged.loc[~control].reset_index(drop=True)
 
 
 def _build_element_metadata(guide) -> pd.DataFrame:
@@ -401,6 +420,7 @@ def create_catalog_per_element(
         on="_element_key",
         how="left",
     )
+    merged = _drop_control_rows(merged)
 
     merged["sceptre_negLog10p"] = _neg_log10(merged["_sceptre_p_value"], pvalue_floor)
     merged["sceptre_p_value"] = merged["_sceptre_p_value"]
@@ -411,17 +431,18 @@ def create_catalog_per_element(
     merged["perturbo_cis_negLog10p"] = _neg_log10(merged["_perturbo_cis_p_value"], pvalue_floor)
     merged["perturbo_cis_p_value"] = merged["_perturbo_cis_p_value"]
 
-    merged["element_name"] = merged["intended_target_name"]
-    merged["element_id"] = merged["element_name"]
-    merged["element_chr"] = merged["intended_target_chr"]
-    merged["element_start"] = merged["intended_target_start"]
-    merged["element_end"] = merged["intended_target_end"]
+    merged = merged.rename(columns={"element_type": "genomic_element_type"})
+    merged["genomic_element_name"] = merged["intended_target_name"]
+    merged["genomic_element_id"] = merged["genomic_element_name"]
+    merged["genomic_element_chr"] = merged["intended_target_chr"]
+    merged["genomic_element_start"] = merged["intended_target_start"]
+    merged["genomic_element_end"] = merged["intended_target_end"]
 
     merged["gene_name"] = _fill_gene_names(merged, mdata)
 
     catalog = categoricalize_text_columns(merged[OUTPUT_COLUMNS])
     catalog = catalog.sort_values(
-        by=["element_chr", "element_start", "element_end", "element_name", "gene_id"],
+        by=["genomic_element_chr", "genomic_element_start", "genomic_element_end", "genomic_element_name", "gene_id"],
         kind="stable",
         na_position="last",
     ).reset_index(drop=True)
@@ -454,19 +475,19 @@ def build_catalog_per_element_output(
             "perturbo_q_value",
             "perturbo_fc_se",
             "perturbo_negLog10p",
-            "element_id",
-            "element_type",
-            "element_chr",
-            "element_start",
-            "element_end",
-            "element_name",
+            "genomic_element_id",
+            "genomic_element_type",
+            "genomic_element_chr",
+            "genomic_element_start",
+            "genomic_element_end",
+            "genomic_element_name",
             "guide_ids",
             "num_guides",
             "gene_name",
             "nPerturbedCells",
         ],
         output_columns=OUTPUT_COLUMNS,
-        sort_columns=["element_chr", "element_start", "element_end", "element_name", "gene_id"],
+        sort_columns=["genomic_element_chr", "genomic_element_start", "genomic_element_end", "genomic_element_name", "gene_id"],
         # perturbo_cis_* are the local table's perturbo_* columns under another
         # name -- the pandas path renames them -- so they exist under that name in
         # neither input and the fast path has to do the rename too. Without this
@@ -481,6 +502,7 @@ def build_catalog_per_element_output(
         },
         derived_neglog10={"perturbo_cis_negLog10p": "perturbo_cis_p_value"},
         require_fillable_q=(("perturbo_cis_q_value", "perturbo_cis_p_value"),),
+        exclude_rows={"intended_target_name": "startswith:non-targeting|"},
         pvalue_floor=pvalue_floor,
     ):
         return None

@@ -4,6 +4,7 @@ process prepare_covariate {
 
     input:
     val(covariate_list)
+    path(samplesheet)
 
     output:
     path "cov_string.txt", emit: covariate_string
@@ -12,7 +13,7 @@ process prepare_covariate {
     script:
     def json_string = groovy.json.JsonOutput.toJson(covariate_list)
     """
-    parse_covariate.py ${json_string}
+    parse_covariate.py ${json_string} ${samplesheet}
     prepare_formula.py parse_covariate.csv
     """
 }

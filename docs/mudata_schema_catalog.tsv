@@ -20,8 +20,7 @@ Cell fields	MuData.obs	concat_batch	categorical	After multi-measurement concaten
 Cell fields	gene.obs	batch	categorical	Always	Input or mapping batch label for each cell.	RNA mapping
 Cell fields	gene.obs	concat_batch	categorical	After concatenation	Measurement-set/source label added during concatenation.	concatenation
 Cell fields	gene.obs	batch_number	integer	Always	One-based numeric encoding of batch used as an inference/QC covariate.	preprocess_adata.py
-Cell fields	gene.obs	n_counts	integer	Always	Number of detected genes; renamed from n_genes_by_counts during MuData creation.	Scanpy QC/create_mdata.py
-Cell fields	gene.obs	num_expressed_genes	integer	Version/input dependent	Number of genes with a nonzero count in the cell; legacy/input alias retained when supplied.	RNA preprocessing/create_mdata.py
+Cell fields	gene.obs	num_expressed_genes	integer	Always	Number of genes with at least one UMI in the cell; renamed from Scanpy's n_genes_by_counts during MuData creation, over every gene in the count matrix before any GTF restriction. Conditioned on by both inference methods.	Scanpy QC/create_mdata.py
 Cell fields	gene.obs	total_gene_umis	integer	Always	Total RNA UMI count for the cell; renamed from total_counts.	Scanpy QC/create_mdata.py
 Cell fields	gene.obs	log1p_n_genes_by_counts	float	Always	Natural log of one plus the number of detected genes.	Scanpy QC
 Cell fields	gene.obs	log1p_total_counts	float	Always	Natural log of one plus total RNA counts.	Scanpy QC
@@ -146,6 +145,14 @@ Unstructured	guide.uns	moi	one-element string array	Always	Recorded or inferred 
 Unstructured	MuData.uns	pairs_to_test	DataFrame	Inference preparation only	Requested guide-gene pairs with guide_id and gene_id; used by SCEPTRE and native PerTurbo local/cis inference.	prepare_inference.py
 Unstructured	MuData.uns	guide_assignment_cell_filter	dictionary	After guide-assignment QC	Threshold and aggregate before/after cell counts for the maximum-assigned-guide filter.	filter_guide_assignment_qc.py
 Unstructured	MuData.uns	hto_post_clone_filter	dictionary	Hashing after clone filtering	Post-clone HTO support threshold, singlet policy, and aggregate before/after cell counts.	filter_hto_post_clone.py
+Cell fields	gene.obs	cov_*	numeric or categorical	When supplied in samplesheet	Measurement-set-level custom annotations copied to RNA cells and available as PCA/UMAP colors; optional for inference.	parse_covariate.py
+Cell fields	gene.obs	external_*	finite numeric	Checkpoint continuation with covariates	Per-cell custom covariate keyed by the exact retained cell ID; passed to both inference methods after validation.	prepare_external_mudata.py
+Cell fields	MuData.obs	external_*	finite numeric	Checkpoint continuation with covariates	Top-level copy of validated per-cell external covariate for shared inference.	prepare_external_mudata.py
+Unstructured	MuData.uns	external_covariates	list of strings	Checkpoint continuation	Names of validated external_* covariates included in the continued MuData.	prepare_external_mudata.py
+Unstructured	MuData.uns	preinference_parent_sha256	SHA-256 string	Checkpoint continuation	Hash of the immutable parent checkpoint MuData used for this continuation.	prepare_external_mudata.py
+Unstructured	MuData.uns	inference_continuous_covariates	list of strings	Configured default inference	Continuous covariate columns passed to PerTurbo after shared design validation.	inference_covariates.py
+Unstructured	MuData.uns	inference_batch_covariate	string	Configured default inference	Batch factor passed to PerTurbo; empty when disabled.	inference_covariates.py
+Unstructured	MuData.uns	inference_covariate_config	list of strings	Configured default inference	Resolved INFERENCE_COV_* options used to build the shared SCEPTRE/PerTurbo design.	inference_covariates.py
 Unstructured	MuData.uns	local_analysis_per_guide_results	DataFrame	Current final default inference	Merged local/cis guide-gene results and annotations.	merge_local_global_results.py
 Unstructured	MuData.uns	local_analysis_per_element_results	DataFrame	Current final default inference	Merged local/cis target-element-gene results aggregated across guides.	merge_local_global_results.py
 Unstructured	MuData.uns	global_analysis_per_guide_results	DataFrame	Current final default inference	Global/trans all-by-all PerTurbo guide-gene results and annotations.	merge_local_global_results.py
@@ -186,11 +193,11 @@ Result columns	per-guide annotations	intended_target_start	integer nullable	Curr
 Result columns	per-guide annotations	intended_target_end	integer nullable	Current annotated tables	Intended-target end coordinate.	analysis_output_formatting.py
 Result columns	shared annotations	gene_name	string nullable	Current annotated tables	Human-readable tested-gene symbol.	analysis_output_formatting.py
 Result columns	shared annotations	nPerturbedCells	integer nullable	Current annotated tables	Number of cells assigned to the tested guide or element under guide_assignment.	analysis_output_formatting.py
-Result columns	per-element annotations	element_id	string	Current annotated element tables	Catalog-facing canonical element identifier.	build_catalog_per_element_output.py
-Result columns	per-element annotations	element_type	string	Current annotated element tables	Catalog-facing element class.	build_catalog_per_element_output.py
-Result columns	per-element annotations	element_chr	string nullable	Current annotated element tables	Catalog-facing element chromosome.	build_catalog_per_element_output.py
-Result columns	per-element annotations	element_start	integer nullable	Current annotated element tables	Catalog-facing element start coordinate.	build_catalog_per_element_output.py
-Result columns	per-element annotations	element_end	integer nullable	Current annotated element tables	Catalog-facing element end coordinate.	build_catalog_per_element_output.py
-Result columns	per-element annotations	element_name	string	Current annotated element tables	Human-readable/catalog element name.	build_catalog_per_element_output.py
+Result columns	per-element annotations	genomic_element_id	string	Current annotated element tables	Catalog-facing canonical element identifier.	build_catalog_per_element_output.py
+Result columns	per-element annotations	genomic_element_type	string	Current annotated element tables	Catalog-facing element class.	build_catalog_per_element_output.py
+Result columns	per-element annotations	genomic_element_chr	string nullable	Current annotated element tables	Catalog-facing element chromosome.	build_catalog_per_element_output.py
+Result columns	per-element annotations	genomic_element_start	integer nullable	Current annotated element tables	Catalog-facing element start coordinate.	build_catalog_per_element_output.py
+Result columns	per-element annotations	genomic_element_end	integer nullable	Current annotated element tables	Catalog-facing element end coordinate.	build_catalog_per_element_output.py
+Result columns	per-element annotations	genomic_element_name	string	Current annotated element tables	Human-readable/catalog element name.	build_catalog_per_element_output.py
 Result columns	per-element annotations	guide_ids	delimited string	Current annotated element tables	Guide identifiers aggregated into the element.	analysis_output_formatting.py
 Result columns	per-element annotations	num_guides	integer	Current annotated element tables	Number of guides represented by the element.	analysis_output_formatting.py

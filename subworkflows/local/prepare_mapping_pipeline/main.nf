@@ -5,6 +5,7 @@ include { prepare_covariate } from '../../../modules/local/prepare_covariate'
 workflow prepare_mapping_pipeline {
     take:
     ch_samples
+    ch_samplesheet_file
 
     main:
     // Prepare covariate list from the samples channel
@@ -60,7 +61,7 @@ workflow prepare_mapping_pipeline {
         covariate_list.view { "Covariate_list: $it" }
     }
 
-    Prepare_covariate = prepare_covariate(covariate_list)
+    Prepare_covariate = prepare_covariate(covariate_list, ch_samplesheet_file)
 
     emit:
     parsed_covariate_file =  Prepare_covariate.parsed_covariate_file
