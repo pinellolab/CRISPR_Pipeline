@@ -204,7 +204,7 @@
                 },
                 "scrna_workflow": {
                     "type": "string",
-                    "default": "standard",
+                    "default": "nac",
                     "enum": [
                         "standard",
                         "nac"

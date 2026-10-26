@@ -29,6 +29,8 @@ process mappingGuide {
     // library whose spacer sits at a variable offset needs the same search with
     // no tag, since nothing fixed precedes the spacer to anchor on.
     def whole_read  = (has_spacer == "true" || params.guide_whole_read) ? "true" : "false"
+    // An empty guide_strand leaves kb's own default in place.
+    def strand_flag = params.guide_strand ? "--strand ${params.guide_strand}" : ""
 
     """
     set -euo pipefail
@@ -140,7 +142,7 @@ process mappingGuide {
         --h5ad \\
         --overwrite \\
         --verbose \\
-        --strand ${params.guide_strand} \\
+        ${strand_flag} \\
         -w ${barcode_file} \\
         \${replacement_args} \\
         \${KB_FASTQS}

@@ -24,6 +24,8 @@ process mappingscRNA {
         def fastq_files = reads.join(' ')
         def workflow_args = params.scrna_workflow == "standard" ? "--workflow standard" : "--workflow nac -c1 ${cdna} -c2 ${nascent_idx}"
         def mm_flag = (params.use_multimapping) ? "--mm" : ""
+        // An empty scrna_strand leaves kb's own default in place.
+        def strand_flag = params.scrna_strand ? "--strand ${params.scrna_strand}" : ""
         """
         echo "Processing $batch with $fastq_files"
 
@@ -55,7 +57,7 @@ process mappingscRNA {
                 --overwrite \\
                 --h5ad \\
                 --sum total \\
-                --strand ${params.scrna_strand} \\
+                ${strand_flag} \\
                 --verbose \\
                 -w ${barcode_file} \\
                 \$replacement_args \\
