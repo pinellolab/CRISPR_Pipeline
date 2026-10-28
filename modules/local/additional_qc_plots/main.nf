@@ -3,12 +3,12 @@ process additional_qc_plots {
 
     input:
         path mudata
-        path clone_qc_input
-        path saturation_qc_input
-        path guide_assignment_qc_input
-        path hto_qc_input
+        path clone_qc_input, stageAs: 'clone_qc_input'
+        path saturation_qc_input, stageAs: 'saturation_qc_input'
+        path guide_assignment_qc_input, stageAs: 'guide_assignment_qc_input'
+        path hto_qc_input, stageAs: 'hto_qc_input'
         path embedding_qc_input, stageAs: 'embedding_inputs/part??/*'
-        path guide_mapping_qc_input
+        path guide_mapping_qc_input, stageAs: 'guide_mapping_qc_input'
 
     output:
         path "additional_qc", emit: additional_qc
@@ -73,5 +73,15 @@ process additional_qc_plots {
         else
             echo "No inference results found in mudata.uns; skipping local/global analysis QC."
         fi
+        """
+    stub:
+        """
+        test -e ${mudata}
+        test -d ${clone_qc_input}
+        test -d ${saturation_qc_input}
+        test -d ${guide_assignment_qc_input}
+        test -d ${hto_qc_input}
+        test -d ${guide_mapping_qc_input}
+        mkdir -p additional_qc
         """
 }

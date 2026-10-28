@@ -15,6 +15,12 @@
                 "input"
             ],
             "properties": {
+                "BALANCED_source_mudata": {"type": "string", "default": "", "description": "Optional full-transcriptome assigned raw-count MuData for the balanced benchmark branch; requires full mode and default inference/pairing."},
+                "BALANCED_parent_inference": {"type": "string", "default": "", "description": "Published parent inference MuData defining eligible cells, frozen analysis genes and unchanged guide calls; old inference results are never reused."},
+                "BALANCED_dataset": {"type": "string", "default": "", "description": "Dataset label for balanced-run provenance."},
+                "BALANCED_cells": {"type": "integer", "default": 0, "minimum": 0, "description": "Exact common cell count; positive when the balanced branch is enabled."},
+                "BALANCED_rna_umis": {"type": "integer", "default": 0, "minimum": 0, "description": "Exact full-transcriptome RNA UMI budget after cell selection, before the frozen analysis gene subset."},
+                "BALANCED_seed": {"type": "integer", "default": 0, "minimum": 0, "description": "Deterministic SHA256 cell selection and PCG64 hypergeometric count-thinning seed."},
                 "ENABLE_POSTCONCAT_EMBEDDING_QC": {
                     "type": "boolean", "default": true,
                     "description": "Defer pooled MT/gene QC until guide/HTO intersection; visualize temporary normalization before and after optional clone removal."
