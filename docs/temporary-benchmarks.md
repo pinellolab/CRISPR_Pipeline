@@ -1,7 +1,7 @@
 # Temporary benchmark dashboards
 
 Five completed report snapshots, published temporarily on **October 23, 2026**
-for review. Open a report to browse its QC, guide assignment, inference, and
+for review; refreshed on **October 28, 2026** with stage-specific QC counts. Open a report to browse its QC, guide assignment, inference, and
 evaluation sections. These are static snapshots, not live server connections.
 They are **not a final manuscript benchmark release**.
 
@@ -21,8 +21,9 @@ Biological QC and skipped-analysis warnings remain in their original sections.
 </div>
 
 Reports are roughly 35–42 MB each because figures are embedded. Open one at a
-time; the first load may take a moment. Original server results and Drive copies
-are unchanged. These snapshots may predate the newest task-diagnostics feature.
+time; the first load may take a moment. The refreshed reports match the corresponding Drive copies. Preprocessing ends
+at per-set RNA QC; mitochondrial filtering and final-cohort statistics appear
+after guide assignment in Post-concatenation QC. Inference results are unchanged.
 
 ## Interpretation notes
 
@@ -39,7 +40,8 @@ also does not by itself establish better null calibration.
 
 Only the small gallery and deployment instructions are tracked in Git. The
 large HTML snapshots come from the temporary GitHub prerelease
-`temporary-benchmark-dashboards-20261023`; their compressed archive is checked
+`temporary-benchmark-dashboards-20261023` (asset
+`dashboards-stage-cohorts-20261028.tar.gz`); their compressed archive is checked
 against a pinned SHA-256 digest during deployment.
 
 When review is over, remove this page, its navigation/landing-page links, its

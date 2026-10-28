@@ -179,7 +179,9 @@ def test_qc_catalog_and_sanitized_failure_evidence_are_embedded(tmp_path):
     assert "do-not-publish-this-value" not in result
     assert "API_TOKEN=&lt;redacted&gt;" in result
     assert "Final cells" in result and "123" in result
-    assert "Assignment rate" in result and "0.800" in result
+    assert "Before assigned-guide filter" in result
+    # A final/unknown-cohort rate is not an assignment-stage observation.
+    assert "0.800" not in dashboard.qc_metrics_content(json.loads(metrics.read_text()), "guide_assignment")
 
 
 def test_final_dashboard_inference_tables_are_bounded_and_searchable(tmp_path):
@@ -361,3 +363,73 @@ def test_completed_dashboard_opens_on_measurement_set_hierarchy(tmp_path):
     assert 'id="family-preprocessing" class="family-panel"' in result
     assert 'onclick="selectFamily' not in result
     assert "selectFamily" not in result
+
+
+def test_sections_use_their_own_stage_cohort_not_final_cells():
+    data = {
+        'parameters': {'selected_qc_and_inference_params': {'QC_pct_mito': 15}},
+        'observed_metrics': {
+            'measurement_set_rna_qc': {'rows': [{
+                'measurement_set': 'IGVFDS2050UJNL', 'input_barcodes': 2946416,
+                'post_knee_cells': 295620, 'post_min_counts_cells': 149075,
+                'post_mad_cells': 149075, 'retained_cells': 149074,
+                'scrublet_status': 'applied',
+            }]},
+            'additional_qc': {
+                'gene': {'rows': [{'batch': 'IGVFDS2050UJNL', 'n_cells': 24771,
+                                   'umi_median': 2578, 'mito_mean': 5.305}]},
+                'guide': {'rows': [{'batch': 'all', 'n_cells': 97984,
+                    'n_cells_before_assigned_guide_filter': 577875,
+                    'n_cells_with_guide': 136619, 'n_cells_without_assigned_guide': 441256,
+                    'assigned_guide_counts_source': 'mudata_concat'}]},
+                'guide_mapping_qc': {'rows': [{'measurement_set': 'IGVFDS2050UJNL',
+                    'rna_cells': 149074, 'guide_cells': 248491, 'overlap_cells': 148893}]},
+                'guide_assignment_filter': {'rows': [{'measurement_set': 'IGVFDS2050UJNL',
+                    'cells_before': 33194, 'cells_after': 33194, 'cells_removed': 0,
+                    'threshold': 'minimum=1; maximum=15'}]},
+            },
+        },
+    }
+    preprocessing = dashboard.qc_metrics_content(data, 'preprocessing')
+    assert '149,074' in preprocessing
+    assert '24,771' not in preprocessing and '2,578' not in preprocessing
+    assert 'Median mito' not in preprocessing and 'Mean mito' not in preprocessing
+    assert 'Maximum mito' not in dashboard.category_flow(data, 'preprocessing')
+    assembly = dashboard.qc_metrics_content(data, 'mudata')
+    assert '148,893' in assembly and '24,771' not in assembly
+    assignment = dashboard.qc_metrics_content(data, 'guide_assignment')
+    assert '33,194' in assignment and '136,619' in assignment
+    assert '24,771' not in assignment and '97,984' not in assignment
+    downstream = dashboard.qc_metrics_content(data, 'postconcat_qc')
+    assert '24,771' in downstream and '2,578' in downstream and '5.305' in downstream
+    order = [family for family, _, _ in dashboard.FAMILIES]
+    assert order.index('guide_assignment') < order.index('postconcat_qc')
+    assert 'Maximum mito' in dashboard.category_flow(data, 'postconcat_qc')
+
+
+def test_missing_stage_data_never_falls_back_to_final_counts():
+    data = {'observed_metrics': {'additional_qc': {
+        'gene': {'rows': [{'batch': 'all', 'n_cells': 97984}]},
+        'guide': {'rows': [{'batch': 'all', 'n_cells_with_guide': 97984,
+                            'assigned_guide_counts_source': 'final_mudata'}]},
+    }}}
+    for family in ['preprocessing', 'mudata', 'guide_assignment']:
+        assert '97,984' not in dashboard.qc_metrics_content(data, family)
+
+
+def test_final_rna_and_guide_plots_follow_downstream_cell_qc():
+    assert dashboard.image_family(Path('pipeline_dashboard/additional_qc/gene/gene_umi.png')) == 'postconcat_qc'
+    assert dashboard.image_family(Path('pipeline_dashboard/additional_qc/guide/guides_per_cell.png')) == 'postconcat_qc'
+    assert dashboard.image_family(Path('measurement_set_qc/rna_qc_filter_flow_B1.png')) == 'preprocessing'
+    assert dashboard.image_family(Path('guide_assignment_qc/guide_assignment_filter_steps_B1.png')) == 'guide_assignment'
+
+
+def test_scrublet_skipped_fit_is_not_labelled_as_applied():
+    data = {'observed_metrics': {'measurement_set_rna_qc': {'rows': [{
+        'measurement_set': 'SET_A', 'input_barcodes': 1000, 'retained_cells': 200,
+        'scrublet_enabled': True, 'scrublet_status': 'skipped_error',
+    }]}}}
+    result, _ = dashboard.preprocessing_measurement_set_cards(data, [])
+    assert 'Scrublet skipped (fit error)' in result
+    assert 'After Scrublet' not in result
+    assert 'RNA-QC retained' in result

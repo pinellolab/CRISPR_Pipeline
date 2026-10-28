@@ -53,7 +53,7 @@ CATEGORY_FLOWS = {
         ("Call cells per measurement set", "Calculate an independent barcode-rank knee for every measurement set"),
         ("Apply per-set cell filters", "Apply the RNA UMI floor, two-sided RNA-complexity MAD bounds and Scrublet"),
         ("Concatenate retained cells", "Combine independently filtered measurement-set matrices"),
-        ("Retain raw counts", "Pooled MT and gene-support QC are shown in Post-concatenation QC when the embedding workflow is enabled"),
+        ("Pass retained RNA cells", "Carry raw RNA counts into modality intersection and guide assignment"),
     ],
     "mudata": [
         ("Intersect barcodes", "Align retained RNA and guide cells, plus hashing cells when enabled"),
@@ -309,15 +309,21 @@ def category_flow(data: dict[str, Any], family: str) -> str:
             ("Scrublet rate override", params.get("SCRUBLET_expected_doublet_rate")),
             ("Scrublet PCA components", params.get("SCRUBLET_n_prin_comps")),
             ("Scrublet adaptive PCA fallback", params.get("SCRUBLET_adaptive_pca_fallback")),
-            ("Post-concat maximum mito %", params.get("QC_pct_mito")),
-            ("Minimum gene cell fraction", params.get("QC_min_cells_per_gene")),
         ]
         resolved = '<h4>Resolved filter values</h4><div class="filter-chips">' + "".join(
             '<span><b>' + html.escape(label) + ':</b> ' + html.escape(display_value(value)) + '</span>'
             for label, value in fields if value is not None
         ) + '</div><p class="flow-note">The RNA-count and detected-gene MAD filters are two-sided. '
         'Knee calling, the 500-UMI floor, MAD filtering and Scrublet run independently per measurement set. '
-        'The mitochondrial and fractional gene-support filters run after concatenation.</p>'
+        'Counts here stop at per-set RNA QC. Later filters and their counts appear in their own sections.</p>'
+    if family == "postconcat_qc" and data:
+        params = data.get("parameters", {}).get("selected_qc_and_inference_params", {})
+        fields = [("Maximum mito %", params.get("QC_pct_mito")),
+                  ("Minimum gene cell fraction", params.get("QC_min_cells_per_gene"))]
+        resolved = '<h4>Downstream filter values</h4><div class="filter-chips">' + "".join(
+            '<span><b>' + html.escape(label) + ':</b> ' + html.escape(display_value(value)) + '</span>'
+            for label, value in fields if value is not None
+        ) + '</div><p>These filters follow guide assignment; final-cohort statistics below include downstream cell QC.</p>'
     return '<div class="process-flow"><h3>Processing and filter flow</h3><div class="flow-steps">' + nodes + '</div>' + resolved + '</div>'
 
 
@@ -352,54 +358,68 @@ def qc_metrics_content(data: dict[str, Any], family: str) -> str:
         ])
 
     if family == "preprocessing":
-        barcode = summary.get("barcode_filter", {})
-        diagnostics = summary.get("diagnostics", {})
-        gene = additional.get("gene", {})
-        overall = overall_row(gene)
+        rows = observed.get("measurement_set_rna_qc", {}).get("rows", [])
+        def total(key):
+            values = [number(row.get(key)) for row in rows]
+            return sum(values) if values and all(value is not None for value in values) else None
         cards = [
-            metric_card("Raw RNA barcodes", display_value(summary.get("raw_scRNA_barcodes_total")), "before concatenation"),
-            metric_card("Concatenated cells", display_value(summary.get("concatenated_scRNA_cells")), "RNA modality"),
-            metric_card("Cells after filter", display_value(barcode.get("cells_after_filter")), barcode.get("method", "barcode filter")),
-            metric_card("Median RNA UMI", display_value(overall.get("umi_median")), "final cells"),
-            metric_card("Mean RNA UMI", display_value(overall.get("umi_mean")), "final cells"),
-            metric_card("Median genes", display_value(diagnostics.get("median_detected_genes_final_cells")), "final cells"),
-            metric_card("Mean mito %", display_value(overall.get("mito_mean")), "final cells"),
-            metric_card("Mito cutoff %", display_value(summary.get("mitochondrial_filter", {}).get("pct_mito_max")), "configured"),
+            metric_card("Input RNA barcodes", display_value(total("input_barcodes")), "per-set input total"),
+            metric_card("After barcode calling", display_value(total("post_knee_cells")), "per-set total"),
+            metric_card("After RNA UMI floor", display_value(total("post_min_counts_cells")), "per-set total"),
+            metric_card("After MAD policy", display_value(total("post_mad_cells")), "per-set total"),
+            metric_card("After RNA QC", display_value(total("retained_cells")), "before modality intersection and guide assignment"),
         ]
-        return '<h3>Cell and RNA quality</h3><div class="metrics">' + "".join(cards) + "</div>" + data_table(
-            gene.get("rows", []), [("batch", "Batch"), ("n_cells", "Cells"),
-            ("umi_median", "Median UMI"), ("umi_mean", "Mean UMI"),
-            ("mito_median", "Median mito %"), ("mito_mean", "Mean mito %")])
+        return '<h3>RNA preprocessing counts</h3><p>Only the RNA filters shown in this section are included. Final-cohort RNA statistics are shown in Post-concatenation QC.</p><div class="metrics">' + "".join(cards) + "</div>" + data_table(
+            rows, [("measurement_set", "Measurement set"), ("input_barcodes", "Input barcodes"),
+            ("post_knee_cells", "After barcode calling"), ("post_min_counts_cells", "After UMI floor"),
+            ("post_mad_cells", "After MAD policy"), ("retained_cells", "After RNA QC"),
+            ("scrublet_status", "Scrublet status")], limit=max(1, len(rows)))
 
     if family == "mudata":
-        final = summary.get("final_mudata", {})
-        intersection = summary.get("modality_intersection", {})
-        cards = [
-            metric_card("Final cells", display_value(final.get("cells")), "MuData"),
-            metric_card("Gene features", display_value(final.get("gene_features")), "RNA modality"),
-            metric_card("Guide features", display_value(final.get("guide_features")), "guide modality"),
-            metric_card("RNA-guide overlap", display_value(intersection.get("rna_guide_intersection_cells")), "cells"),
-            metric_card("Unfiltered overlap", display_value(intersection.get("guide_unfiltered_intersection_fraction")), "fraction"),
-            metric_card("Guide assignments", display_value(final.get("total_sgrna_assignment_values")), "total values"),
-        ]
-        return '<h3>Final multimodal object</h3><div class="metrics">' + "".join(cards) + "</div>"
+        rows = additional.get("guide_mapping_qc", {}).get("rows", [])
+        return '<h3>RNA–guide modality intersection</h3><p>Counts at modality assembly, before assigned-guide and downstream cell filters.</p>' + data_table(
+            rows, [("measurement_set", "Measurement set"), ("rna_cells", "RNA QC cells"),
+                   ("guide_cells", "Guide-mapped cells"), ("overlap_cells", "Exact RNA–guide overlap")],
+            limit=max(1, len(rows)))
 
     if family == "guide_assignment":
-        guide = additional.get("guide", {})
-        overall = overall_row(guide)
+        overall = overall_row(additional.get("guide", {}))
+        # Historical per-batch guide statistics describe final cells, not this stage.
+        before = overall.get("n_cells_before_assigned_guide_filter")
+        after = overall.get("n_cells_with_guide") if overall.get("assigned_guide_counts_source") == "mudata_concat" else None
+        filters = additional.get("guide_assignment_filter", {}).get("rows", [])
         cards = [
-            metric_card("Cells with guide", display_value(overall.get("n_cells_with_guide")), "assigned"),
-            metric_card("Assignment rate", display_value(overall.get("frac_cells_with_guide")), "fraction"),
-            metric_card("Exactly one guide", display_value(overall.get("n_cells_exactly_1_guide")), "cells"),
-            metric_card("Median guide UMI", display_value(overall.get("guide_umi_median")), "per cell"),
-            metric_card("Guides per cell", display_value(overall.get("guides_per_cell_mean")), "mean"),
-            metric_card("Cells per guide", display_value(overall.get("cells_per_guide_median")), "median"),
-            metric_card("Recovered guides", display_value(overall.get("n_guides_total")), "features"),
+            metric_card("Before assigned-guide filter", display_value(before), "assignment-stage cohort"),
+            metric_card("Cells with an assigned guide", display_value(after), "before downstream cell QC"),
+            metric_card("Cells without assigned guides", display_value(overall.get("n_cells_without_assigned_guide")), "assignment-stage cohort"),
         ]
-        return '<h3>Guide assignment quality</h3><div class="metrics">' + "".join(cards) + "</div>" + data_table(
-            guide.get("rows", []), [("batch", "Batch"), ("n_cells", "Cells"),
-            ("guide_umi_median", "Median guide UMI"), ("frac_cells_with_guide", "Assigned fraction"),
-            ("n_cells_exactly_1_guide", "Exactly one guide"), ("guides_per_cell_mean", "Mean guides/cell")])
+        return '<h3>Guide assignment and cell filtering</h3><p>Counts here precede mitochondrial filtering. Final-cohort guide statistics are shown in Post-concatenation QC; unavailable stage counts are not inferred from final cells.</p><div class="metrics">' + "".join(cards) + '</div>' + data_table(
+            filters, [("measurement_set", "Measurement set"), ("filter_label", "Assignment filter"),
+                      ("cells_before", "Before"), ("cells_after", "After"), ("cells_removed", "Removed"),
+                      ("threshold", "Threshold")], limit=max(1, len(filters)))
+
+    if family == "postconcat_qc":
+        gene = additional.get("gene", {})
+        overall = overall_row(gene)
+        final = summary.get("final_mudata", {})
+        cards = [
+            metric_card("Final cells", display_value(final.get("cells", overall.get("n_cells"))), "after downstream cell QC"),
+            metric_card("Median RNA UMI", display_value(overall.get("umi_median")), "final cohort"),
+            metric_card("Mean RNA UMI", display_value(overall.get("umi_mean")), "final cohort"),
+            metric_card("Mean mito %", display_value(overall.get("mito_mean")), "final cohort"),
+            metric_card("Gene features", display_value(final.get("gene_features")), "delivered MuData"),
+            metric_card("Guide features", display_value(final.get("guide_features")), "delivered MuData"),
+        ]
+        content = '<h3>RNA quality after downstream cell QC</h3><div class="metrics">' + "".join(cards) + '</div>' + data_table(
+            gene.get("rows", []), [("batch", "Batch"), ("n_cells", "Final cells"),
+            ("umi_median", "Median UMI"), ("umi_mean", "Mean UMI"),
+            ("mito_median", "Median mito %"), ("mito_mean", "Mean mito %")], limit=max(1, len(gene.get("rows", []))))
+        guide = additional.get("guide", {})
+        content += '<h3>Guide statistics in the final cohort</h3><p>These describe cells remaining after downstream QC, rather than the earlier assignment-stage cohort.</p>' + data_table(
+            guide.get("rows", []), [("batch", "Batch"), ("n_cells", "Final cells"),
+            ("guide_umi_median", "Median guide UMI"), ("n_cells_exactly_1_guide", "Exactly one guide"),
+            ("guides_per_cell_mean", "Mean guides/cell")], limit=max(1, len(guide.get("rows", []))))
+        return content
 
     if family == "evaluation":
         intended = overall_row(additional.get("intended_target", {}))
@@ -464,6 +484,8 @@ def image_family(path: Path) -> str:
         'hto_filter', 'hashing_qc',
     )):
         return 'postconcat_qc'
+    if "additional_qc" in parts and ("gene" in parts or "guide" in parts):
+        return "postconcat_qc"
     if "seqspec" in value:
         return "seqspec"
     if "guide_mapping_qc" in parts or "guide_mapping_orientation_qc" in value:
@@ -703,12 +725,16 @@ def preprocessing_measurement_set_cards(
         input_cells = number(row.get("input_barcodes")) or 0
         retained = number(row.get("retained_cells")) or 0
         retained_pct = (100.0 * retained / input_cells) if input_cells else 0.0
+        scrublet_status = str(row.get("scrublet_status", "")).lower()
+        scrublet_label = "After Scrublet" if row.get("scrublet_enabled") else "Scrublet skipped"
+        if scrublet_status.startswith("skipped"):
+            scrublet_label = "Scrublet skipped (fit error)" if scrublet_status == "skipped_error" else "Scrublet skipped"
         stages = [
             ("Input barcodes", row.get("input_barcodes")),
             ("Automatic knee", row.get("post_knee_cells")),
             (f'RNA UMI ≥ {display_value(row.get("fixed_min_counts"))}', row.get("post_min_counts_cells")),
             (f'{display_value(row.get("mad_total_counts_n"))} MAD counts + genes', row.get("post_mad_cells")),
-            ("After Scrublet" if row.get("scrublet_enabled") else "Scrublet skipped", row.get("retained_cells")),
+            (scrublet_label, row.get("retained_cells")),
         ]
         stage_html = "".join(
             '<div class="filter-stage"><span>' + html.escape(label) + '</span><strong>' +
@@ -722,8 +748,8 @@ def preprocessing_measurement_set_cards(
         facts = [
             ("Knee UMI", row.get("knee_umi_threshold")),
             ("Knee rank", row.get("knee_rank")),
-            ("Retained", row.get("retained_cells")),
-            ("Retained %", f"{retained_pct:.2f}%"),
+            ("RNA-QC retained", row.get("retained_cells")),
+            ("RNA-QC retained %", f"{retained_pct:.2f}%"),
             ("Scrublet removed", row.get("removed_by_scrublet")),
             ("PCA components", row.get("scrublet_n_prin_comps_used")),
         ]
@@ -735,7 +761,7 @@ def preprocessing_measurement_set_cards(
             '<details class="measurement-card preprocessing-card"><summary><div><span class="measurement-name">' +
             html.escape(measurement_set) + '</span><span class="measurement-subtitle">automatic knee → UMI → MAD → doublet policy</span></div>'
             '<div class="measurement-summary"><strong>' + html.escape(display_value(int(retained))) +
-            f'</strong><span>retained · {retained_pct:.2f}%</span></div></summary>'
+            f'</strong><span>RNA-QC retained · {retained_pct:.2f}%</span></div></summary>'
             '<div class="measurement-body"><h4>Cell-filter sequence</h4><div class="filter-stages">' +
             stage_html + '</div><div class="measurement-facts">' + fact_html + '</div>' +
             ('<div class="measurement-plots">' + plots + '</div>' if plots else '<p class="empty">Plots have not been published for this set yet.</p>') +
@@ -744,7 +770,7 @@ def preprocessing_measurement_set_cards(
     return (
         '<div class="measurement-section"><div class="measurement-section-head"><div>'
         '<span class="eyebrow">Measurement-set hierarchy</span><h3>Preprocessing by measurement set</h3>'
-        '<p>Open a card to inspect the ordered filters, retained cells and associated QC plots.</p></div>'
+        '<p>Open a card to inspect per-set RNA filters and their retained cells. Counts precede guide assignment and downstream cell QC.</p></div>'
         f'<span class="measurement-count">{len(cards)} sets</span></div>' + "".join(cards) + '</div>', used
     )
 
@@ -1189,7 +1215,9 @@ def render(args: argparse.Namespace) -> str:
             metric_card("Task runtime", fmt_seconds(state["runtime"]), "aggregate"),
         ]
         family_images = artifact_images.get(family, [])
-        extra = category_flow(qc_data, family) + qc_metrics_content(qc_data, family)
+        extra = category_flow(qc_data, family)
+        if family != "postconcat_qc":
+            extra += qc_metrics_content(qc_data, family)
         if family == "mapping":
             extra += mapping_measurement_set_cards(qc_data)
             extra += guide_mapping_qc_content(getattr(args, "artifact_dir", None))
@@ -1218,6 +1246,7 @@ def render(args: argparse.Namespace) -> str:
             extra += postconcat_cards
             family_images = [(path, encoded) for path, encoded in family_images if path not in used_images]
             extra += postconcat_qc_content(getattr(args, 'artifact_dir', None))
+            extra += qc_metrics_content(qc_data, family)
         if family == 'final':
             included = sum(len(items) for items in artifact_images.values())
             extra += f'<h3>QC image coverage</h3><p data-images-included="{included}" data-images-omitted="{len(omitted_images)}">{included} unique stage-specific QC images embedded; {len(omitted_images)} omitted by the configured size budget.</p>'

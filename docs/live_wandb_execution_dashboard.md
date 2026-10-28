@@ -123,7 +123,7 @@ Each category panel must contain:
 Process-to-category routing is implemented by `family_for()` in
 `bin/render_wandb_pipeline_dashboard.py`. Reference preparation belongs to
 Input QC even if invoked inside a preprocessing subworkflow. Sequencing
-saturation and clone removal belong to Evaluation.
+saturation belongs to Evaluation; clone removal belongs to Post-concatenation QC.
 
 ## Cell and gene filtering flow
 
@@ -137,9 +137,11 @@ flowchart LR
     D2 --> F
     F --> G[Two-sided RNA UMI and detected-gene MAD filters]
     G --> H[Scrublet per measurement set]
-    H --> I[Concatenate retained measurement sets]
-    I --> J[QC_pct_mito]
-    J --> K[QC_min_cells_per_gene fractional support]
+    H --> I[Intersect RNA and guide barcodes]
+    I --> J[Guide assignment and assigned-guide eligibility]
+    J --> K[Guide-count limits and concatenation]
+    K --> L[Post-concatenation QC: mitochondrial filter]
+    L --> M[Fractional gene support on the delivered cohort]
 ```
 
 The dashboard displays the resolved barcode caller, minimum RNA UMIs, two MAD
@@ -147,6 +149,21 @@ multipliers, Scrublet profile/rate, mitochondrial cutoff, and fractional gene
 support. Cell calling, the RNA UMI floor, two-sided MAD rules, and Scrublet are
 applied independently per measurement set. Mitochondrial and fractional gene
 support filtering are applied after concatenation.
+
+Every section reports only its recorded stage cohort. Preprocessing totals,
+per-set tables, and cards end at RNA QC (barcode calling, UMI floor, MAD policy,
+and Scrublet). They do not use final MuData cell counts or final RNA/mitochondrial
+statistics. MuData shows the recorded RNA–guide intersection. Guide assignment
+shows assigned-guide eligibility and min/max-guide filter counts when available;
+it does not substitute final-cohort statistics for missing stage metrics.
+Mitochondrial filtering is displayed in Post-concatenation QC, after Guide
+assignment, with its recorded per-set before/after counts. Final RNA and guide
+statistics and their plots are grouped there after the downstream filter flow.
+For example, 149,074 RNA-QC cells and 24,771 final cells are distinct stage
+counts, not contradictory values. Missing intermediate statistics remain
+unavailable rather than being reconstructed from final cells. Completed reports
+can be regenerated without rerunning inference. Existing running sources remain
+pinned until a deliberate update or report-only rebuild.
 
 ## Update lifecycle
 

@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'bin'))
 from dashboard_presentation import enhance_dashboard_html
 
-DIGEST = "286583b6948b424a1b7f911afc669f19acac306ab950021fc4a5b4142ec3703c"
+DIGEST = "cecd79bc7a072cfe1eb97c934b3391aef375156184cd0bd50005f5b0b22a3475"
 FILES = {
     "Engreitz_ccPerturb.html", "GaryHonDataset.html", "HuangFuDataset.html",
     "Gersbach_HTV2.html", "Gersbach_gemX_v3.html",
