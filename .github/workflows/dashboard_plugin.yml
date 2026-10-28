@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_version:
-        description: 'Enter 0.1.0 to publish nf-crispr-dashboard@0.1.0 to the registry'
+        description: 'Enter 0.1.2 to publish nf-crispr-dashboard@0.1.2 to the registry'
         required: false
         default: ''
 
@@ -33,11 +33,11 @@ jobs:
         run: ./gradlew test assemble --no-daemon
       - uses: actions/upload-artifact@v4
         with:
-          name: nf-crispr-dashboard-0.1.0
-          path: plugins/nf-crispr-dashboard/build/distributions/nf-crispr-dashboard-0.1.0.zip
+          name: nf-crispr-dashboard-0.1.2
+          path: plugins/nf-crispr-dashboard/build/distributions/nf-crispr-dashboard-0.1.2.zip
 
   publish:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_version == '0.1.0'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_version == '0.1.2'
     needs: build
     runs-on: ubuntu-latest
     steps:

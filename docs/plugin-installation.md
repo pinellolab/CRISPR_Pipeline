@@ -1,6 +1,6 @@
 # Install the live-dashboard plugin
 
-The integrated dashboard uses the `nf-crispr-dashboard@0.1.0` Nextflow plugin.
+The integrated dashboard uses the `nf-crispr-dashboard@0.1.2` Nextflow plugin.
 For now, the versioned plugin archive is **bundled in this repository**, but
 Nextflow does not load it directly from the source tree. Install it once into
 an absolute, writable `NXF_PLUGINS_DIR` visible to the Nextflow launcher before
@@ -28,18 +28,35 @@ a different installed version, and is safe to rerun for the same archive.
 Verify the installation without starting a pipeline:
 
 ```bash
-test -f "$NXF_PLUGINS_DIR/nf-crispr-dashboard-0.1.0/.archive.sha256"
-sha256sum plugins/nf-crispr-dashboard/dist/nf-crispr-dashboard-0.1.0.zip
+test -f "$NXF_PLUGINS_DIR/nf-crispr-dashboard-0.1.2/.archive.sha256"
+sha256sum plugins/nf-crispr-dashboard/dist/nf-crispr-dashboard-0.1.2.zip
 ```
 
 The archive SHA-256 must be
-`6fb2b20f5012d65b2ed1e1e14c026d49f1f4a779faee1d20a2fbac870b9919b0`.
+`02a1eba42b8f30dc29952a603a36c485a089dfa5ea18d7104e415040ec902bbf`.
 The installer prints `Installed dashboard plugin` or `Dashboard plugin already
 installed` on success. The actual version and checksum are defined in
 `run_support/install_dashboard_plugin.sh`; if they change, use the matching
 checkout and reinstall rather than copying an older plugin directory.
 
 ## Enable it for a run
+
+Version 0.1.2 records task work directories and attempts, retains observer
+history across resumed runs, and supports a pinned local renderer image.
+The renderer publishes bounded task diagnostics alongside the execution
+history. See the [execution dashboard](live_wandb_execution_dashboard.md) for
+archive limits and recovery-status interpretation.
+
+When using Nextflow 26.04.6 with this pipeline's legacy DSL2 closures, export
+`NXF_SYNTAX_PARSER=v1` before configuration checks and execution. A preview
+can verify graph construction without executing tasks; disable
+`OUTPUT_IGVF_PACKAGE` for that preview only, because preview does not produce
+the final files required by the completion packaging hook. Full runs retain
+the default IGVF packaging and TSV outputs. Completion packaging resolves
+workflow metadata through the module method binding, so deferred DSL2 hook
+delegation cannot hide the workflow's final status. Keep the launcher log at
+`<launchDir>/.nextflow.log` so the completion step can publish the required
+`pipeline_info/nextflow.log` into the IGVF package.
 
 Keep `NXF_PLUGINS_DIR` exported in the shell that starts Nextflow. Add the
 plugin config after your dataset/resource configs and before the generated

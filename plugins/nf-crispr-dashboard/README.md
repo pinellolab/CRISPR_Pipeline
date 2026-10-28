@@ -78,10 +78,10 @@ To publish from GitHub Actions, first obtain approval for the
 `nf-crispr-dashboard` plugin claim with provider `pinellolab` in the Nextflow
 Plugin Registry. Add the registry token as the `NPR_API_KEY` repository secret
 in `pinellolab/CRISPR_Pipeline` (never commit it). Then manually run the
-**Build dashboard plugin** workflow on the reviewed branch and enter `0.1.0`
+**Build dashboard plugin** workflow on the reviewed branch and enter `0.1.2`
 in its `publish_version` input. Pushes and pull requests build and test only;
 they never publish. After publication, verify that a fresh Nextflow plugin
-cache can resolve `nf-crispr-dashboard@0.1.0` before enabling the plugin in
+cache can resolve `nf-crispr-dashboard@0.1.2` before enabling the plugin in
 the pipeline's default configuration.
 
 ## License
