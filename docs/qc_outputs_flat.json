@@ -489,7 +489,7 @@
     "flat_key": "additional_qc_guide.n_cells_with_guide",
     "section": "additional_qc_guide",
     "metric": "n_cells_with_guide",
-    "description": "Cells with at least one assigned guide.",
+    "description": "Cells with at least one assigned guide. On the overall row this is the count mudata_concat recorded before QC_require_assigned_guide dropped the unassigned cells, not a recount of the filtered object.",
     "unit": "cells",
     "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
     "source_artifact": "additional_qc/guide/guide_metrics.tsv"
@@ -507,8 +507,44 @@
     "flat_key": "additional_qc_guide.frac_cells_with_guide",
     "section": "additional_qc_guide",
     "metric": "frac_cells_with_guide",
-    "description": "Fraction of cells with at least one assigned guide.",
+    "description": "Fraction of cells with at least one assigned guide, measured over the cells present before QC_require_assigned_guide ran. This is the guide-assignment rate, so it is not n_cells_with_guide / n_cells once that filter has removed cells.",
     "unit": "fraction",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.n_cells_before_assigned_guide_filter",
+    "section": "additional_qc_guide",
+    "metric": "n_cells_before_assigned_guide_filter",
+    "description": "Cells present when the assigned-guide filter ran, recorded by mudata_concat.",
+    "unit": "cells",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.n_cells_without_assigned_guide",
+    "section": "additional_qc_guide",
+    "metric": "n_cells_without_assigned_guide",
+    "description": "Cells carrying no assigned guide when the filter ran; dropped when QC_require_assigned_guide is true.",
+    "unit": "cells",
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.assigned_guide_filter_applied",
+    "section": "additional_qc_guide",
+    "metric": "assigned_guide_filter_applied",
+    "description": "Whether QC_require_assigned_guide actually removed the unassigned cells.",
+    "unit": null,
+    "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
+    "source_artifact": "additional_qc/guide/guide_metrics.tsv"
+  },
+  {
+    "flat_key": "additional_qc_guide.assigned_guide_counts_source",
+    "section": "additional_qc_guide",
+    "metric": "assigned_guide_counts_source",
+    "description": "mudata_concat when the assignment counts come from the recorded pre-filter values, final_mudata when they were recounted from this object.",
+    "unit": null,
     "row_level": "overall row where batch == all, plus per-batch rows when batch metadata exists",
     "source_artifact": "additional_qc/guide/guide_metrics.tsv"
   },
@@ -637,6 +673,87 @@
     "unit": "percent",
     "row_level": "aggregate row plus one row per measurement set",
     "source_artifact": "additional_qc/guide_assignment_filter/guide_assignment_filter_flow.tsv"
+  },
+  {
+    "flat_key": "guide_mapping_qc.measurement_set",
+    "section": "guide_mapping_qc",
+    "metric": "measurement_set",
+    "description": "Measurement-set identifier.",
+    "unit": null,
+    "row_level": "one row per measurement set",
+    "source_artifact": "additional_qc/guide_mapping_qc/guide_mapping_qc.tsv"
+  },
+  {
+    "flat_key": "guide_mapping_qc.rna_cells",
+    "section": "guide_mapping_qc",
+    "metric": "rna_cells",
+    "description": "RNA cells retained before modality intersection.",
+    "unit": "cells",
+    "row_level": "one row per measurement set",
+    "source_artifact": "additional_qc/guide_mapping_qc/guide_mapping_qc.tsv"
+  },
+  {
+    "flat_key": "guide_mapping_qc.guide_cells",
+    "section": "guide_mapping_qc",
+    "metric": "guide_cells",
+    "description": "Cells present in the mapped guide matrix.",
+    "unit": "cells",
+    "row_level": "one row per measurement set",
+    "source_artifact": "additional_qc/guide_mapping_qc/guide_mapping_qc.tsv"
+  },
+  {
+    "flat_key": "guide_mapping_qc.overlap_cells",
+    "section": "guide_mapping_qc",
+    "metric": "overlap_cells",
+    "description": "Exact RNA-guide barcode intersection.",
+    "unit": "cells",
+    "row_level": "one row per measurement set",
+    "source_artifact": "additional_qc/guide_mapping_qc/guide_mapping_qc.tsv"
+  },
+  {
+    "flat_key": "guide_mapping_qc.guide_to_rna_fraction",
+    "section": "guide_mapping_qc",
+    "metric": "guide_to_rna_fraction",
+    "description": "Guide-mapped cells divided by retained RNA cells.",
+    "unit": "fraction",
+    "row_level": "one row per measurement set",
+    "source_artifact": "additional_qc/guide_mapping_qc/guide_mapping_qc.tsv"
+  },
+  {
+    "flat_key": "guide_mapping_qc.overlap_to_rna_fraction",
+    "section": "guide_mapping_qc",
+    "metric": "overlap_to_rna_fraction",
+    "description": "Exact RNA-guide barcode overlap divided by retained RNA cells.",
+    "unit": "fraction",
+    "row_level": "one row per measurement set",
+    "source_artifact": "additional_qc/guide_mapping_qc/guide_mapping_qc.tsv"
+  },
+  {
+    "flat_key": "guide_mapping_qc.overlap_to_guide_fraction",
+    "section": "guide_mapping_qc",
+    "metric": "overlap_to_guide_fraction",
+    "description": "Exact overlap divided by guide-mapped cells.",
+    "unit": "fraction",
+    "row_level": "one row per measurement set",
+    "source_artifact": "additional_qc/guide_mapping_qc/guide_mapping_qc.tsv"
+  },
+  {
+    "flat_key": "guide_mapping_qc.status",
+    "section": "guide_mapping_qc",
+    "metric": "status",
+    "description": "PASS or FAIL under the configured recovery thresholds.",
+    "unit": null,
+    "row_level": "one row per measurement set",
+    "source_artifact": "additional_qc/guide_mapping_qc/guide_mapping_qc.tsv"
+  },
+  {
+    "flat_key": "guide_mapping_qc.reason",
+    "section": "guide_mapping_qc",
+    "metric": "reason",
+    "description": "Threshold failures for this measurement set.",
+    "unit": null,
+    "row_level": "one row per measurement set",
+    "source_artifact": "additional_qc/guide_mapping_qc/guide_mapping_qc.tsv"
   },
   {
     "flat_key": "hto_post_clone_filter.measurement_set",
@@ -1309,6 +1426,33 @@
     "section": "measurement_set_rna_qc",
     "metric": "scrublet_pca_fallback_used",
     "description": "Whether this measurement set required the adaptive PCA fallback.",
+    "unit": null,
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.scrublet_failure_policy",
+    "section": "measurement_set_rna_qc",
+    "metric": "scrublet_failure_policy",
+    "description": "Configured behavior when Scrublet cannot fit: error or skip.",
+    "unit": null,
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.scrublet_status",
+    "section": "measurement_set_rna_qc",
+    "metric": "scrublet_status",
+    "description": "Whether Scrublet was applied, disabled, or skipped after an error.",
+    "unit": null,
+    "row_level": "one row per measurement set",
+    "source_artifact": "figures/measurement_set_qc_metrics.tsv"
+  },
+  {
+    "flat_key": "measurement_set_rna_qc.scrublet_skip_reason",
+    "section": "measurement_set_rna_qc",
+    "metric": "scrublet_skip_reason",
+    "description": "Recorded exception when Scrublet was skipped under the explicit skip policy.",
     "unit": null,
     "row_level": "one row per measurement set",
     "source_artifact": "figures/measurement_set_qc_metrics.tsv"

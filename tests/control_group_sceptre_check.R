@@ -32,6 +32,7 @@ extract_function <- function(name) {
 
 eval(parse(text = extract_function("resolve_sceptre_control_group")))
 eval(parse(text = extract_function("write_control_group_metadata")))
+eval(parse(text = extract_function("count_non_targeting_only_cells")))
 
 failures <- character()
 check <- function(label, expr) {
@@ -116,6 +117,25 @@ write_control_group_metadata("complement", NA_character_, "auto", FALSE, NA_inte
 recorded <- paste(readLines(tmp), collapse = " ")
 check('an unrequested group records null', grepl('"control_group_requested": null', recorded, fixed = TRUE))
 check('an unknown count records null', grepl('"non_targeting_cells": null', recorded, fixed = TRUE))
+
+if (requireNamespace("Matrix", quietly = TRUE)) {
+  # One NT-only cell, one mixed cell, one targeting cell and one unassigned.
+  calls <- Matrix::Matrix(rbind(c(1, 1, 0, 0), c(0, 1, 1, 0)), sparse = TRUE)
+  check("count only NT-only cells from input calls",
+        count_non_targeting_only_cells(calls, c("nt", "target"), "nt") == 1L)
+  check("no non-targeting guides means no NT cells",
+        count_non_targeting_only_cells(calls, c("nt", "target"), character()) == 0L)
+  check_error("reject unknown NT ID",
+              count_non_targeting_only_cells(calls, c("nt", "target"), "missing"), "missing")
+  check_error("reject mismatched guide axes",
+              count_non_targeting_only_cells(calls, "nt", "nt"), "unique guide IDs")
+  # Low-MOI example with multiple NT guides and no row names on the matrix.
+  low <- Matrix::Matrix(rbind(c(1, 0, 0), c(0, 1, 0), c(0, 0, 1)), sparse = TRUE)
+  n_nt <- count_non_targeting_only_cells(low, c("nt1", "nt2", "target"), c("nt2", "nt1"))
+  check("count IDs by input row order, not internal matrix names", n_nt == 2L)
+  check("NT count preserves the requested low-MOI contrast",
+        resolve_sceptre_control_group("nt_cells", TRUE, n_nt)$control_group == "nt_cells")
+}
 
 if (length(failures)) {
   cat("FAILED:\n")

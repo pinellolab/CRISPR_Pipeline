@@ -364,6 +364,19 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 }
 
 
+count_non_targeting_only_cells <- function(assignment, guide_ids, nt_ids) {
+  if (length(nt_ids) == 0L) return(0L)
+  if (nrow(assignment) != length(guide_ids) || anyDuplicated(guide_ids)) {
+    stop("Guide assignment rows must match unique guide IDs.")
+  }
+  positions <- match(nt_ids, guide_ids)
+  if (anyNA(positions)) stop("Non-targeting guide IDs are missing from the input assignments.")
+  binary <- assignment > 0
+  total <- Matrix::colSums(binary)
+  nt <- Matrix::colSums(binary[positions, , drop = FALSE])
+  as.integer(sum(nt > 0 & nt == total))
+}
+
 # Which cells a perturbation is compared against. "nt_cells" contrasts it with the
 # non-targeting cells, which is what PerTurbo's control-anchored pool does, so the
 # two methods answer the same question; "complement" contrasts it with every other
@@ -508,7 +521,15 @@ inference_sceptre_m <- function(mudata, n_processors = NA, moi_override = NULL, 
     if (length(nt_ids) == 0) {
       0L
     } else {
-      sum(Matrix::colSums(sceptre_object@grna_matrix[nt_ids, , drop = FALSE] > 0) > 0)
+      # SCEPTRE 0.10.3 stores @grna_matrix as a list of sparse blocks. Count
+      # directly from the unchanged input, without depending on that layout.
+      guide <- mudata[["guide"]]
+      assays <- SummarizedExperiment::assayNames(guide)
+      assay_name <- if ("guide_assignment" %in% assays) "guide_assignment" else "counts"
+      count_non_targeting_only_cells(
+        SummarizedExperiment::assay(guide, assay_name),
+        rownames(SingleCellExperiment::rowData(guide)), nt_ids
+      )
     }
   }, error = function(e) NA_integer_)
 

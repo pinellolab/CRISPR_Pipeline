@@ -63,6 +63,10 @@ def write_markdown(path, records):
             "when different QC artifacts use the same column name."
         ),
         "",
+        "The flat files define metrics for portal/schema integration; observed values are written to run-level `pipeline_qc_metrics.json` and the source tables below. Regenerate all three catalog files together after updating `METRIC_CATALOG`.",
+        "",
+        "Assignment rates use the recorded cell population before assigned-guide filtering. Scrublet status and skip reasons distinguish enabled, applied and failed/skipped execution. Cells-per-guide quartiles are emitted on the overall row; do not substitute zero for unavailable metrics on other rows.",
+        "",
         "| Flat key | Description | Unit | Row level | Source artifact |",
         "|---|---|---|---|---|",
     ]
