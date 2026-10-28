@@ -195,9 +195,7 @@ See DEMO_MODE_WARNING.txt in the output directory.
         completionSummary(monochrome_logs)
         writePipelineManifest(outdir)
         copyNextflowLog(outdir)
-        if (workflow.success && params.OUTPUT_IGVF_PACKAGE && params.ANALYSIS_mode == 'full' && params.INFERENCE_method == 'default' && !params.INFERENCE_input_mudata) {
-            packageIgvfResults(outdir)
-        }
+        packageSuccessfulIgvfResults(outdir)
         if (hook_url) {
             imNotification(summary_params, hook_url)
         }
@@ -220,6 +218,13 @@ See DEMO_MODE_WARNING.txt in the output directory.
 
 // Organize published artifacts without copying the large MuData. The four TSVs
 // are produced inside the pinned base container by export_igvf_inference_tsv.
+// Evaluate metadata in the module method binding rather than the hook delegate.
+def packageSuccessfulIgvfResults(outdir) {
+    if (params.OUTPUT_IGVF_PACKAGE && params.ANALYSIS_mode == 'full' && params.INFERENCE_method == 'default' && !params.INFERENCE_input_mudata && workflow.success) {
+        packageIgvfResults(outdir)
+    }
+}
+
 def packageIgvfResults(outdir) {
     def Files = java.nio.file.Files
     def root = new File(outdir.toString()).toPath().toAbsolutePath().normalize()

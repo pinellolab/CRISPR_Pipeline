@@ -44,3 +44,7 @@ A single-chunk SCEPTRE handoff is copied through a temporary file, SHA-256 check
 and atomically published. Optional additional-QC inputs have distinct staging
 names, so inherited/skipped stages can safely use the same empty placeholder.
 These compatibility changes preserve raw counts, assignments and tested pairs.
+
+IGVF packaging at successful completion resolves workflow status inside the
+module method binding, avoiding a null workflow value from a deferred DSL2
+completion-hook delegate. This changes completion handling, not inference.
