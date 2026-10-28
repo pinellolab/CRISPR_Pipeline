@@ -117,6 +117,7 @@ METRIC_CATALOG = {
             {"name": "guide_cells", "description": "Cells present in the mapped guide matrix.", "unit": "cells"},
             {"name": "overlap_cells", "description": "Exact RNA-guide barcode intersection.", "unit": "cells"},
             {"name": "guide_to_rna_fraction", "description": "Guide-mapped cells divided by retained RNA cells.", "unit": "fraction"},
+            {"name": "overlap_to_rna_fraction", "description": "Exact RNA-guide barcode overlap divided by retained RNA cells.", "unit": "fraction"},
             {"name": "overlap_to_guide_fraction", "description": "Exact overlap divided by guide-mapped cells.", "unit": "fraction"},
             {"name": "status", "description": "PASS or FAIL under the configured recovery thresholds.", "unit": None},
             {"name": "reason", "description": "Threshold failures for this measurement set.", "unit": None},

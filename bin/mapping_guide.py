@@ -268,6 +268,8 @@ def compute_guide_metrics(
         metrics["cells_per_guide_std"] = cpg_series.std()
         metrics["cells_per_guide_min"] = cpg_series.min()
         metrics["cells_per_guide_max"] = cpg_series.max()
+        metrics["cells_per_guide_q25"] = cpg_series.quantile(0.25)
+        metrics["cells_per_guide_q75"] = cpg_series.quantile(0.75)
 
     return metrics
 
