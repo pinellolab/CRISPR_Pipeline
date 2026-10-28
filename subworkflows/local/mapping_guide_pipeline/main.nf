@@ -55,13 +55,14 @@ workflow mapping_guide_pipeline {
         }
     }
     else {
-        bc_replacement_ch = params.replace_barcodes ? Channel.fromPath(params.bc_replacement_file).collect() : Channel.fromPath("dummy_bc_replacement.txt").collect()
+        bc_replacement_ch = params.replace_barcodes ? Channel.fromPath(params.bc_replacement_file).collect() : Channel.fromPath("${projectDir}/assets/dummy_bc_replacement.txt").collect()
 
         MappingOut = mappingGuide(
             ch_guide,
             GuideRef.guide_index,
             GuideRef.t2g_guide,
             SeqSpecResult.parsed_seqspec,
+            ch_guide_seqspec,
             SeqSpecResult.barcode_file,
             bc_replacement_ch,
             params.is_10x3v3,
@@ -79,7 +80,8 @@ workflow mapping_guide_pipeline {
 
     AnndataConcatenate = anndata_concat(
         parsed_covariate_file,
-        ks_guide_out_dir_collected
+        ks_guide_out_dir_collected,
+        params.replace_barcodes
     )
 
     emit:

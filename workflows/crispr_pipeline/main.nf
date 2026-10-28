@@ -93,8 +93,22 @@ workflow CRISPR_PIPELINE {
         ch_hash_seqspec.view { "Hash seqspec: $it" }
     }
 
-    // barcode_onlist
-    ch_barcode_onlist = ch_rna
+    // barcode_onlist, per modality. A feature-barcode library can be prepared
+    // with a different index kit from the RNA, so its cell barcodes come from a
+    // different onlist and have to be translated into the RNA's space
+    // afterwards. Taking the RNA's onlist for every modality silently discards
+    // a guide library whose barcodes are in the other space.
+    ch_rna_barcode_onlist = ch_rna
+        .map { meta, _fastqs -> file(meta.barcode_onlist) }
+        .unique()
+        .first()
+
+    ch_guide_barcode_onlist = ch_guide
+        .map { meta, _fastqs -> file(meta.barcode_onlist) }
+        .unique()
+        .first()
+
+    ch_hash_barcode_onlist = ch_hash
         .map { meta, _fastqs -> file(meta.barcode_onlist) }
         .unique()
         .first()
@@ -124,14 +138,14 @@ workflow CRISPR_PIPELINE {
     mapping_rna_pipeline(
             ch_rna,
             ch_rna_seqspec,
-            ch_barcode_onlist,
+            ch_rna_barcode_onlist,
             prepare_mapping_pipeline.out.parsed_covariate_file
         )
 
     mapping_guide_pipeline(
         ch_guide,
         ch_guide_seqspec,
-        ch_barcode_onlist,
+        ch_guide_barcode_onlist,
         ch_guide_design,
         prepare_mapping_pipeline.out.parsed_covariate_file,
         params.reverse_complement_guides,
@@ -161,7 +175,7 @@ workflow CRISPR_PIPELINE {
         mapping_hashing_pipeline(
             ch_hash,
             ch_hash_seqspec,
-            ch_barcode_onlist,
+            ch_hash_barcode_onlist,
             ch_barcode_hashtag_map,
             prepare_mapping_pipeline.out.parsed_covariate_file
             )
@@ -207,8 +221,12 @@ workflow CRISPR_PIPELINE {
         )
         GuideMappingGate = guide_mapping_qc_gate(MergeMuData.mudata, GuideMappingQC.qc_dir)
 
+        // Alignment and quantification only: an empty channel leaves every
+        // downstream process without input, so the run stops here and succeeds.
+        mudata_past_gate = params.stop_after_guide_mapping_qc ? Channel.empty() : GuideMappingGate.mudata
+
         // Shared processing pipeline
-        GuideAssignment = guide_assignment_pipeline(GuideMappingGate.mudata)
+        GuideAssignment = guide_assignment_pipeline(mudata_past_gate)
         // HTO support is assessed on GEX/guide-qualified cells before the parallel branches.
         HTOFilter = filter_hto_post_clone(GuideAssignment.concat_mudata)
         qualified_mudata = HTOFilter.filtered_mudata
@@ -323,7 +341,9 @@ workflow CRISPR_PIPELINE {
 
         // Scrublet now runs independently for each RNA measurement set before
         // concatenation, so the assembled MuData is already doublet-filtered.
-        mudata_for_processing = GuideMappingGate.mudata
+        // Alignment and quantification only: an empty channel leaves every
+        // downstream process without input, so the run stops here and succeeds.
+        mudata_for_processing = params.stop_after_guide_mapping_qc ? Channel.empty() : GuideMappingGate.mudata
 
         // Shared processing pipeline
         GuideAssignment = guide_assignment_pipeline(mudata_for_processing)

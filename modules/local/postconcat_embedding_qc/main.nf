@@ -22,7 +22,7 @@ process postconcat_embedding_qc {
     if [ '${params.TAPSEQ_QC_MODE}' = 'true' ]; then TAPSEQ_ARG='--tapseq-mode'; fi
     LEIDEN_ARG='--no-enable-leiden'
     if [ '${params.QC_EMBEDDING_enable_leiden}' = 'true' ]; then LEIDEN_ARG='--enable-leiden'; fi
-    python ${projectDir}/bin/postconcat_embedding_qc.py ${mudata_input} \
+    postconcat_embedding_qc.py ${mudata_input} \
         --stage ${stage} --pct-mito ${params.QC_pct_mito} \
         --min-cells-fraction ${params.QC_min_cells_per_gene} \
         ${params.QC_target_gene_rescue ? '--target-gene-rescue' : '--no-target-gene-rescue'} \

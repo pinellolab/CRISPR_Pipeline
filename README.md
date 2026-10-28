@@ -165,7 +165,7 @@ Demo mode is strictly for pre-runs. The pipeline prints warnings at startup and 
 | `BASEEDITING_FLASH_device` | `auto` | `auto`, `cpu`, `cuda`, `cuda:N`, or GPU index | Device used by the FLASH matcher. `auto` selects an available accelerator and otherwise uses CPU. |
 | `BASEEDITING_FLASH_fastq_chunk_size` | `200000` | Integer `>= 1` | Number of paired FASTQ records streamed into each FLASH processing chunk. |
 | `BASEEDITING_FLASH_gpu_read_chunk` | `4096` | Integer `>= 1` | Dense guide-matching sub-chunk size on the selected CPU or GPU device. Reduce it if accelerator memory is insufficient. |
-| `scrna_workflow` | `standard` | `standard`, `nac` | Selects the kb count RNA workflow. `standard` performs mature transcript counting; `nac` performs nascent-aware counting with cDNA and nascent references for unspliced/nascent signal. |
+| `scrna_workflow` | `nac` | `standard`, `nac` | Selects the kb count RNA workflow. `standard` performs mature transcript counting; `nac` performs nascent-aware counting with cDNA and nascent references for unspliced/nascent signal. |
 | `use_multimapping` | `false` | `true`, `false` | Passes kb count multimapping mode for scRNA mapping and keeps that setting during AnnData concatenation. |
 | `replace_barcodes` | `false` | `true`, `false` | Enables the CC-Perturb-seq barcode replacement strategy during RNA and guide mapping. When enabled, kb receives the replacement table and downstream concatenation reads `counts_unfiltered_modified`. |
 | `bc_replacement_file` | `''` | File path | Replacement table used by kb count when `replace_barcodes = true`. |

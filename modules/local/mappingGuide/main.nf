@@ -8,6 +8,7 @@ process mappingGuide {
     path guide_index
     path t2g_guide
     path parsed_seqSpec_file
+    path guide_seqspec
     path barcode_file
     path bc_replacement_file
     val is_10xv3v
@@ -24,6 +25,12 @@ process mappingGuide {
     def counts_dir = "counts_unfiltered${params.replace_barcodes ? '_modified' : ''}"
     // Check if spacer is valid (not null/empty and length > 1)
     def has_spacer  = (spacer_tag && spacer_tag.length() > 1) ? "true" : "false"
+    // A spacer tag is one reason to search the whole read, not the only one. A
+    // library whose spacer sits at a variable offset needs the same search with
+    // no tag, since nothing fixed precedes the spacer to anchor on.
+    def whole_read  = (has_spacer == "true" || params.guide_whole_read) ? "true" : "false"
+    // An empty guide_strand leaves kb's own default in place.
+    def strand_flag = params.guide_strand ? "--strand ${params.guide_strand}" : ""
 
     """
     set -euo pipefail
@@ -42,8 +49,8 @@ process mappingGuide {
         # part of the parsed chemistry, preserve its read id, and set start/end to 0.
         # Ex: 0,0,16:0,16,26:0,37,58 -> 0,0,16:0,16,26:0,0,0
         #     0,0,16:0,16,26:1,20,30 -> 0,0,16:0,16,26:1,0,0
-        if [ "${has_spacer}" == "true" ]; then
-            echo "Spacer tag detected ('${spacer_tag}'). Enabling automatic guide whole-read search."
+        if [ "${whole_read}" == "true" ]; then
+            echo "Guide whole-read search enabled (spacer tag: '${spacer_tag}', guide_whole_read: ${params.guide_whole_read})."
             echo "The guide feature read is preserved from the parsed seqspec chemistry; only feature start/end are reset to 0,0."
             echo "Parsed guide chemistry: \$RAW_CHEM"
             CHEM=\$(echo "\$RAW_CHEM" | awk -F: 'BEGIN{OFS=":"} {
@@ -82,8 +89,42 @@ process mappingGuide {
 
     echo "Final Chemistry: \$CHEM"
 
+    # kallisto pseudoaligns only 66.8% of these reads while 75.8% of them carry
+    # an exact library spacer, and --no-jump made no difference. Handing kb a
+    # read that is just the spacer removes the question. splitcode writes one
+    # record per input read, empty where it found no anchor, so the extracted
+    # file stays in step with R1 without any filtering.
+    KB_FASTQS="${fastq_files}"
+    if [ "${params.guide_extract_spacer}" = true ]; then
+        seqspec_to_splitcode.py \\
+            --seqspec ${guide_seqspec} \\
+            --output splitcode_config.txt \\
+            --read-index 1
+        if [ -s splitcode_config.txt ]; then
+            echo "Extracting the spacer with splitcode:"
+            cat splitcode_config.txt
+            splitcode -c splitcode_config.txt -N 2 --gzip -t ${task.cpus} \\
+                -o sc_R1.fastq.gz,sc_R2.fastq.gz ${fastq_files}
+            # The extracted file is named for the @extract variable.
+            KB_FASTQS="sc_R1.fastq.gz spacer.fastq.gz"
+            # The spacer is now the whole of the second file.
+            CHEM="\$(echo "\$CHEM" | awk -F: 'BEGIN{OFS=":"} {\$3="1,0,0"; print}')"
+            echo "Chemistry after extraction: \$CHEM"
+        else
+            echo "The guide read is already just the spacer; no extraction needed."
+        fi
+    fi
+
     if [ "${params.replace_barcodes}" = true ] && [ -f "${bc_replacement_file}" ] && [ -s "${bc_replacement_file}" ]; then
-        replacement_args="-r ${bc_replacement_file}"
+        # bustools reads the replacement list with a plain ifstream, so a
+        # gzipped file comes back as binary and stops with "Barcode lengths
+        # not consistent in file". 10x ships the translation gzipped.
+        if gzip -t "${bc_replacement_file}" 2>/dev/null; then
+            gzip -dc "${bc_replacement_file}" > bc_replacement_list.txt
+            replacement_args="-r bc_replacement_list.txt"
+        else
+            replacement_args="-r ${bc_replacement_file}"
+        fi
     else
         replacement_args=""
     fi
@@ -101,9 +142,10 @@ process mappingGuide {
         --h5ad \\
         --overwrite \\
         --verbose \\
+        ${strand_flag} \\
         -w ${barcode_file} \\
         \${replacement_args} \\
-        ${fastq_files}
+        \${KB_FASTQS}
 
     expected_h5ad="${batch}_ks_guide_out/${counts_dir}/adata.h5ad"
     if [ ! -s "\${expected_h5ad}" ]; then
