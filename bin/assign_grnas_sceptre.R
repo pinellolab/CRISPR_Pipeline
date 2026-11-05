@@ -18,13 +18,15 @@ assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n
     )
 
   # assign gRNAs
-  assign_grnas_args <- list(sceptre_object, method = "mixture")
+  assignment_method <- if (isTRUE(sceptre_object@low_moi)) "maximum" else "mixture"
+  message("SCEPTRE guide assignment method: ", assignment_method)
+  assign_grnas_args <- list(sceptre_object, method = assignment_method)
   
   # Add optional parameters if they are not "default"
-  if (probability_threshold != "default") {
+  if (assignment_method == "mixture" && probability_threshold != "default") {
     assign_grnas_args$probability_threshold <- as.numeric(probability_threshold)
   }
-  if (n_em_rep != "default") {
+  if (assignment_method == "mixture" && n_em_rep != "default") {
     assign_grnas_args$n_em_rep <- as.integer(n_em_rep)
   }
   # Parallelization controls inferred from n_processors
