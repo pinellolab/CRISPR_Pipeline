@@ -11,6 +11,9 @@ assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n
   # set analysis parameters
   sceptre_object <- sceptre_object |>
     sceptre::set_analysis_parameters(
+      # Assignment has no effect tests. Avoid requiring inference-only NTC
+      # target-label normalization while fitting/exporting guide presence.
+      control_group = "complement",
       discovery_pairs = data.frame(
         grna_target = character(0),
         response_id = character(0)
