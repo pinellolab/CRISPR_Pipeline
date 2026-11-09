@@ -176,7 +176,7 @@ class Covariate(NamedTuple):
     @property
     def sceptre_term(self) -> str:
         """How this covariate is written in SCEPTRE's formula."""
-        return f"log({self.name})" if self.kind == "count" else self.name
+        return f"log(pmax({self.name}, 1))" if self.name == "total_guide_umis" else (f"log({self.name})" if self.kind == "count" else self.name)
 
 
 CANONICAL_COVARIATES: tuple[Covariate, ...] = (
@@ -245,16 +245,18 @@ def ensure_gene_depth_totals(mdata) -> list[str]:
 
 
 def validate_positive(values, column: str) -> np.ndarray:
-    """Every count must be strictly positive, so that ``log`` is defined.
+    """Validate count covariates on the scale shared by both inference methods.
 
-    No cell that survives filtering can have zero library size, zero detected
-    genes or zero guide UMIs -- ``QC_require_assigned_guide`` in
-    ``bin/mudata_concat.py`` alone rules out the last. Rather than paper over a
-    violation with ``log1p`` and fit a term that is quietly wrong, fail here and
-    say which cells are at fault: it means the filtering upstream did not do what
-    this assumes.
+    RNA depth and detected genes must be positive. Genuine zero-guide cells
+    are permitted when the selected cell policy retains them; their guide-depth
+    term is log(max(total_guide_umis, 1)) in both SCEPTRE and PerTurbo. Raw
+    counts and guide assignments are never changed by this transform.
     """
     array = np.asarray(values, dtype=float)
+    if column == 'total_guide_umis':
+        if not np.isfinite(array).all() or (array < 0).any():
+            raise ValueError('Guide UMI covariate must be finite and non-negative')
+        return np.maximum(array, 1.0)
     bad = ~(array > 0)
     if bad.any():
         raise ValueError(
@@ -472,7 +474,7 @@ def _materialize_configured_covariates(mdata, config):
         levels = sorted(design["batch"].unique())
         rank_parts += [(design["batch"] == level).to_numpy(dtype=float)[:, None]
                        for level in levels[1:]]
-    rank_parts += [np.log(design[c.name].to_numpy(dtype=float))[:, None]
+    rank_parts += [np.log(validate_positive(design[c.name].to_numpy(dtype=float), c.name))[:, None]
                    for c in CANONICAL_COVARIATES if c.kind == "count" and c.name in design]
     rank_parts += [design[name].to_numpy(dtype=float)[:, None] for name in optional if name in design]
     matrix = np.hstack(rank_parts)

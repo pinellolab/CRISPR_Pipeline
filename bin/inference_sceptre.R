@@ -157,16 +157,17 @@ build_formula_object <- function(covariate_df, requested = character(0)) {
   for (covariate in COUNT_COVARIATES) {
     if (!(covariate %in% present)) next
     values <- covariate_df[[covariate]]
-    if (any(!is.finite(values)) || any(values <= 0, na.rm = TRUE)) {
+    invalid <- !is.finite(values) | if (covariate == "total_guide_umis") values < 0 else values <= 0
+    if (any(invalid)) {
       stop(sprintf(
-        paste0("Covariate `%s` must be strictly positive to be log-transformed; ",
-               "found %d non-positive or non-finite values. This is enforced ",
+        paste0("Covariate `%s` contains %d invalid counts (non-finite, negative, ",
+               "or zero for RNA depth/detected genes). This is enforced ",
                "upstream in bin/inference_covariates.py, so reaching here means ",
                "the covariates were not prepared by that step."),
-        covariate, sum(!is.finite(values) | values <= 0)
+        covariate, sum(invalid)
       ))
     }
-    terms_vec <- c(terms_vec, sprintf("log(%s)", covariate))
+    terms_vec <- c(terms_vec, if (covariate == "total_guide_umis") sprintf("log(pmax(%s, 1))", covariate) else sprintf("log(%s)", covariate))
   }
 
   for (covariate in CATEGORICAL_COVARIATES) {

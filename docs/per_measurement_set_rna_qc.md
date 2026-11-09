@@ -98,3 +98,15 @@ When `SCRUBLET_adaptive_pca_fallback=true`, only Scrublet's explicit
 component than Scrublet's reported usable dimension. Requested and actual PCA
 dimensions and whether fallback occurred are saved in
 `measurement_set_qc_metrics.tsv`; unrelated Scrublet errors remain fatal.
+
+## Standard caller and experimental comparisons
+
+This branch keeps the IGVF barcode selectors `none`, `knee` and `knee2`.
+The configured default remains `QC_barcode_filter = 'knee2'`; RNA UMI,
+MAD, mitochondrial, hashing and guide-assignment filters retain their existing
+independent controls. No Cell Ranger native-barcode import, OrdMag,
+chemistry-specific ambient rank windows, or EmptyDrops removal mode is wired
+into preprocessing. Cell Ranger comparison outputs belong to separate analyses.
+Do not reuse experimental `QC_cell_calling_chemistry`,
+`QC_cell_ranger_empty_drops_removal` or native-barcode-list overrides in run
+configs for this branch. Regenerate run provenance against this exact commit.

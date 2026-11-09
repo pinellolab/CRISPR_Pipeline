@@ -48,3 +48,9 @@ These compatibility changes preserve raw counts, assignments and tested pairs.
 IGVF packaging at successful completion resolves workflow status inside the
 module method binding, avoiding a null workflow value from a deferred DSL2
 completion-hook delegate. This changes completion handling, not inference.
+
+When the configured cell filter retains genuine zero-guide cells, both inference
+backends use `log(max(total_guide_umis, 1))` for guide-depth adjustment. Negative
+or non-finite guide counts remain errors; RNA depth and detected-gene counts
+must be positive. This does not assign a guide to a zero-guide cell or relax
+perturbation eligibility. Raw counts and assignment layers remain unchanged.

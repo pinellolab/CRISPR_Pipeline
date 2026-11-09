@@ -219,7 +219,7 @@ def gene_symbols(adata):
     """Return one symbol per feature without changing the delivered feature index."""
     for key in ('symbol', 'gene_symbol', 'gene_name'):
         if key in adata.var:
-            values = adata.var[key].fillna('').astype(str).to_numpy()
+            values = adata.var[key].astype(object).fillna('').astype(str).to_numpy()
             return np.where(values != '', values, adata.var_names.astype(str))
     return adata.var_names.astype(str).to_numpy()
 
