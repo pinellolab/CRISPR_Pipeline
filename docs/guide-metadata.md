@@ -20,3 +20,22 @@ Validation checklist:
 6. For dual-guide assays, retain both guide identities and enable `DUAL_GUIDE`; expect the post-assignment collapse to select the intended two-guide cells.
 
 For hashing assays, the `barcode_hashtag_map` file supplies HTO feature IDs/sequences (see the [example](downloadable-examples/hash_metadata.tsv)). The HTO read SeqSpec, reference, and mapping must match each other. HTO singlet and minimum-positive-cell filters are applied to the already RNA/guide-filtered population; a weak or mis-oriented HTO library can remove many usable-looking RNA cells. Compare per-set HTO counts and GMM-Demux calls in the dashboard before relaxing thresholds.
+
+## Fixed guide intervals in FLASH base-editing mapping
+
+`BASEEDITING_FLASH_search_mode = 'full_read'` retains the legacy sliding search.
+For assays whose SeqSpec defines the captured spacer exactly, select `seqspec`:
+only that interval is compared with guide references, and reads tied between
+multiple best-matching guides are left unassigned. The interval length must equal
+the matched guide length, and captured reference sequences must be unique.
+The mode and rejected ambiguous-read count are recorded in the mapped AnnData
+parameters. Alignment QC positions in this mode are relative to the extracted
+interval. Barcode and UMI extraction remain defined by the same SeqSpec.
+
+A full-read sliding search can find overlapping, shifted spacers from different
+guide designs at different positions in one read. Even zero-mismatch matches
+can therefore change guide identity. Use the assay's validated feature interval
+when comparing such libraries with the original publication; lowering mismatch
+tolerance alone does not resolve cross-position ambiguity. Changing this mode
+requires guide remapping and downstream assignment/inference, rather than only
+regenerating evaluation plots. This option is unrelated to RNA cell calling.

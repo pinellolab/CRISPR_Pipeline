@@ -189,6 +189,12 @@
                     "enum": ["legacy", "flash"],
                     "description": "Select the legacy or streaming FLASH base-editing guide mapper."
                 },
+                "BASEEDITING_FLASH_search_mode": {
+                    "type": "string",
+                    "enum": ["full_read", "seqspec"],
+                    "default": "full_read",
+                    "description": "Guide search region; seqspec restricts mapping to its guide interval and rejects tied best guide matches."
+                },
                 "BASEEDITING_FLASH_tolerance": {
                     "type": "integer",
                     "default": 5,

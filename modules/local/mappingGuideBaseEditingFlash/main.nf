@@ -36,6 +36,7 @@ process mappingGuideBaseEditingFlash {
         --output_prefix ${batch}_ks_guide_out \\
         --reverse_complement_guides ${reverse_complement_guides} \\
         --spacer_tag "${spacer_tag}" \\
+        --guide-search-mode ${params.BASEEDITING_FLASH_search_mode} \\
         --tolerance ${params.BASEEDITING_FLASH_tolerance} \\
         --guide_len ${params.BASEEDITING_FLASH_guide_len} \\
         --device ${params.BASEEDITING_FLASH_device} \\

@@ -77,6 +77,8 @@ def parse_args():
         required=True,
         help="Parsed seqspec chemistry string in kb format: bc:umi:guide.",
     )
+    parser.add_argument("--guide-search-mode", choices=["full_read", "seqspec"], default="full_read",
+                        help="Search the full read (legacy) or only the SeqSpec guide interval; interval mode rejects guide ties.")
     parser.add_argument(
         "--tolerance",
         type=int,
@@ -309,7 +311,9 @@ def gpu_mem_str(device: str) -> str:
 
 
 class DenseGuideMatcher:
-    def __init__(self, guides: Sequence[str], guide_len: int, tolerance: int, device: str, read_chunk: int):
+    def __init__(self, guides: Sequence[str], guide_len: int, tolerance: int, device: str, read_chunk: int, unique_only: bool = False):
+        self.unique_only = unique_only
+        self.ambiguous_reads = 0
         self.guides = list(guides)
         self.L = int(guide_len)
         self.tolerance = int(tolerance)
@@ -370,6 +374,11 @@ class DenseGuideMatcher:
             best_gid_i32 = (argmin % guide_count).to(torch.int32)
 
             ok = best_dist_i16 <= self.tolerance
+            if self.unique_only:
+                per_guide = mismatches.min(dim=1).values
+                ambiguous = (per_guide == best_dist_i16[:, None]).sum(dim=1) > 1
+                self.ambiguous_reads += int((ok & ambiguous).sum().item())
+                ok = ok & ~ambiguous
             best_dist_i32 = best_dist_i16.to(torch.int32)
             best_dist_i32 = torch.where(ok, best_dist_i32, torch.tensor(10**9, device=self.dev, dtype=torch.int32))
             best_start_i32 = torch.where(ok, best_start_i32, torch.tensor(-1, device=self.dev, dtype=torch.int32))
@@ -405,6 +414,7 @@ class DenseGuideMatcher:
             best_start = np.full(batch_size, -1, dtype=np.int32)
             best_gid = np.full(batch_size, -1, dtype=np.int32)
 
+            tied_guides = np.zeros(batch_size, dtype=np.int32)
             for gid, guide in enumerate(self.guide_mat):
                 mism = np.sum(windows != guide[None, None, :], axis=-1, dtype=np.int16)
                 mism = np.where(valid, mism, np.int16(32767))
@@ -412,6 +422,7 @@ class DenseGuideMatcher:
                 local_dist = mism[np.arange(batch_size), local_start].astype(np.int32)
 
                 better = local_dist < best_dist
+                tied_guides = np.where(better, 1, tied_guides + (local_dist == best_dist))
                 better_start = (local_dist == best_dist) & (
                     (best_start < 0) | (local_start < best_start)
                 )
@@ -425,6 +436,10 @@ class DenseGuideMatcher:
                 best_gid[update] = gid
 
             ok = best_dist <= self.tolerance
+            if self.unique_only:
+                ambiguous = tied_guides > 1
+                self.ambiguous_reads += int((ok & ambiguous).sum())
+                ok = ok & ~ambiguous
             best_dist = np.where(ok, best_dist, 10**9).astype(np.int32)
             best_start = np.where(ok, best_start, -1).astype(np.int32)
             best_gid = np.where(ok, best_gid, -1).astype(np.int32)
@@ -933,7 +948,15 @@ def main():
             tolerance=args.tolerance,
             device=args.device,
             read_chunk=args.gpu_read_chunk,
+            unique_only=args.guide_search_mode == "seqspec",
         )
+        if args.guide_search_mode == "seqspec":
+            if args.align_on_read >= 0 and args.align_on_read != guide_spec[0]:
+                raise ValueError("SeqSpec guide mode cannot override its read index")
+            if guide_spec[2] - guide_spec[1] != guide_len:
+                raise ValueError("SeqSpec guide interval must equal the matched guide length")
+            if len(unique_guides) != len(raw_spacers):
+                raise ValueError("SeqSpec guide mode requires unique captured guide sequences")
         stats = PlotStats(
             tol=args.tolerance,
             guide_len=guide_len,
@@ -993,6 +1016,8 @@ def main():
                     onlist_read_pairs += 1
 
             align_reads = r2_seqs if align_on_read == 1 else r1_seqs
+            if args.guide_search_mode == "seqspec":
+                align_reads = [slice_from_read_pair(a, b, guide_spec) for a, b in zip(r1_seqs, r2_seqs)]
             best_dist, best_start, best_gid = matcher.best_hits(align_reads)
             stats.update(align_reads, unique_guides, best_dist, best_start, best_gid)
 
@@ -1025,6 +1050,8 @@ def main():
         adata.uns["params"] = {
             "fastq_pairs": list(zip(r1_paths, r2_paths)),
             "chemistry": args.chemistry,
+            "guide_search_mode": args.guide_search_mode,
+            "ambiguous_reads_rejected": matcher.ambiguous_reads,
             "guide_len": guide_len,
             "tolerance": args.tolerance,
             "align_on_read": align_on_read,
