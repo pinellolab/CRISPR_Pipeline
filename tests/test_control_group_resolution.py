@@ -239,7 +239,7 @@ def test_the_shared_setting_is_declared_with_auto_as_the_default():
 def test_the_resolution_happens_once_in_the_inference_subworkflow():
     workflow = (REPO_ROOT / "subworkflows/local/inference_pipeline/main.nf").read_text()
 
-    assert "include { resolveControlGroupFromParams }" in workflow
+    assert re.search(r"include\s*\{[^}]*\bresolveControlGroupFromParams\b", workflow)
     assert workflow.count("resolveControlGroupFromParams()") == 1
     assert "log.info(control_group.log_line)" in workflow
 
