@@ -171,7 +171,8 @@ Read `external_mudata_report.json` before interpreting inference. It records
 parent, submitted, and accepted cell counts, external covariate names, and
 file hashes. The dashboard shows those three counts alongside the original
 Mapping and QC panels. Inference and Evaluation show results from the
-continuation. The dashboard also flags older checkpoints with incomplete QC
+continuation. If single-guide selection is enabled, the dashboard also
+shows the count after the guide UMI floor and dominance ratio. It flags older checkpoints with incomplete QC
 publication. The Nextflow task list includes `prepare_external_mudata`,
 inference, evaluation, and dashboard assembly. The continuation reuses the
 mapping and QC performed at the checkpoint.

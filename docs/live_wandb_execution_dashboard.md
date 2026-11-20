@@ -105,7 +105,8 @@ A completed checkpoint is labeled **Ready for inference** and publishes a
 uses this snapshot for the original Mapping and QC panels and shows the
 resumed inference and evaluation alongside them. The continuation header
 reports the parent run and the checkpoint, submitted, and accepted cell
-counts. Task status and timing describe the current invocation.
+counts. When single-guide inference selection runs, its remaining cell
+count is also shown. Task status and timing describe the current invocation.
 
 The observer and wrapper update `pipeline_dashboard/execution_dashboard.html`
 while inference runs. The completed continuation is also available at

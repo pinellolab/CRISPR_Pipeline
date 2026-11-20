@@ -97,7 +97,7 @@ def family_for(process: str) -> str:
     leaf = value.split(":")[-1]
     if leaf in {"save_checkpoint_dashboard", "stage_checkpoint_dashboard", "render_continuation_dashboard", "preinference_checkpoint"}:
         return "final"
-    if "ntc_calibration" in value or "resolve_inference_mode" in value:
+    if leaf == "filter_inference_single_guides" or "ntc_calibration" in value or "resolve_inference_mode" in value:
         return "inference"
     if any(key in leaf for key in ('embedding_before_clone', 'embedding_after_clone',
                                    'postconcat_embedding_qc', 'remove_clonal_cells', 'filter_hto_post_clone')):
@@ -1414,7 +1414,7 @@ def seqspec_content(table_path: Path, image_path: Path | None) -> str:
     return table + image
 
 
-def continuation_content(report: dict[str, Any]) -> str:
+def continuation_content(report: dict[str, Any], cell_filter: dict[str, Any]) -> str:
     if not report:
         return ""
     parent = html.escape(str(report["parent_run_name"]))
@@ -1424,14 +1424,20 @@ def continuation_content(report: dict[str, Any]) -> str:
         provenance = "This older checkpoint has partial published QC. Some mapping metrics or plots may be unavailable."
     else:
         provenance = "Published mapping and QC files for this checkpoint are unavailable."
-    cards = "".join(
-        metric_card(label, display_value(report.get(key)), detail)
-        for label, key, detail in (
-            ("Checkpoint cells", "parent_cells", "after pipeline QC"),
-            ("Submitted cells", "submitted_cells", "before the external allowlist"),
-            ("Inference input cells", "accepted_cells", "after external selection"),
-        )
+    eligible = report["accepted_cells"]
+    selected = cell_filter.get("selected_cells")
+    show_filter = cell_filter.get("input_cells") == eligible and isinstance(selected, int) and 0 < selected <= eligible
+    cards = (
+        metric_card("Checkpoint cells", display_value(report["parent_cells"]), "after pipeline QC")
+        + metric_card("Submitted cells", display_value(report["submitted_cells"]), "before the external allowlist")
+        + metric_card("Inference input cells", display_value(eligible), "after external selection")
     )
+    if show_filter:
+        floor = display_value(cell_filter.get("min_assigned_umis"))
+        ratio = display_value(cell_filter.get("min_umi_ratio_to_next_guide"))
+        cards += metric_card("Single-guide inference cells", display_value(selected),
+                             f"after the guide UMI floor ({floor}) and ratio ({ratio})")
+
     covariates = ", ".join(html.escape(str(name)) for name in report.get("external_covariates", []))
     note = f"<p>External covariates: {covariates}</p>" if covariates else ""
     return (
@@ -1451,11 +1457,15 @@ def render(args: argparse.Namespace) -> str:
     checkpoint = artifact_dir / "checkpoint_dashboard" if artifact_dir else None
     continuation_record = checkpoint / "continuation.json" if checkpoint else None
     continuation = {}
+    cell_filter = {}
     qc_metrics_json = getattr(args, "qc_metrics_json", None)
     guide_report = args.guide_report
     seqspec_table = args.seqspec_table
     if continuation_record and continuation_record.is_file():
         continuation = json.loads(continuation_record.read_text(encoding="utf-8"))
+        filter_report = artifact_dir / "inference_cell_filter" / "inference_single_guide_filter.json"
+        if filter_report.is_file():
+            cell_filter = json.loads(filter_report.read_text(encoding="utf-8"))
         qc_metrics_json = checkpoint / "pipeline_qc_metrics.json"
         guide_report = checkpoint / "guide_metadata.validation.json"
         seqspec_table = checkpoint / "guide_position_table.csv"
@@ -1669,7 +1679,7 @@ details.measurement-card{{border-color:var(--line);border-radius:12px;padding:0;
 @media(max-width:700px){{.shell{{padding:15px}}header{{display:block}}.live{{margin-top:12px;width:max-content}}details.measurement-card>summary{{grid-template-columns:auto 1fr}}.measurement-summary,.modality-chips{{grid-column:2;text-align:left;justify-content:flex-start}}.measurement-plots{{grid-template-columns:1fr}}}}
 </style></head><body><div class="shell">
 <header><div><span class="eyebrow">CRISPR Pipeline · execution dashboard</span><h1>{html.escape(args.run_name)}</h1><div class="run-id">{html.escape(args.run_id)}</div></div><div class="live {html.escape(args.status.lower())}"><i></i><span>{"READY FOR INFERENCE" if ready else html.escape(args.status.upper())}</span></div></header>
-{continuation_content(continuation)}
+{continuation_content(continuation, cell_filter)}
 {family_tabs}
 {f'<div class="summary telemetry">{task_summary}{guide_card}</div>' if task_summary or guide_card else ""}
 <div class="graph-card"><div class="graph-head"><div><span class="eyebrow">Live dependency view</span><h2>Pipeline execution steps</h2></div><p>Select a stage to inspect its QC and tasks</p></div><nav class="graph">{"".join(graph_nodes)}</nav></div>

@@ -165,7 +165,8 @@ workflow CONTINUE_FROM_CHECKPOINT {
     Evaluation = evaluation_pipeline(GTF_Reference.gencode_gtf, Inference.inference_mudata)
     render_continuation_dashboard(
         CheckpointDashboard.dashboard, Inference.inference_mudata, Evaluation.evaluation_output_dir,
-        Evaluation.control_output_dir, Inference.calibration_output
+        Evaluation.control_output_dir, Inference.calibration_output,
+        Inference.cell_filter_report.ifEmpty { file("${projectDir}/dummy_hash.txt") }
     )
 
     emit:

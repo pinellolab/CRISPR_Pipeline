@@ -47,8 +47,8 @@ After continuation finishes, open
 `CONTINUE_OUT/pipeline_dashboard/dashboard.html`. It includes the checkpoint
 QC and the resumed run’s inference previews, calibration, and evaluation.
 The continuation header records the parent run and the checkpoint, submitted,
-and accepted cell counts. Use the accepted count as the input cohort for
-inference. The final HTML is also published by standalone Nextflow runs.
+and accepted cell counts. If single-guide inference selection is enabled,
+the dashboard also shows the size of the cohort after that selection. The final HTML is also published by standalone Nextflow runs.
 
 For checkpoints created before `checkpoint_qc/` was added, keep the original
 output tree in place. The continuation reports whichever published QC plots and

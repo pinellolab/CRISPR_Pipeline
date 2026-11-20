@@ -48,6 +48,7 @@ process render_continuation_dashboard {
     path evaluation_output
     path controls, stageAs: 'controls/*'
     path calibration, stageAs: 'calibration_input/*'
+    path cell_filter_report, stageAs: 'inference_cell_filter/*'
 
     output:
     path 'dashboard.html'

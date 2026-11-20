@@ -181,6 +181,12 @@ def test_continued_dashboard_keeps_parent_qc_and_shows_resumed_results(tmp_path,
     assert 'class="node checkpoint" data-family="mapping"' in live
     assert 'class="node running" data-family="inference"' in live
 
+    filter_dir = continued / "inference_cell_filter"
+    filter_dir.mkdir()
+    (filter_dir / "inference_single_guide_filter.json").write_text(json.dumps({
+        "input_cells": 3, "selected_cells": 2, "min_assigned_umis": 5,
+        "min_umi_ratio_to_next_guide": 3,
+    }))
     results = mu.read_h5mu(accepted)
     results.uns["local_analysis_per_guide_results"] = {
         "gene_name": np.array(["first_gene", "lowest_pvalue_gene"]),
@@ -205,6 +211,8 @@ def test_continued_dashboard_keeps_parent_qc_and_shows_resumed_results(tmp_path,
     assert "43,821" in standalone and "rna_qc_full_panel" in standalone
     assert standalone.index("lowest_pvalue_gene") < standalone.index("first_gene")
     assert "global_gene" in standalone
+    assert "Single-guide inference cells" in standalone
+    assert "after the guide UMI floor (5) and ratio (3)" in standalone
     trace.write_text(trace.read_text().replace("RUNNING", "COMPLETED"))
     wandb_html_monitor.render_snapshot(args, "completed", True)
     final = (published / "dashboard.html").read_text()
