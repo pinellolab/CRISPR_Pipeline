@@ -33,7 +33,7 @@ process createDashboard_default {
         path benchmark_output_dir
 
     output:
-        tuple path("evaluation_output"), path("figures"), path("guide_seqSpec_plots"), path("additional_qc"), path("dashboard.html"), path("svg"), path("benchmark_output")
+        tuple path("evaluation_output"), path("figures"), path("guide_seqSpec_plots"), path("additional_qc"), path("dashboard.html"), path("svg"), path("benchmark_output"), emit: dashboard_files
         path "pipeline_dashboard.tar.gz", emit: dashboard_archive
         path "pipeline_qc_metrics.json", emit: qc_metrics_json
 

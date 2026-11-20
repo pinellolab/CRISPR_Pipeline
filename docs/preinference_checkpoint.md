@@ -10,7 +10,10 @@ published at `OUTDIR/preinference_checkpoint/RUN_NAME/`:
 
 - `preinference_mudata.h5mu`: the unmodified, final pre-inference population;
 - `preinference_manifest.json`: its SHA-256, GTF SHA-256, cell/feature counts,
-  source commit, and `READY_FOR_INFERENCE` status.
+  source commit, and `READY_FOR_INFERENCE` status;
+- `checkpoint_qc/`: the published mapping metrics, SeqSpec table, QC tables,
+  and plots from the checkpoint. Preserve this directory with the manifest
+  and H5MU when moving the handoff.
 
 Run a continuation with a *different output directory* and
 `--ANALYSIS_mode continue --ANALYSIS_parent_manifest /path/to/preinference_manifest.json`.
@@ -32,7 +35,24 @@ external covariate. Evaluation runs afterward. The original checkpoint is
 never overwritten. `-resume` retries tasks within a given invocation; changing
 an edited H5MU in place is not a supported cache-invalidation mechanism.
 
-`--ANALYSIS_mode full` explicitly opts into the previous uninterrupted path.
-Current limitation: the continuation does not yet reconstruct
-the full mapping/assignment HTML dashboard from parent-run artifacts, and the
-edited-H5MU validation currently reads the entire object into memory.
+## Dashboard across runs
+
+Open `OUTDIR/pipeline_dashboard/dashboard.html` when the checkpoint completes.
+With the execution dashboard enabled, the checkpoint is marked **Ready for
+inference**. During continuation, the live execution dashboard shows the
+original mapping, preprocessing, guide assignment, and post-concatenation QC
+from the copied snapshot under `CONTINUE_OUT/checkpoint_dashboard/`.
+
+After continuation finishes, open
+`CONTINUE_OUT/pipeline_dashboard/dashboard.html`. It includes the checkpoint
+QC and the resumed run’s inference previews, calibration, and evaluation.
+The continuation header records the parent run and the checkpoint, submitted,
+and accepted cell counts. Use the accepted count as the input cohort for
+inference. The final HTML is also published by standalone Nextflow runs.
+
+For checkpoints created before `checkpoint_qc/` was added, keep the original
+output tree in place. The continuation reports whichever published QC plots and
+tables it can recover and flags incomplete or unavailable upstream evidence.
+
+`--ANALYSIS_mode full` runs mapping through inference in one invocation.
+Edited-H5MU validation currently reads the entire input object into memory.

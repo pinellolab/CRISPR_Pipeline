@@ -505,7 +505,13 @@ def _selected_params(params):
         "SATURATION_downsample_fractions",
         "GUIDE_ASSIGNMENT_method",
         "GUIDE_ASSIGNMENT_capture_method",
+        "GUIDE_ASSIGNMENT_min_guides_per_cell",
+        "GUIDE_ASSIGNMENT_max_guides_per_cell",
+        "GUIDE_ASSIGNMENT_cleanser_probability_threshold",
+        "GUIDE_ASSIGNMENT_SCEPTRE_probability_threshold",
+        "GUIDE_ASSIGNMENT_SCEPTRE_n_em_rep",
         "INFERENCE_method",
+        "INFERENCE_target_guide_pairing_strategy",
         "INFERENCE_max_target_distance_bp",
         "Multiplicity_of_infection",
     ]

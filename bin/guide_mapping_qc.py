@@ -71,11 +71,11 @@ def write_plot(rows: list[dict], output: Path, orientation: bool, spacer_tag: st
     x = np.arange(len(labels))
     width = 0.25
     fig, ax = plt.subplots(figsize=(max(8, len(labels) * 1.5), 5.2))
-    ax.bar(x - width, [row["rna_cells"] for row in rows], width, label="RNA cells", color="#2563eb")
-    ax.bar(x, [row["guide_cells"] for row in rows], width, label="guide-mapped cells", color="#f59e0b")
-    ax.bar(x + width, [row["overlap_cells"] for row in rows], width, label="RNA-guide overlap", color="#10b981")
+    ax.bar(x - width, [row["rna_cells"] for row in rows], width, label="GEX cells after RNA QC", color="#2563eb")
+    ax.bar(x, [row["guide_cells"] for row in rows], width, label="Mapped guide barcodes", color="#f59e0b")
+    ax.bar(x + width, [row["overlap_cells"] for row in rows], width, label="Exact GEX–guide overlap", color="#10b981")
     ax.set_yscale("symlog", linthresh=1)
-    ax.set_ylabel("Cells (symlog scale)")
+    ax.set_ylabel("Barcode count (symlog)")
     ax.set_xticks(x, labels, rotation=35, ha="right")
     ax.legend(frameon=False, ncol=3)
     orientation_label = "reverse-complemented" if orientation else "as supplied"

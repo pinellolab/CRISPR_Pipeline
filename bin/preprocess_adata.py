@@ -154,7 +154,7 @@ def plot_filter_steps(snapshots, batch, outpath, knee_context):
     summary_ax.axis("off")
     status = "APPLIED" if applied else "DISABLED / SKIPPED"
     threshold = (
-        f"rank ≤ {selected_rank:,}\nRNA UMIs ≥ {selected_threshold:,.0f}"
+        f"Knee rank {selected_rank:,}\nRNA UMIs ≥ {selected_threshold:,.0f}"
         if applied else "No applied knee"
     )
     summary_ax.text(
@@ -329,7 +329,8 @@ def plot_scrublet_scores(scores, predicted, threshold, batch, outpath):
         ax.hist(scores[predicted], bins=60, color="#f97316", alpha=0.8, label="Doublet calls")
     if np.isfinite(threshold):
         ax.axvline(threshold, color="#7c3aed", linestyle="--", linewidth=1.5, label=f"Threshold = {threshold:.3g}")
-    ax.set(xlabel="Scrublet doublet score", ylabel="Cells", title=f"{batch}: Scrublet doublet calls")
+    ax.set(xlabel="Scrublet doublet score", ylabel="Cells",
+           title=f"{batch}: Scrublet doublet calls · {int(predicted.sum()):,} cells removed")
     ax.legend(frameon=False)
     fig.tight_layout()
     fig.savefig(outpath, dpi=180, facecolor="white")
@@ -478,7 +479,7 @@ def main(args):
         "filter_name": "barcode_filter",
         "filter_label": f"QC_barcode_filter = {args.barcode_filter}",
         "threshold": (
-            f"rank ≤ {selected_rank:,}; RNA UMIs ≥ {knee_threshold:,.0f}"
+            f"Knee rank {selected_rank:,}; RNA UMIs ≥ {knee_threshold:,.0f}"
             if selected_rank is not None else
             ("manual mode; no knee applied" if args.barcode_filter == "none" else "no valid knee; skipped")
         ),

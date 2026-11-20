@@ -72,12 +72,14 @@ is:
 $PARENT_OUT/preinference_checkpoint/$PARENT_NAME/
   preinference_mudata.h5mu
   preinference_manifest.json
+  checkpoint_qc/
 ```
 
 Check that the run completed successfully and the manifest says
 `READY_FOR_INFERENCE`. The manifest records parent cell/feature counts and
-hashes of the MuData and reference GTF. **Do not edit the parent H5MU or
-manifest.**
+hashes of the MuData and reference GTF. Preserve the parent H5MU, manifest,
+and QC snapshot together. Open `$PARENT_OUT/pipeline_dashboard/dashboard.html`
+to review the mapping and QC before starting inference.
 
 If the checkpoint invocation fails before publishing the handoff, retry that
 same stage from its original launch directory with the same work directory
@@ -161,12 +163,18 @@ $CONTINUE_OUT/external_mudata/analysis_input.h5mu
 $CONTINUE_OUT/external_mudata/external_mudata_report.json
 $CONTINUE_OUT/pipeline_outputs/inference_mudata.h5mu
 $CONTINUE_OUT/pipeline_outputs/*analysis*_output.parquet
+$CONTINUE_OUT/checkpoint_dashboard/
+$CONTINUE_OUT/pipeline_dashboard/dashboard.html
 ```
 
 Read `external_mudata_report.json` before interpreting inference. It records
 parent, submitted, and accepted cell counts, external covariate names, and
-file hashes. Check the Nextflow task list: this run should contain
-`prepare_external_mudata`, inference, and evaluation, but no mapping task.
+file hashes. The dashboard shows those three counts alongside the original
+Mapping and QC panels. Inference and Evaluation show results from the
+continuation. The dashboard also flags older checkpoints with incomplete QC
+publication. The Nextflow task list includes `prepare_external_mudata`,
+inference, evaluation, and dashboard assembly. The continuation reuses the
+mapping and QC performed at the checkpoint.
 
 If **this** invocation fails after starting inference, retry from its own
 launch directory with its own work directory and `-resume`; keep the parent

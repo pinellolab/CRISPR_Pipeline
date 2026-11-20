@@ -22,6 +22,7 @@ include { guide_mapping_qc_gate } from '../../modules/local/guide_mapping_qc_gat
 include { filter_hto_post_clone } from '../../modules/local/filter_hto_post_clone'
 include { postconcat_embedding_qc as embedding_before_clone } from '../../modules/local/postconcat_embedding_qc'
 include { postconcat_embedding_qc as embedding_after_clone } from '../../modules/local/postconcat_embedding_qc'
+include { save_checkpoint_dashboard } from '../../modules/local/checkpoint_dashboard'
 include { preinference_checkpoint } from '../../modules/local/preinference_checkpoint'
 
 // Import hashing-specific modules
@@ -238,16 +239,40 @@ workflow CRISPR_PIPELINE {
         }
         if (params.ANALYSIS_mode == 'checkpoint') {
             preinference_checkpoint(mudata_for_inference, Preprocessing.gencode_gtf)
+            dashboard_mudata = mudata_for_inference
+            evaluation_dir = file("${projectDir}/assets/calibration_empty")
+            control_dir = file("${projectDir}/assets/hto_qc_empty")
+            benchmark_output_dir = file("${projectDir}/assets/benchmark_empty")
         } else {
-        Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
+            Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
+            dashboard_mudata = Inference.inference_mudata
 
-        evaluation_pipeline (
-            Preprocessing.gencode_gtf,
-            Inference.inference_mudata
+            Evaluation = evaluation_pipeline (
+                Preprocessing.gencode_gtf,
+                Inference.inference_mudata
             )
 
+            evaluation_dir = Evaluation.evaluation_output_dir
+            control_dir = Evaluation.control_output_dir
+
+            if (params.ENABLE_BENCHMARK) {
+                Benchmark = tf_benchmark(
+                    Inference.inference_mudata,
+                    Preprocessing.gencode_gtf,
+                    file(params.ENCODE_BED_DIR),
+                    params.DEMO_MODE
+                )
+                benchmark_output_dir = Benchmark.benchmark_output
+            } else {
+                benchmark_output_dir = Channel.value(file("${workflow.projectDir}/assets/benchmark_empty"))
+            }
+            // The dashboard copies benchmark_output/ as it is; the non-targeting
+            // calibration check rides along under benchmark_output/calibration/.
+            benchmark_output_dir = collect_benchmark_outputs(benchmark_output_dir, Inference.calibration_output).collected
+        }
+
         AdditionalQC = additional_qc_plots(
-            Inference.inference_mudata,
+            dashboard_mudata,
             clone_qc_dir,
             saturation_qc_dir,
             GuideAssignment.guide_assignment_qc,
@@ -255,21 +280,6 @@ workflow CRISPR_PIPELINE {
             embedding_dirs,
             GuideMappingQC.qc_dir
         )
-
-        if (params.ENABLE_BENCHMARK) {
-            Benchmark = tf_benchmark(
-                Inference.inference_mudata,
-                Preprocessing.gencode_gtf,
-                file(params.ENCODE_BED_DIR),
-                params.DEMO_MODE
-            )
-            benchmark_output_dir = Benchmark.benchmark_output
-        } else {
-            benchmark_output_dir = Channel.value(file("${workflow.projectDir}/assets/benchmark_empty"))
-        }
-        // The dashboard copies benchmark_output/ as it is; the non-targeting
-        // calibration check rides along under benchmark_output/calibration/.
-        benchmark_output_dir = collect_benchmark_outputs(benchmark_output_dir, Inference.calibration_output).collected
 
         Dashboard = dashboard_pipeline_HASHING (
             seqSpecCheck_pipeline_HASHING.out.guide_seqSpecCheck_plots,
@@ -285,17 +295,25 @@ workflow CRISPR_PIPELINE {
             mapping_hashing_pipeline.out.ks_hashing_out_dir_collected,
             HTOFilter.filtered_hashing,
             HTOFilter.unfiltered_hashing,
-            Inference.inference_mudata,
+            dashboard_mudata,
             AdditionalQC.additional_qc,
             Preprocessing.figures_dir,
-            evaluation_pipeline.out.evaluation_output_dir,
-            evaluation_pipeline.out.control_output_dir,
+            evaluation_dir,
+            control_dir,
             benchmark_output_dir
 
             )
+        if (params.ANALYSIS_mode == 'checkpoint') {
+            qc_dirs = Dashboard.dashboard_files.map { files ->
+                files.findAll { it.name in ['figures', 'additional_qc', 'guide_seqSpec_plots', 'hashing_seqSpec_plots'] }
+            }
+            save_checkpoint_dashboard(
+                preinference_checkpoint.out.manifest, Dashboard.qc_metrics,
+                seqSpecCheck_pipeline_HASHING.out.guide_position_table, qc_dirs
+            )
+        }
         if (params.OUTPUT_IGVF_PACKAGE && params.INFERENCE_method == 'default' && params.ANALYSIS_mode == 'full') {
             check_igvf_dashboard(Dashboard.dashboard_archive)
-        }
         }
     }
     else {
@@ -352,16 +370,40 @@ workflow CRISPR_PIPELINE {
         }
         if (params.ANALYSIS_mode == 'checkpoint') {
             preinference_checkpoint(mudata_for_inference, Preprocessing.gencode_gtf)
+            dashboard_mudata = mudata_for_inference
+            evaluation_dir = file("${projectDir}/assets/calibration_empty")
+            control_dir = file("${projectDir}/assets/hto_qc_empty")
+            benchmark_output_dir = file("${projectDir}/assets/benchmark_empty")
         } else {
-        Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
+            Inference = inference_pipeline(mudata_for_inference, Preprocessing.gencode_gtf)
+            dashboard_mudata = Inference.inference_mudata
 
-        evaluation_pipeline (
-            Preprocessing.gencode_gtf,
-            Inference.inference_mudata
+            Evaluation = evaluation_pipeline (
+                Preprocessing.gencode_gtf,
+                Inference.inference_mudata
             )
 
+            evaluation_dir = Evaluation.evaluation_output_dir
+            control_dir = Evaluation.control_output_dir
+
+            if (params.ENABLE_BENCHMARK) {
+                Benchmark = tf_benchmark(
+                    Inference.inference_mudata,
+                    Preprocessing.gencode_gtf,
+                    file(params.ENCODE_BED_DIR),
+                    params.DEMO_MODE
+                )
+                benchmark_output_dir = Benchmark.benchmark_output
+            } else {
+                benchmark_output_dir = Channel.value(file("${workflow.projectDir}/assets/benchmark_empty"))
+            }
+            // The dashboard copies benchmark_output/ as it is; the non-targeting
+            // calibration check rides along under benchmark_output/calibration/.
+            benchmark_output_dir = collect_benchmark_outputs(benchmark_output_dir, Inference.calibration_output).collected
+        }
+
         AdditionalQC = additional_qc_plots(
-            Inference.inference_mudata,
+            dashboard_mudata,
             clone_qc_dir,
             saturation_qc_dir,
             GuideAssignment.guide_assignment_qc,
@@ -369,21 +411,6 @@ workflow CRISPR_PIPELINE {
             embedding_dirs,
             GuideMappingQC.qc_dir
         )
-
-        if (params.ENABLE_BENCHMARK) {
-            Benchmark = tf_benchmark(
-                Inference.inference_mudata,
-                Preprocessing.gencode_gtf,
-                file(params.ENCODE_BED_DIR),
-                params.DEMO_MODE
-            )
-            benchmark_output_dir = Benchmark.benchmark_output
-        } else {
-            benchmark_output_dir = Channel.value(file("${workflow.projectDir}/assets/benchmark_empty"))
-        }
-        // The dashboard copies benchmark_output/ as it is; the non-targeting
-        // calibration check rides along under benchmark_output/calibration/.
-        benchmark_output_dir = collect_benchmark_outputs(benchmark_output_dir, Inference.calibration_output).collected
 
         Dashboard = dashboard_pipeline (
             seqSpecCheck_pipeline.out.guide_seqSpecCheck_plots,
@@ -393,16 +420,24 @@ workflow CRISPR_PIPELINE {
             mapping_rna_pipeline.out.ks_transcripts_out_dir_collected,
             MergeMuData.adata_guide,
             mapping_guide_pipeline.out.ks_guide_out_dir_collected,
-            Inference.inference_mudata,
+            dashboard_mudata,
             AdditionalQC.additional_qc,
             Preprocessing.figures_dir,
-            evaluation_pipeline.out.evaluation_output_dir,
-            evaluation_pipeline.out.control_output_dir,
+            evaluation_dir,
+            control_dir,
             benchmark_output_dir
             )
+        if (params.ANALYSIS_mode == 'checkpoint') {
+            qc_dirs = Dashboard.dashboard_files.map { files ->
+                files.findAll { it.name in ['figures', 'additional_qc', 'guide_seqSpec_plots', 'hashing_seqSpec_plots'] }
+            }
+            save_checkpoint_dashboard(
+                preinference_checkpoint.out.manifest, Dashboard.qc_metrics,
+                seqSpecCheck_pipeline.out.guide_position_table, qc_dirs
+            )
+        }
         if (params.OUTPUT_IGVF_PACKAGE && params.INFERENCE_method == 'default' && params.ANALYSIS_mode == 'full') {
             check_igvf_dashboard(Dashboard.dashboard_archive)
-        }
         }
     }
 

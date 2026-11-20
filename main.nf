@@ -23,6 +23,7 @@ include { PACKAGE_EXISTING_IGVF_RESULTS } from './subworkflows/local/utils_nfcor
 include { skipGTFDownload } from './modules/local/skipGTFDownload'
 include { downloadGTF } from './modules/local/downloadGTF'
 include { remove_clonal_cells } from './modules/local/remove_clonal_cells'
+include { stage_checkpoint_dashboard; render_continuation_dashboard } from './modules/local/checkpoint_dashboard'
 include { prepare_external_mudata } from './modules/local/prepare_external_mudata'
 include { evaluation_pipeline } from './subworkflows/local/evaluation_pipeline'
 /*
@@ -115,6 +116,31 @@ workflow CONTINUE_FROM_CHECKPOINT {
     if (!parent_mudata.exists()) {
         error "Parent MuData not found beside the manifest: ${parent_mudata}"
     }
+    checkpoint_dir = parent_manifest.toRealPath().parent
+    parent_outdir = checkpoint_dir.parent
+    parent_sources = []
+    guide_report = []
+    if (checkpoint_dir.parent?.name == 'preinference_checkpoint') {
+        parent_outdir = checkpoint_dir.parent.parent
+        continuation_outdir = file(params.outdir)
+        if (continuation_outdir.exists() && continuation_outdir.toRealPath() == parent_outdir) {
+            error "Checkpoint continuation requires a different output directory from the parent run."
+        }
+        def validation = parent_outdir.resolve("pipeline_info/${checkpoint_dir.name}/guide_metadata.validation.json")
+        guide_report = validation.exists() ? [validation] : []
+        if (!checkpoint_dir.resolve('checkpoint_qc').exists()) {
+            parent_sources = [
+                'measurement_set_qc', 'guide_mapping_qc', 'guide_assignment_qc',
+                'postconcat_embedding_qc', 'clone_removal', 'hashing_qc', 'sequencing_saturation',
+                'pipeline_outputs/seqspeccheck', 'seqspeccheck'
+            ].collect { parent_outdir.resolve(it) }.findAll { it.exists() }.unique { it.name }
+        }
+    }
+    def snapshot = checkpoint_dir.resolve('checkpoint_qc')
+    if (snapshot.exists()) {
+        parent_sources = [snapshot]
+    }
+
     edited_mudata = params.ANALYSIS_input_mudata ? file(params.ANALYSIS_input_mudata) : parent_mudata
     keep_cells = file(params.ANALYSIS_keep_cells_tsv ?: "${projectDir}/dummy_hash.txt")
     covariates = file(params.ANALYSIS_covariates_tsv ?: "${projectDir}/dummy_hash.txt")
@@ -134,8 +160,13 @@ workflow CONTINUE_FROM_CHECKPOINT {
         parent_manifest, parent_mudata, edited_mudata,
         GTF_Reference.gencode_gtf, keep_cells, covariates
     )
+    CheckpointDashboard = stage_checkpoint_dashboard(External.report, parent_sources, guide_report)
     Inference = inference_pipeline(External.mudata, GTF_Reference.gencode_gtf)
-    evaluation_pipeline(GTF_Reference.gencode_gtf, Inference.inference_mudata)
+    Evaluation = evaluation_pipeline(GTF_Reference.gencode_gtf, Inference.inference_mudata)
+    render_continuation_dashboard(
+        CheckpointDashboard.dashboard, Inference.inference_mudata, Evaluation.evaluation_output_dir,
+        Evaluation.control_output_dir, Inference.calibration_output
+    )
 
     emit:
     analysis_input = External.mudata

@@ -98,17 +98,33 @@ Routine debug fields such as `error: -` do not trigger it.
 The newest successfully uploaded run is retained when replacement fails. This
 prevents a transient network or W&B error from removing the last usable view.
 
+## Checkpoint and continuation
+
+A completed checkpoint is labeled **Ready for inference** and publishes a
+`checkpoint_qc/` snapshot beside its manifest. The continuation dashboard
+uses this snapshot for the original Mapping and QC panels and shows the
+resumed inference and evaluation alongside them. The continuation header
+reports the parent run and the checkpoint, submitted, and accepted cell
+counts. Task status and timing describe the current invocation.
+
+The observer and wrapper update `pipeline_dashboard/execution_dashboard.html`
+while inference runs. The completed continuation is also available at
+`pipeline_dashboard/dashboard.html` from a standalone Nextflow invocation.
+See the [checkpoint guide](preinference_checkpoint_user_guide.md) for the handoff layout
+and older checkpoint behavior.
+
 ## Pipeline flow shown in the dashboard
 
 ```mermaid
 flowchart LR
-    A[Input QC<br/>samples, metadata, references] --> B[SeqSpec<br/>read structure]
-    B --> C[Mapping<br/>RNA and guide quantification]
-    C --> D[Preprocessing<br/>per-set cell QC and gene filtering]
-    D --> E[MuData<br/>barcode intersection and assembly]
+    A[Input validation and preparation<br/>samples, metadata, references] --> B[Library structure QC<br/>SeqSpec and observed guide capture]
+    B --> C[Library mapping<br/>GEX, guides, optional HTO and RNA saturation]
+    C --> D[GEX preprocessing<br/>cell calling and per-set RNA QC]
+    D --> E[MuData assembly<br/>barcode intersection]
     E --> F[Guide assignment<br/>guide-positive cells]
-    F --> G[Inference<br/>SCEPTRE and PerTurbo]
-    G --> H[Evaluation<br/>controls, saturation, benchmarks]
+    F --> Q[Post-concatenation QC<br/>mitochondrial, clone and embedding QC]
+    Q --> G[Inference<br/>SCEPTRE and PerTurbo]
+    G --> H[Evaluation<br/>controls and benchmarks]
     H --> I[Final<br/>reports and provenance]
 ```
 
@@ -116,14 +132,23 @@ Each category panel must contain:
 
 1. its ordered processing flow;
 2. completed, cached, failed and running task state from the Nextflow trace;
-3. a searchable process/task table with runtime and peak memory;
+3. a process/task table with runtime and recorded peak memory;
 4. QC metrics and figures available at that point; and
 5. bounded failure evidence when a task fails.
 
 Process-to-category routing is implemented by `family_for()` in
 `bin/render_wandb_pipeline_dashboard.py`. Reference preparation belongs to
-Input QC even if invoked inside a preprocessing subworkflow. Sequencing
-saturation belongs to Evaluation; clone removal belongs to Post-concatenation QC.
+Input validation and preparation. Library mapping includes RNA sequencing
+saturation when enabled. The saturation estimate uses RNA mapping records and
+the barcodes retained by RNA preprocessing. Clone removal belongs to
+Post-concatenation QC. The Evaluation gallery contains downstream trans-effect
+distributions and the TF benchmark when produced.
+
+The library-structure table shows the best observed mate and orientation for
+each sampled FASTQ pair. Compare that result to the supplied SeqSpec. The table
+and glossary explain the hit, position and flank metrics. The mapping recovery
+card reports a separate check on mapped guide support and barcode overlap,
+with thresholds taken from the run's recovery report.
 
 ## Cell and gene filtering flow
 
@@ -144,11 +169,13 @@ flowchart LR
     L --> M[Fractional gene support on the delivered cohort]
 ```
 
-The dashboard displays the resolved barcode caller, minimum RNA UMIs, two MAD
-multipliers, Scrublet profile/rate, mitochondrial cutoff, and fractional gene
-support. Cell calling, the RNA UMI floor, two-sided MAD rules, and Scrublet are
-applied independently per measurement set. Mitochondrial and fractional gene
-support filtering are applied after concatenation.
+The dashboard links resolved analysis settings to their pipeline stages and
+uses the parameter schema for descriptions, types and optionality. The RNA
+stage shows the resolved barcode caller, minimum RNA UMIs and MAD multipliers.
+Scrublet settings and per-set filter counts are shown only when applicable.
+The filter table distinguishes step-specific removal from retention relative
+to the original set and explains ties at the knee UMI threshold. Mitochondrial
+and fractional gene support filtering appear after concatenation.
 
 Every section reports only its recorded stage cohort. Preprocessing totals,
 per-set tables, and cards end at RNA QC (barcode calling, UMI floor, MAD policy,
@@ -159,6 +186,10 @@ it does not substitute final-cohort statistics for missing stage metrics.
 Mitochondrial filtering is displayed in Post-concatenation QC, after Guide
 assignment, with its recorded per-set before/after counts. Final RNA and guide
 statistics and their plots are grouped there after the downstream filter flow.
+This includes pooled RNA and guide plots made by the final report builder.
+The Final dashboard stage shows a cross-stage count sequence from recorded
+metrics and gives the source artifact paths. The Inference table search
+operates on the displayed preview of the lowest-p-value rows.
 For example, 149,074 RNA-QC cells and 24,771 final cells are distinct stage
 counts, not contradictory values. Missing intermediate statistics remain
 unavailable rather than being reconstructed from final cells. Completed reports

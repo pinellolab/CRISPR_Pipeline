@@ -13,11 +13,12 @@ SPEC.loader.exec_module(dashboard)
 
 def test_special_qc_processes_are_routed_to_expected_categories():
     assert dashboard.family_for("workflow:skipGTFDownload") == "input"
-    assert dashboard.family_for("workflow:sequencing_saturation") == "evaluation"
+    assert dashboard.family_for("workflow:sequencing_saturation") == "mapping"
     assert dashboard.family_for("workflow:remove_clonal_cells") == "postconcat_qc"
     assert dashboard.image_family(Path("measurement_set_qc/rna_qc_filter_flow_B1.png")) == "preprocessing"
     assert dashboard.family_for("pipeline:ntc_calibration_pipeline:ntc_calibration_report") == "inference"
     assert dashboard.family_for("pipeline:resolve_inference_mode") == "inference"
+    assert dashboard.family_for("pipeline:guide_assignment_pipeline:mudata_concat") == "guide_assignment"
     assert dashboard.image_family(Path("pipeline_outputs/calibration/ntc_cells_per_guide.png")) == "inference"
     assert dashboard.image_family(Path("pipeline_dashboard/benchmark_output/calibration/ntc_calibration_qq_guide.png")) == "inference"
 
@@ -200,7 +201,7 @@ def test_final_dashboard_inference_tables_are_bounded_and_searchable(tmp_path):
     result = dashboard.final_inference_content(final_dashboard, limit=25)
 
     assert "Local Analysis: top guide–gene pairs" in result
-    assert "Filter the 25 mirrored rows" in result
+    assert "Search the 25 displayed rows" in result
     assert "GENE24" in result
     assert "GENE25" not in result
     assert 'id="inference-0"' in result
@@ -252,7 +253,7 @@ def test_mapping_cards_group_modalities_by_measurement_set():
     assert "Mapping by measurement set" in result
     assert result.count('<details class="measurement-card">') == 1
     assert "SET_A" in result
-    assert "RNA" in result and "guide" in result
+    assert "GEX" in result and "Guide" in result
     assert "1,500" in result
     assert "88.5%" in result
 
@@ -290,7 +291,7 @@ def test_preprocessing_cards_keep_each_sets_plots_inside_its_card():
     )
 
     assert "Preprocessing by measurement set" in result
-    assert "automatic knee → UMI → MAD → doublet policy" in result
+    assert "After barcode calling" in result
     assert "After Scrublet" in result
     assert "20.00%" in result
     assert "knee plot scRNA SET A" in result
@@ -422,6 +423,12 @@ def test_final_rna_and_guide_plots_follow_downstream_cell_qc():
     assert dashboard.image_family(Path('pipeline_dashboard/additional_qc/guide/guides_per_cell.png')) == 'postconcat_qc'
     assert dashboard.image_family(Path('measurement_set_qc/rna_qc_filter_flow_B1.png')) == 'preprocessing'
     assert dashboard.image_family(Path('guide_assignment_qc/guide_assignment_filter_steps_B1.png')) == 'guide_assignment'
+    assert dashboard.image_family(Path('figures/scRNA_barcodes_UMI_thresholds.png')) == 'postconcat_qc'
+    assert dashboard.image_family(Path('figures/cells_per_hto_barplot.png')) == 'postconcat_qc'
+    assert dashboard.image_family(Path('figures/guide_per_cell_unknown.png')) == 'guide_assignment'
+    assert dashboard.image_family(Path('additional_qc/global_analysis/global_analysis_per_guide_distribution.png')) == 'evaluation'
+    assert dashboard.image_family(Path('benchmark_output/tf_benchmark.png')) == 'evaluation'
+    assert dashboard.image_family(Path('additional_qc/sequencing_saturation/sequencing_saturation_curve.png')) == 'mapping'
 
 
 def test_scrublet_skipped_fit_is_not_labelled_as_applied():
@@ -433,3 +440,84 @@ def test_scrublet_skipped_fit_is_not_labelled_as_applied():
     assert 'Scrublet skipped (fit error)' in result
     assert 'After Scrublet' not in result
     assert 'RNA-QC retained' in result
+
+
+def test_disabled_scrublet_settings_and_stages_are_hidden(tmp_path):
+    data = {
+        "parameters": {"selected_qc_and_inference_params": {
+            "ENABLE_SCRUBLET": False, "SCRUBLET_n_prin_comps": 30,
+        }},
+        "observed_metrics": {"measurement_set_rna_qc": {"rows": [{
+            "measurement_set": "SET_A", "input_barcodes": 711361, "barcode_filter": "knee",
+            "post_knee_cells": 194728, "retained_cells": 46769, "scrublet_status": "disabled",
+        }]}},
+    }
+    assert "Scrublet PCA components" not in dashboard.category_flow(data, "preprocessing")
+    result, _ = dashboard.preprocessing_measurement_set_cards(data, [])
+    assert "After knee" in result and "Scrublet" not in result
+    assert "711,361" in result and "194,728" in result
+    (tmp_path / "measurement_set_qc_filter_flow.tsv").write_text(
+        "filter_label\tthreshold\tremoved_percent\tretained_percent_of_input\n"
+        "QC_barcode_filter = knee\trank ≤ 187,860; RNA UMIs ≥ 11\t72.6259\t27.374\n"
+        "Scrublet doublet removal\tdisabled\t0.0\t6.5745\n", encoding="utf-8",
+    )
+    flow = dashboard.measurement_set_filter_flow_content(tmp_path)
+    assert "Knee rank 187,860; RNA UMIs ≥ 11" in flow
+    assert "72.63%" in flow and "27.37%" in flow
+    assert "Scrublet doublet removal" not in flow
+
+
+def test_final_cohort_flow_uses_recorded_sources_and_guide_rate():
+    data = {
+        "observed_metrics": {
+            "measurement_set_rna_qc": {"rows": [
+                {"input_barcodes": 100, "post_knee_cells": 80, "retained_cells": 60},
+                {"input_barcodes": 100, "post_knee_cells": 70, "retained_cells": 50},
+            ]},
+            "additional_qc": {
+                "guide_mapping_qc": {"rows": [{"overlap_cells": 98, "guide_cells": 400}]},
+                "guide_assignment_filter": {"rows": [{"measurement_set": "all", "cells_after": 79}]},
+                "guide": {"rows": [{"batch": "all", "assigned_guide_counts_source": "mudata_concat",
+                                    "n_cells_with_guide": 80, "frac_cells_with_guide": 0.8}]},
+            },
+        },
+        "dashboard_summary": {"filtering_summary": {"final_mudata": {"cells": 65}}},
+    }
+    flow = dashboard.run_cohort_flow(data)
+    assert "After RNA QC</strong><span>110" in flow
+    assert "Exact RNA–guide matches</strong><span>98" in flow
+    assert "After guide-count filter</strong><span>79" in flow
+    assert "Final MuData cells</strong><span>65" in flow
+    assert "400 mapped guide barcodes" in flow
+    assert "80.00%" in dashboard.qc_metrics_content(data, "guide_assignment")
+    data["observed_metrics"]["additional_qc"]["guide"]["rows"][0]["assigned_guide_counts_source"] = "final_mudata"
+    assert "Cells with an assigned guide</strong><span>—" in dashboard.run_cohort_flow(data)
+    assert "80.00%" not in dashboard.qc_metrics_content(data, "guide_assignment")
+
+
+def test_global_qc_uses_valid_test_count_from_matching_per_guide_summary(tmp_path):
+    data = {"observed_metrics": {"additional_qc": {"global_analysis": {"rows": [
+        {"n_guides_tested": 2, "total_significant_tests": 7},
+    ]}}}}
+    path = tmp_path / "global_analysis_per_guide_summary.tsv"
+    path.write_text("guide_id\tn_tests\na\t100.0\nb\t90.0\n", encoding="utf-8")
+    content = dashboard.qc_metrics_content(data, "evaluation", tmp_path)
+    assert "Valid trans tests" in content and ">190<" in content
+    published = tmp_path / "pipeline_dashboard"
+    published.mkdir()
+    duplicate = published / path.name
+    duplicate.write_bytes(path.read_bytes())
+    assert ">190<" in dashboard.qc_metrics_content(data, "evaluation", tmp_path)
+    duplicate.write_text("guide_id\tn_tests\na\t100.0\nb\t85.0\n", encoding="utf-8")
+    assert "Valid trans tests" not in dashboard.qc_metrics_content(data, "evaluation", tmp_path)
+    duplicate.unlink()
+    path.write_text("guide_id\tn_tests\na\t100.0\n", encoding="utf-8")
+    assert "Valid trans tests" not in dashboard.qc_metrics_content(data, "evaluation", tmp_path)
+
+
+def test_completed_reference_task_evidence_links_only_later_matching_names():
+    failure = {"name": "pipeline:downloadReference", "status": "FAILED", "exit": "17"}
+    success = {"name": "pipeline:downloadReference", "status": "COMPLETED", "realtime": "3m 26s"}
+    assert "Later trace entry with the same task name" in dashboard.failure_content([failure, success], None, 10)
+    assert "Later trace entry with the same task name" not in dashboard.failure_content([success, failure], None, 10)
+    assert "Unavailable" in dashboard.process_table([{"name": "PreprocessAnnData", "peak_rss": ""}])

@@ -44,25 +44,20 @@ def plot_filter(counts, keep, label, maximum, output, minimum=0):
     upper = max(int(counts.max()) if counts.size else 0, maximum, 1)
     bins = np.arange(-0.5, upper + 1.5, 1)
     before, after = len(counts), int(keep.sum())
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.4))
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.4), sharey=True)
     for ax, values, color, title in (
         (axes[0], counts, "#60a5fa", f"Before: {before:,} cells"),
         (axes[1], counts[keep], "#34d399", f"After: {after:,} cells"),
     ):
         ax.hist(values, bins=bins, color=color, edgecolor="white")
+        if minimum > 0:
+            ax.axvline(minimum - 0.5, color="#7c3aed", linestyle="--", label=f"Minimum = {minimum}")
         if maximum > 0:
             ax.axvline(maximum + 0.5, color="#dc2626", linestyle="--", label=f"Maximum = {maximum}")
+        if minimum > 0 or maximum > 0:
             ax.legend(frameon=False)
         ax.set(title=title, xlabel="Assigned gRNAs per cell", ylabel="Cells")
-    axes[2].axis("off")
-    text = (
-        f"{before:,} cells before\n\n↓\n\n"
-        + (f"{minimum} ≤ assigned gRNAs ≤ {maximum}\nAPPLIED" if maximum > 0 else f"assigned gRNAs ≥ {minimum}")
-        + f"\n\n↓\n\n{after:,} cells after\n{before-after:,} removed"
-    )
-    axes[2].text(0.5, 0.5, text, ha="center", va="center", fontsize=11,
-                 bbox={"boxstyle": "round,pad=0.6", "facecolor": "#f8fafc", "edgecolor": "#94a3b8"})
-    fig.suptitle(f"{label}: guide-assignment cell filter", fontsize=14)
+    fig.suptitle(f"{label}: guide-assignment cell filter · {before - after:,} cells removed", fontsize=14)
     fig.tight_layout()
     fig.savefig(output, dpi=170, facecolor="white")
     plt.close(fig)

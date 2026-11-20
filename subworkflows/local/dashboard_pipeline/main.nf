@@ -64,5 +64,7 @@ workflow dashboard_pipeline {
 
     emit:
     dashboard_archive = DashboardProcess.dashboard_archive
+    dashboard_files = DashboardProcess.dashboard_files
+    qc_metrics = DashboardProcess.qc_metrics_json
 
 }

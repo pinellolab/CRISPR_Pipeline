@@ -31,6 +31,7 @@ def first_file(root: Path, patterns: list[str]) -> Path:
 def discovered_paths(outdir: Path, run_name: str) -> dict[str, Path]:
     dashboard_dir = outdir / "pipeline_dashboard"
     legacy_dashboard = dashboard_dir / "legacy_dashboard.html"
+    preview = dashboard_dir / "inference_preview.html"
     return {
         "guide_report": first_file(outdir, [
             f"pipeline_info/{run_name}/guide_metadata.validation.json",
@@ -43,9 +44,10 @@ def discovered_paths(outdir: Path, run_name: str) -> dict[str, Path]:
         # execution dashboard expose QC plots as soon as their producing
         # process publishes them, before the final dashboard is assembled.
         "artifact_dir": outdir,
+        "checkpoint_manifest": outdir / "preinference_checkpoint" / run_name / "preinference_manifest.json",
         "final_dashboard_html": (
-            legacy_dashboard if legacy_dashboard.exists()
-            else dashboard_dir / "dashboard.html"
+            preview if preview.is_file() else legacy_dashboard
+            if legacy_dashboard.exists() else dashboard_dir / "dashboard.html"
         ),
     }
 
@@ -92,7 +94,11 @@ def render_snapshot(args: argparse.Namespace, status: str, final: bool) -> int:
     # replacing its former entrypoint with the advanced execution dashboard.
     if final and original_dashboard.is_file() and not legacy_dashboard.exists():
         legacy_dashboard.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(original_dashboard, legacy_dashboard)
+        with original_dashboard.open(encoding="utf-8", errors="replace") as handle:
+            header = handle.read(250_000)
+            is_execution_report = 'data-dashboard="execution"' in header or "execution dashboard</span>" in header
+        if not is_execution_report:
+            shutil.copy2(original_dashboard, legacy_dashboard)
     paths = discovered_paths(args.outdir, args.run_name)
     render_args = SimpleNamespace(
         trace=args.trace,
@@ -104,6 +110,7 @@ def render_snapshot(args: argparse.Namespace, status: str, final: bool) -> int:
         seqspec_image=paths["seqspec_image"],
         qc_metrics_json=paths["qc_metrics_json"],
         artifact_dir=paths["artifact_dir"],
+        checkpoint_ready=paths["checkpoint_manifest"].is_file(),
         # The final pipeline dashboard is a bounded result-table source for
         # the advanced execution dashboard, never a replacement for it.
         final_dashboard_html=paths["final_dashboard_html"],

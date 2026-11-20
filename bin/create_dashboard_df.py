@@ -1320,7 +1320,7 @@ def create_json_df(json_dir):
         json_df = pd.concat(list_of_params, ignore_index=True)
     return json_df
 
-def create_inference_blocks(mudata, use_default=False):
+def create_inference_blocks(mudata, use_default=False, limit=10000):
     """Create inference blocks for either one result set or local/global results."""
     inference_blocks = []
 
@@ -1331,7 +1331,7 @@ def create_inference_blocks(mudata, use_default=False):
             if results_key in mudata.uns:
                 inference_table = pd.DataFrame({k: v for k, v in mudata.uns[results_key].items()})
                 
-                n=10000
+                n = limit
                 pvalue_candidates = (
                     ["sceptre_p_value", "p_value", "perturbo_p_value"]
                     if analysis_type == "local_analysis"
