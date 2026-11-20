@@ -14,9 +14,11 @@ include { mergeMudata } from '../../../modules/local/mergeMudata'
 include { export_igvf_inference_tsv } from '../../../modules/local/export_igvf_inference_tsv'
 include { buildCatalogElement } from '../../../modules/local/buildCatalogElement'
 include { buildCatalogGuide } from '../../../modules/local/buildCatalogGuide'
-include { resolveControlGroupFromParams } from '../../../modules/local/control_group'
+include { resolveControlGroupFromParams; resolveControlGroup } from '../../../modules/local/control_group'
 include { resolve_inference_mode } from '../../../modules/local/resolve_inference_mode'
 include { ntc_calibration_pipeline } from '../ntc_calibration_pipeline'
+
+include { filter_inference_single_guides } from '../../../modules/local/filter_inference_single_guides'
 
 workflow inference_pipeline {
 
@@ -31,7 +33,18 @@ workflow inference_pipeline {
     // and logged once. This is the line to read when you wonder why a screen used
     // one pool. It aborts here if the setting is unusable, rather than three hours
     // into a run.
-    def control_group = resolveControlGroupFromParams()
+    def single_flag = params.INFERENCE_single_guide_cells_only
+    def single_only = single_flag == true || (single_flag != null && single_flag.toString().trim().toLowerCase() in ['true', '1', 'yes'])
+    inference_cohort = mudata_concat
+    cell_filter_report = Channel.empty()
+    if (single_only) {
+        SingleGuideCells = filter_inference_single_guides(mudata_concat)
+        inference_cohort = SingleGuideCells.mudata
+        cell_filter_report = SingleGuideCells.report
+    }
+    // Only the inference design changes; upstream assignment still reads the
+    // original Multiplicity_of_infection (high => SCEPTRE mixture).
+    def control_group = single_only ? resolveControlGroup(params.INFERENCE_control_group, 'low', params.INFERENCE_PERTURBO_CRT_POOL, params.INFERENCE_SCEPTRE_control_group) : resolveControlGroupFromParams()
     log.info(control_group.log_line)
 
     // The parameters alone leave 'auto' half-decided: whether the screen is
@@ -58,25 +71,25 @@ workflow inference_pipeline {
         ]
     }
     def resolution_setting = control_group.setting
-    def resolution_moi = params.Multiplicity_of_infection ?: ''
+    def resolution_moi = single_only ? 'low' : (params.Multiplicity_of_infection ?: '')
     def resolution_perturbo_pool = params.INFERENCE_PERTURBO_CRT_POOL ?: ''
     def resolution_sceptre_group = params.INFERENCE_SCEPTRE_control_group ?: ''
 
     if (params.INFERENCE_target_guide_pairing_strategy == 'predefined_pairs') {
         PrepareInference = prepare_user_guide_inference(
-            mudata_concat,
+            inference_cohort,
             file(params.INFERENCE_predefined_pairs_to_test)
         )}
     else if (params.INFERENCE_target_guide_pairing_strategy == 'by_distance') {
         PrepareInference = prepare_guide_inference(
-            mudata_concat,
+            inference_cohort,
             gtf_reference,
             params.INFERENCE_max_target_distance_bp,
             false
         )}
     else if (params.INFERENCE_target_guide_pairing_strategy == 'default') {
         PrepareInference = prepare_guide_inference(
-            mudata_concat,
+            inference_cohort,
             gtf_reference,
             params.INFERENCE_max_target_distance_bp,
             true
@@ -91,7 +104,7 @@ workflow inference_pipeline {
     if (params.INFERENCE_target_guide_pairing_strategy != 'all_by_all') {
         mudata_input = PrepareInference.mudata_inference_input
     } else {
-        mudata_input = mudata_concat
+        mudata_input = inference_cohort
     }
 
     def calibration_placeholder = Channel.value(file("${workflow.projectDir}/assets/calibration_empty"))
@@ -172,7 +185,7 @@ workflow inference_pipeline {
         // retain a constant batch that SCEPTRE correctly skipped. Prepare a
         // second, un-subset copy with the identical pair universe instead.
         PrepareInferenceGlobal = prepare_global_guide_inference(
-            mudata_concat,
+            inference_cohort,
             gtf_reference,
             params.INFERENCE_max_target_distance_bp,
             false
@@ -251,6 +264,8 @@ workflow inference_pipeline {
 
     emit:
     inference_mudata = FinalInference
+    analysis_input = inference_cohort
+    cell_filter_report = cell_filter_report
     inference_mode = mode
     calibration_output = calibration_output
 

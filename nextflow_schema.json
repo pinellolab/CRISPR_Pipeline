@@ -531,6 +531,26 @@
             "fa_icon": "fas fa-chart-line",
             "description": "Differential expression and perturbation inference settings.",
             "properties": {
+                "INFERENCE_single_guide_cells_only": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Keep exactly one assigned guide per cell at inference; upstream guide assignment remains unchanged.",
+                    "help_text": "Experimental row selection over the full binary guide_assignment layer before cis subsetting. Preserves RNA/guide counts and guide calls, uses a low-MOI inference design, and leaves Multiplicity_of_infection controlling upstream assignment. auto uses non-targeting controls if available; explicit nt_cells requires them. Publishes an inference_cell_filter report and selected-cell TSV. Existing datasets require fresh inference and evaluation; compatible preprocessing and guide calls may be reused."
+                },
+                "INFERENCE_single_guide_min_umis": {
+                    "type": "number",
+                    "default": 5,
+                    "minimum": 0,
+                    "description": "With INFERENCE_single_guide_cells_only: minimum raw guide UMIs of the one assigned guide.",
+                    "help_text": "Cells whose single assigned guide carries fewer raw UMIs are set aside at the inference boundary. Applied to the raw guide count matrix; counts and assignments are not changed. 0 disables the floor. In the TF benchmark datasets a floor of 5 costs nothing except in a library with ~20 UMIs per guide, where 3 keeps the low-count guides."
+                },
+                "INFERENCE_single_guide_min_ratio": {
+                    "type": "number",
+                    "default": 3,
+                    "minimum": 0,
+                    "description": "With INFERENCE_single_guide_cells_only: minimum ratio of the assigned guide's UMIs to the strongest other guide's UMIs.",
+                    "help_text": "A second real infection shows as a second guide with a sizeable fraction of the top guide's UMIs even when the mixture model called only one guide; the diffuse one-UMI background of low-depth guide libraries does not. The ratio is depth-independent, so one value serves libraries with 20 and with 800 UMIs per cell; at 3 the kept cells carry a second guide at a third or more of the top in under 2% of cases in the TF benchmark datasets. 0 disables the check."
+                },
                 "INFERENCE_control_group": {
                     "type": "string",
                     "default": "auto",

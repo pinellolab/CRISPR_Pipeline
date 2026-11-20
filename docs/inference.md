@@ -18,3 +18,49 @@ internal guide matrix as sparse blocks, without changing the requested
 contrast, assignments or tested pairs.
 
 When `ENABLE_NTC_CALIBRATION=true` and both methods are run, a separate non-targeting pseudo-element pass evaluates empirical behavior without changing the main result tables or BH families. Its QQ, p-value, method-agreement and direct-target-versus-control precision–recall figures are published under `pipeline_outputs/calibration/` and shown in the live dashboard's Inference block. A skipped calibration reports why; it must not be interpreted as evidence of calibrated p-values. Compare methods on the same tested pair set and report the threshold and universe alongside AUROC/AUPRC or hit counts.
+
+## Experimental: high-MOI assignment with single-guide inference
+
+`INFERENCE_single_guide_cells_only` defaults to `false`. Set it to `true` to
+run low-MOI inference on the cells of a high-MOI screen that carry one guide,
+selected at the inference boundary from the existing binary `guide_assignment`
+layer and the raw guide counts, over every guide and before local/cis feature
+subsetting. A cell is kept when it has **exactly one positive assignment
+call**, that guide carries at least `INFERENCE_single_guide_min_umis` raw UMIs
+(default 5) and at least `INFERENCE_single_guide_min_ratio` times the UMIs of
+the strongest other guide in the cell (default 3). Raw guide UMIs are never
+used as assignments; zero-guide and multi-guide cells, cells under the UMI
+floor and cells with a competing guide are removed only here. RNA counts,
+guide counts, guide identities and existing assignment calls are preserved;
+no reassignment, guide collapsing, RNA thinning or new upstream QC occurs. The
+selected cohort is passed to **both** SCEPTRE and PerTurbo and to calibration.
+
+The two thresholds exist because the mixture model and a share rule fail in
+opposite places. The mixture model scores each guide against its own
+background, so it rejects a real second infection even when that guide is a
+small fraction of a deep top guide, but on an almost empty guide profile a
+single call can be noise. A share of total guide UMIs cannot tell a second
+real guide from the diffuse one-UMI background of a low-depth guide library.
+The ratio to the next-strongest guide is depth-independent: fourteen one-UMI
+background guides under a 22-UMI top guide pass it, a 150-UMI second guide
+under a 600-UMI top guide does not. Setting both thresholds to 0 reduces the
+selection to "exactly one assigned guide".
+
+Keep `Multiplicity_of_infection = 'high'` and `GUIDE_ASSIGNMENT_method = 'sceptre'`
+for upstream mixture assignment. The selected inference cohort is treated as
+low MOI independently of that upstream parameter. Set
+`INFERENCE_control_group = 'nt_cells'` to compare with non-targeting singleton
+cells for both methods; this fails if there are no control cells. Avoid stale
+method-specific overrides. The default `auto` resolves from the selected cohort;
+`complement` remains an explicit alternative contrast.
+
+The pipeline publishes `inference_cell_filter/inference_single_guide_filter.json`
+(retained cells, cells removed at each of the four conditions, the thresholds,
+the median assigned-guide UMIs and ratio of the kept cells, and signatures of the
+preserved guide matrices) and `inference_single_guide_cells.tsv`. Selection fails
+if assignments are absent, nonbinary, misaligned, or no cell passes. The default
+path does not add a filter process or change existing results. Enabling the
+option requires fresh pair preparation, inference, calibration, evaluation and
+dashboards; preprocessing and high-MOI assignments can be reused when their
+exact final cell eligibility and raw counts match. Do not reuse an earlier
+concatenation that precedes the parent's final QC.
