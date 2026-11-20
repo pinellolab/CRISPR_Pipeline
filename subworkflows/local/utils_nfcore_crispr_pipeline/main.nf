@@ -155,6 +155,8 @@ workflow PIPELINE_COMPLETION {
 
     main:
     summary_params = [:]
+    def package_igvf = params.OUTPUT_IGVF_PACKAGE && params.ANALYSIS_mode == 'full' &&
+        params.INFERENCE_method == 'default' && !params.INFERENCE_input_mudata
 
     //
     // Completion email and summary
@@ -195,7 +197,7 @@ See DEMO_MODE_WARNING.txt in the output directory.
         completionSummary(monochrome_logs)
         writePipelineManifest(outdir)
         copyNextflowLog(outdir)
-        if (params.OUTPUT_IGVF_PACKAGE && params.ANALYSIS_mode == 'full' && params.INFERENCE_method == 'default' && !params.INFERENCE_input_mudata && workflowSucceeded()) {
+        if (package_igvf && workflowSucceeded()) {
             packageIgvfResults(outdir)
         }
         if (hook_url) {
