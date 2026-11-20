@@ -195,7 +195,7 @@ See DEMO_MODE_WARNING.txt in the output directory.
         completionSummary(monochrome_logs)
         writePipelineManifest(outdir)
         copyNextflowLog(outdir)
-        if (workflow.success && params.OUTPUT_IGVF_PACKAGE && params.ANALYSIS_mode == 'full' && params.INFERENCE_method == 'default' && !params.INFERENCE_input_mudata) {
+        if (params.OUTPUT_IGVF_PACKAGE && params.ANALYSIS_mode == 'full' && params.INFERENCE_method == 'default' && !params.INFERENCE_input_mudata && workflowSucceeded()) {
             packageIgvfResults(outdir)
         }
         if (hook_url) {
@@ -216,6 +216,10 @@ See DEMO_MODE_WARNING.txt in the output directory.
         }
         log.error "Pipeline failed. Please refer to troubleshooting docs: https://nf-co.re/docs/usage/troubleshooting"
     }
+}
+
+def workflowSucceeded() {
+    return workflow.success
 }
 
 // Organize published artifacts without copying the large MuData. The four TSVs

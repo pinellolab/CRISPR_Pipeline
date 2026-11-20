@@ -689,6 +689,7 @@ def test_guide_umi_covariate_survives_the_all_cells_pool_without_controls(
             break
         passed.append(token)
     assert (adapter.GUIDE_UMI_COVARIATE in passed) is expect_guide_umi_covariate
+    assert ("--control-substring" in cmd) is (pool != "all-cells")
 
 
 def test_bounded_bh_family_excludes_control_elements(tmp_path):

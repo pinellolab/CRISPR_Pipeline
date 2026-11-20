@@ -532,8 +532,6 @@ def _run_perturbo(
         map_key,
         "--perturbation-element-names-uns-key",
         names_key,
-        "--control-substring",
-        CONTROL_SUBSTRING,
         "--library-size-key",
         "total_gene_umis",
         "--size-factor-mode",
@@ -558,6 +556,15 @@ def _run_perturbo(
         str(args.step_size),
         "--no-progress-bar",
     ]
+    # rc12 loads the control matrix before fitting the all-cells null.
+    # No control guide is assigned in a singleton screen with zero
+    # control-only cells, so use the native all-cells fit without a selector.
+    omit_control_selector = (
+        args.crt and args.resolved_crt_pool == "all-cells"
+        and _observed_singleton(input_path) == (True, 0)
+    )
+    if not omit_control_selector:
+        cmd.extend(["--control-substring", CONTROL_SUBSTRING])
     if args.gene_chunk_size > 0:
         cmd.extend(["--gene-chunk-size", str(args.gene_chunk_size)])
     if args.crt_gene_chunk_size > 0:
@@ -581,7 +588,7 @@ def _run_perturbo(
             "--crt-saddlepoint-only", "--crt-polish-baseline", "--crt-allow-unconverged-baseline",
             "--crt-pool", args.resolved_crt_pool,
         ])
-        if args.crt_test_control_elements:
+        if args.crt_test_control_elements and not omit_control_selector:
             # The control evaluation scores non-targeting pairs against direct-target
             # pairs, so it needs the controls to carry p-values of their own.
             cmd.append("--crt-test-control-elements")

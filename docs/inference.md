@@ -64,3 +64,7 @@ option requires fresh pair preparation, inference, calibration, evaluation and
 dashboards; preprocessing and high-MOI assignments can be reused when their
 exact final cell eligibility and raw counts match. Do not reuse an earlier
 concatenation that precedes the parent's final QC.
+
+A single-guide cohort can have zero control-only cells. If the resolved CRT
+pool is all-cells and no control guides are assigned, PerTurbo fits its
+baseline on all analysed cells without loading a separate control matrix.
