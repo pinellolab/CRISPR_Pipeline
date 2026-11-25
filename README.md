@@ -15,9 +15,14 @@
 
 Current documentation: [CRISPR Pipeline website](https://pinellolab.github.io/CRISPR_Pipeline/) — [start here](docs/usage.md), [run recipes](docs/run-recipes.md), [samplesheet](docs/samplesheet.md), [SeqSpec](docs/seqspec.md), [guide metadata](docs/guide-metadata.md), [checkpoint continuation](docs/preinference_checkpoint_user_guide.md), and [MuData field reference](docs/mudata_schema.md). The default `ANALYSIS_mode` is `checkpoint`; specify `full` for an uninterrupted inference run.
 
-The optional integrated dashboard plugin is currently bundled with this
-repository but requires a one-time local installation before use. See the
-[plugin installation guide](docs/plugin-installation.md).
+Use CRISPR Pipeline **v1.1.0** for a stable run. The integrated dashboard
+plugin is bundled and requires a one-time local installation. See the
+[plugin installation guide](docs/plugin-installation.md) and
+[Slurm launch recipe](docs/run-recipes.md#slurm-configuration).
+
+The [compact Yang config](conf/simplified_pipeline/nextflow_yang.dev.config)
+and [all-options Slurm template](conf/simplified_pipeline/nextflow_slurm_all_options.config)
+are maintained alongside the release.
 
 Temporary normalization, PCA/UMAP and pre/post-clone measurement-set QC are
 documented in [Post-concatenation embedding QC](docs/postconcat_embedding_qc.md).

@@ -90,6 +90,8 @@ def main():
     examples = DEST / "downloadable-examples"
     examples.mkdir(exist_ok=True)
     for source, target in (
+        ("conf/simplified_pipeline/nextflow_yang.dev.config", "nextflow_yang.dev.config"),
+        ("conf/simplified_pipeline/nextflow_slurm_all_options.config", "nextflow_slurm_all_options.config"),
         ("docs/examples/minimal_samplesheet.csv", "samplesheet.csv"),
         ("docs/examples/hashing_samplesheet.csv", "hashing_samplesheet.csv"),
         ("example_data/guide_metadata.tsv", "guide_metadata.tsv"),

@@ -32,3 +32,13 @@ dashboard, or run behavior, follow `skills/sync-pipeline-docs/SKILL.md` in the
 same change. Update the canonical documentation and GitHub Pages navigation as
 needed, then run `python scripts/check_docs_sync.py` and the strict site build.
 The skill supplies the semantic review; CI checks mechanical consistency.
+
+## Standard Slurm configurations
+
+When pipeline parameters, defaults, resource profiles, or the release version
+change, review `conf/simplified_pipeline/nextflow_yang.dev.config` against the
+new defaults. Preserve intentional Yang study overrides and update their
+comments. Regenerate the complete Slurm reference with
+`python scripts/render_slurm_config.py` and validate it with
+`python scripts/check_docs_sync.py`. Keep the release tag in the config
+examples synchronized with `manifest.version` in `conf/provenance.config`.

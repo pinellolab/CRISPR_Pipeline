@@ -2,6 +2,36 @@
 
 These commands show the supported entry points. Replace illustrative paths and select the executor/profile configured for your site. Keep a stable launch directory, work directory, source commit, params/configs, and inputs for every `-resume`. On the Pinello server, also perform the mandatory [container-storage and provenance preflight](preinference_checkpoint_user_guide.md#local-pinello-server-preflight-required-on-this-server) immediately before **each** launch; do not use home or system `/tmp` as image caches.
 
+## Slurm configuration
+
+Use the immutable `v1.1.0` tag for a reproducible deployment. The
+[all-options Slurm template](downloadable-examples/nextflow_slurm_all_options.config)
+lists active defaults and site settings by topic. The
+[compact Yang overlay](downloadable-examples/nextflow_yang.dev.config)
+contains the Yang assay and QC overrides and defaults to a full analysis.
+Choose one overlay and supply your own samplesheet, output directory, shared
+work and cache paths, and scheduler partitions.
+
+```bash
+git clone --branch v1.1.0 https://github.com/pinellolab/CRISPR_Pipeline.git
+cd CRISPR_Pipeline
+export NXF_PLUGINS_DIR=/shared/nextflow-plugins
+export NXF_SYNTAX_PARSER=v1
+bash run_support/install_dashboard_plugin.sh
+export YANG_SLURM_QUEUE=your_cpu_partition
+export YANG_SIF_CACHE=/shared/singularity-cache
+nextflow -c conf/simplified_pipeline/nextflow_yang.dev.config run main.nf \
+  -profile slurm -work-dir /shared/work/yang \
+  --input /shared/inputs/samplesheet.csv --outdir /shared/results/yang_qc \
+  --ANALYSIS_mode checkpoint
+```
+
+Use `checkpoint` to finish dashboard Step 7 and write the post-QC MuData.
+For a GPU-enabled full run, set the optional GPU partition and any required
+site-specific Slurm GRES value in your copy of the overlay. See
+[plugin installation](plugin-installation.md) for local image paths and
+dashboard configuration.
+
 ## End-to-end from FASTQs
 
 The default is a pre-inference checkpoint, so set `full` explicitly when you want inference in the same invocation:

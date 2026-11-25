@@ -1,5 +1,14 @@
 # Downloadable input examples
 
+These examples target CRISPR Pipeline **v1.1.0**. Check out that tag and follow
+the [Slurm recipe](run-recipes.md#slurm-configuration) for a version-pinned
+checkpoint or full run.
+
+| Slurm configuration | Use |
+|---|---|
+| [Compact Yang overlay](downloadable-examples/nextflow_yang.dev.config) | Yang-specific assay, QC and resource overrides. |
+| [All-options template](downloadable-examples/nextflow_slurm_all_options.config) | Commented engine defaults and optional settings, grouped by topic. |
+
 These are format references checked into the repository, **not** a ready-to-run dataset. The samplesheet has illustrative absolute paths and the SeqSpecs/metadata describe a specific assay. Replace paths and verify library structure, guide orientation, barcode chemistry, reference build, and captured sequences for your experiment.
 
 | File | Purpose |

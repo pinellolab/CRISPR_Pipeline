@@ -13,7 +13,7 @@ The example input files in this repository explain the format but have historica
 
 ## Choose the run mode
 
-`ANALYSIS_mode` defaults to `checkpoint` in the current `dev` configuration. It completes mapping, QC, and guide assignment, then publishes a pre-inference MuData without running inference. Use `full` for an unattended end-to-end analysis, or `continue` to validate an edited checkpoint and run inference. These are distinct Nextflow invocations. `-resume` only retries cached tasks in an invocation; it does not convert a checkpoint into a continuation.
+`ANALYSIS_mode` defaults to `checkpoint` in the `v1.1.0` release. It completes mapping, QC, and guide assignment, then publishes a pre-inference MuData without running inference. Use `full` for an unattended end-to-end analysis, or `continue` to validate an edited checkpoint and run inference. These are distinct Nextflow invocations. `-resume` only retries cached tasks in an invocation; it does not convert a checkpoint into a continuation.
 
 ```bash
 nextflow run /absolute/path/CRISPR_Pipeline/main.nf \
@@ -37,7 +37,7 @@ After launch, inspect the live [execution dashboard](live_wandb_execution_dashbo
 
 For an integrated live dashboard in a direct Nextflow run, first follow the
 [bundled plugin installation guide](plugin-installation.md). The plugin is
-currently opt-in and is not installed merely by cloning this repository.
+is included by the release config and requires a one-time installation into your Nextflow plugin cache.
 
 ## What happens next
 

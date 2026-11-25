@@ -3,10 +3,10 @@
 The integrated dashboard uses the `nf-crispr-dashboard@0.1.2` Nextflow plugin.
 For now, the versioned plugin archive is **bundled in this repository**, but
 Nextflow does not load it directly from the source tree. Install it once into
-an absolute, writable `NXF_PLUGINS_DIR` visible to the Nextflow launcher before
-adding `conf/dashboard_plugin.config` to a run. This is optional: the analysis
-can run without the plugin, but a direct Nextflow invocation then does not
-provide this integrated live dashboard.
+an absolute, writable `NXF_PLUGINS_DIR` visible to the Nextflow launcher.
+The v1.1.0 root config already includes `conf/dashboard_plugin.config`.
+Install the plugin before loading that config. A custom configuration that
+omits the observer can run analysis without it when IGVF packaging is disabled.
 
 ## One-time installation on each execution environment
 
@@ -32,7 +32,7 @@ test -f "$NXF_PLUGINS_DIR/nf-crispr-dashboard-0.1.2/.archive.sha256"
 sha256sum plugins/nf-crispr-dashboard/dist/nf-crispr-dashboard-0.1.2.zip
 ```
 
-The archive SHA-256 must be
+On macOS, use `shasum -a 256` instead of `sha256sum`. The archive SHA-256 must be
 `02a1eba42b8f30dc29952a603a36c485a089dfa5ea18d7104e415040ec902bbf`.
 The installer prints `Installed dashboard plugin` or `Dashboard plugin already
 installed` on success. The actual version and checksum are defined in
@@ -58,8 +58,8 @@ delegation cannot hide the workflow's final status. Keep the launcher log at
 `<launchDir>/.nextflow.log` so the completion step can publish the required
 `pipeline_info/nextflow.log` into the IGVF package.
 
-Keep `NXF_PLUGINS_DIR` exported in the shell that starts Nextflow. Add the
-plugin config after your dataset/resource configs and before the generated
+Keep `NXF_PLUGINS_DIR` exported in the shell that starts Nextflow. With a
+custom config stack, load the plugin config before the generated
 provenance config, for example:
 
 ```bash

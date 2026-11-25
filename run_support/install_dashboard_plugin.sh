@@ -11,7 +11,11 @@ EXPECTED_SHA256=02a1eba42b8f30dc29952a603a36c485a089dfa5ea18d7104e415040ec902bbf
     echo 'Set NXF_PLUGINS_DIR to an absolute, writable shared plugin-cache path.' >&2
     exit 2
 }
-ACTUAL_SHA256="$(sha256sum "$ARCHIVE" | cut -d ' ' -f 1)"
+if command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL_SHA256="$(sha256sum "$ARCHIVE" | cut -d ' ' -f 1)"
+else
+    ACTUAL_SHA256="$(shasum -a 256 "$ARCHIVE" | cut -d ' ' -f 1)"
+fi
 [[ "$ACTUAL_SHA256" == "$EXPECTED_SHA256" ]] || {
     echo 'Dashboard plugin archive checksum mismatch; refusing installation.' >&2
     exit 1

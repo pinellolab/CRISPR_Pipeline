@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 from build_docs_site import DOCS, PAGES, ROOT, render_parameters
+from render_slurm_config import OUTPUT, render as render_slurm_config
 
 
 def require(condition, message):
@@ -58,6 +59,13 @@ def main():
     require(digest == pinned, "Bundled plugin archive differs from pinned installer checksum")
     require(all(value in guide for value in (version, digest, "NXF_PLUGINS_DIR", "run_support/install_dashboard_plugin.sh", "conf/dashboard_plugin.config")), "Plugin installation guide is out of sync")
     require("plugin-installation.md" in (DOCS / "website/index.md").read_text(), "Website landing page does not link plugin installation")
+    require(OUTPUT.is_file() and OUTPUT.read_text() == render_slurm_config(),
+            "Slurm defaults are stale. Run python scripts/render_slurm_config.py")
+    manifest = (ROOT / "conf/provenance.config").read_text()
+    release = capture(r"^\s*version = '([^']+)'", manifest, "pipeline manifest version")
+    for relative in ("nextflow.config", "nextflow_cc.config", "nextflow_tapseq.config",
+                     "conf/simplified_pipeline/nextflow_yang.dev.config", "docs/examples.md"):
+        require(f"v{release}" in (ROOT / relative).read_text(), f"{relative} has a stale release version")
     print(f"Documentation and bundled plugin checks passed ({len(PAGES)} pages, plugin {version})")
 
 
