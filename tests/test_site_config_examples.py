@@ -174,8 +174,8 @@ def test_a_site_config_says_why_it_only_carries_deltas(name):
 
 
 @pytest.mark.parametrize("name", SITE_CONFIGS)
-def test_a_site_config_is_discoverable_from_the_readme(name):
-    assert name in (REPO_ROOT / "README.md").read_text(), name
+def test_a_site_config_is_discoverable_from_the_examples_guide(name):
+    assert name in (REPO_ROOT / "docs/examples.md").read_text(), name
 
 
 def test_the_tapseq_example_defines_the_panel():

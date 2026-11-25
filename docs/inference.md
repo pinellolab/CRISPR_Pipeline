@@ -6,16 +6,35 @@ The default inference runs local/cis SCEPTRE, local/cis PerTurbo and global/tran
 
 The shared covariate design includes log RNA depth and, by default, batch, detected genes and log guide UMIs. Optional mitochondrial fraction, ribosomal fraction, and assigned guide count are configurable. `cov_*` samplesheet columns are measurement-set covariates; `external_*` continuation columns are per-cell numeric covariates. Both methods receive validated requested terms. A set-level `cov_day` is typically collinear with the full measurement-set batch effect, so the pipeline rejects that design rather than silently dropping it. See [covariates](samplesheet_covariates.md) and [all parameters](parameters.md).
 
-`INFERENCE_control_group='auto'` resolves from the declared MOI: low MOI uses non-targeting control cells; high MOI uses the complement of each perturbation. Method-specific overrides exist for sensitivity analyses and are logged when they make SCEPTRE and PerTurbo contrasts differ. Control guide annotation therefore matters biologically, not just cosmetically.
+## Choose the control contrast
 
-The shared resolver also checks the observed assignments: a singleton design
-with control-only cells can resolve to low MOI even when high MOI was declared.
-SCEPTRE's control-only cell count is computed from the input assignment matrix
-and guide IDs, independently of its package-internal matrix representation.
-Cells carrying targeting guides alongside controls, and cells with no guide,
-are excluded from that count. This supports SCEPTRE versions that store the
-internal guide matrix as sparse blocks, without changing the requested
-contrast, assignments or tested pairs.
+The shared resolver measures guide assignments before inference. It determines
+the control pool from the declared MOI, whether the observed design is
+singleton, and whether the dataset contains cells carrying only non-targeting
+guides. It records the selected design, counts and reason in
+`pipeline_outputs/inference_mode.json`.
+
+| `INFERENCE_control_group` | When to use it | SCEPTRE | PerTurbo CRT pool |
+|---|---|---|---|
+| `auto` | Default. Uses the non-targeting contrast for a low-MOI or observed singleton design with control-only cells. Otherwise uses the complement. | `nt_cells` or `complement` | `control-anchored` or `all-cells` |
+| `nt_cells` | A low-MOI design with control-only cells. | `nt_cells` | `control-anchored` |
+| `complement` | Compare with the complement of each perturbation. | `complement` | `all-cells` |
+
+Check control-only cell counts by measurement set before using a
+non-targeting contrast. On the TAP-seq chr8 run almost all control-only cells
+came from one lane. The complement avoided using that lane as the control
+population for every comparison. A low-MOI SCEPTRE fit can exclude
+multi-guide cells while the PerTurbo all-cells pool retains them. Review
+the method-specific notes in `inference_mode.json`.
+
+Leave the legacy method-specific settings at
+`INFERENCE_PERTURBO_CRT_POOL='from-moi'` and
+`INFERENCE_SCEPTRE_control_group='complement'` to use the shared resolver.
+Changing either legacy override applies to that method alone and the
+pipeline records the difference. Older SCEPTRE runs that always used the
+complement can differ from current low-MOI runs.
+
+## Non-targeting calibration
 
 When `ENABLE_NTC_CALIBRATION=true` and both methods are run, a separate non-targeting pseudo-element pass evaluates empirical behavior without changing the main result tables or BH families. Its QQ, p-value, method-agreement and direct-target-versus-control precision–recall figures are published under `pipeline_outputs/calibration/` and shown in the live dashboard's Inference block. A skipped calibration reports why; it must not be interpreted as evidence of calibrated p-values. Compare methods on the same tested pair set and report the threshold and universe alongside AUROC/AUPRC or hit counts.
 

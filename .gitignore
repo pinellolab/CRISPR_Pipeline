@@ -94,3 +94,6 @@ plugins/nf-crispr-dashboard/build/
 /build/docs-site/
 /build/site/
 /.docs-venv/
+
+# Public example measurement-set manifests.
+!examples/datasets/*/sample_metadata.tsv

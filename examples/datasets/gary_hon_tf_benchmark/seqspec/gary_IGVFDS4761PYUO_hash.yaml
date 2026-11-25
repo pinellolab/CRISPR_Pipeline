@@ -1,0 +1,131 @@
+!Assay
+seqspec_version: '0.3.0'
+assay_id: 'IGVF_ASSAY_001'
+name: 'hash_assay'
+doi: ''
+date: '28 January 2026'
+description: ''
+modalities:
+- 'tag'
+lib_struct: ''
+library_protocol:
+- !LibProtocol
+  protocol_id: 'Custom'
+  name: 'Library Protocol'
+  modality: 'tag'
+library_kit: 'Custom'
+sequence_protocol: 'Custom'
+sequence_kit: 'Custom'
+sequence_spec:
+- !Read
+  read_id: 'dummy_hash_R1.fq'
+  name: 'dummy_hash_R1.fq'
+  modality: 'tag'
+  primer_id: 'r1_primer'
+  min_len: 26
+  max_len: 26
+  strand: 'pos'
+  files:
+  - !File
+    file_id: 'dummy_hash_R1'
+    filename: 'dummy_hash_R1.fq'
+    filetype: ''
+    filesize: 0
+    url: ''
+    urltype: 'local'
+    md5: '00000000000000000000000000000000'
+- !Read
+  read_id: 'dummy_hash_R2.fq'
+  name: 'dummy_hash_R2.fq'
+  modality: 'tag'
+  primer_id: 'r2_primer'
+  min_len: 25
+  max_len: 25
+  strand: 'neg'
+  files:
+  - !File
+    file_id: 'dummy_hash_R2'
+    filename: 'dummy_hash_R2.fq'
+    filetype: ''
+    filesize: 0
+    url: ''
+    urltype: 'local'
+    md5: '00000000000000000000000000000000'
+library_spec:
+- !Region
+  parent_id: null
+  region_id: 'tag'
+  region_type: 'tag'
+  name: 'tag'
+  sequence_type: 'joined'
+  sequence: ''
+  min_len: 0
+  max_len: 1024
+  onlist: null
+  regions:
+  - !Region
+    parent_id: 'tag'
+    region_id: 'r1_primer'
+    region_type: 'custom_primer'
+    name: 'r1_primer'
+    sequence_type: 'fixed'
+    sequence: ''
+    min_len: 0
+    max_len: 0
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: 'tag'
+    region_id: 'barcode'
+    region_type: 'barcode'
+    name: 'barcode'
+    sequence_type: 'random'
+    sequence: 'XXXXXXXXXXXXXXXX'
+    min_len: 16
+    max_len: 16
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: 'tag'
+    region_id: 'umi'
+    region_type: 'umi'
+    name: 'umi'
+    sequence_type: 'random'
+    sequence: 'XXXXXXXXXX'
+    min_len: 10
+    max_len: 10
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: 'tag'
+    region_id: 'hashing'
+    region_type: 'tag'
+    name: 'hashing'
+    sequence_type: 'random'
+    sequence: 'XXXXXXXXXXXXXXX'
+    min_len: 15
+    max_len: 15
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: 'tag'
+    region_id: 'common'
+    region_type: 'linker'
+    name: 'common'
+    sequence_type: 'fixed'
+    sequence: 'xxxxxxxxxx'
+    min_len: 10
+    max_len: 10
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: 'tag'
+    region_id: 'r2_primer'
+    region_type: 'custom_primer'
+    name: 'r2_primer'
+    sequence_type: 'fixed'
+    sequence: ''
+    min_len: 0
+    max_len: 0
+    onlist: null
+    regions: null

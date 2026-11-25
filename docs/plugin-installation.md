@@ -14,9 +14,17 @@ From the root of the same pinned pipeline checkout that will run the analysis:
 
 ```bash
 cd /absolute/path/CRISPR_Pipeline
+export NXF_VER=26.04.6
+export NXF_SYNTAX_PARSER=v1
 export NXF_PLUGINS_DIR=/absolute/shared/path/nextflow-plugins
 bash run_support/install_dashboard_plugin.sh
+nextflow -version
 ```
+
+Nextflow 26.04.6 is the engine version used to build and validate the bundled
+plugin. This version pin applies to the Nextflow launcher on Slurm and other
+executors. Export these variables in the shell or batch script that invokes
+Nextflow.
 
 Use a persistent directory with enough space and write permission. On a
 cluster, make it accessible from the node that launches Nextflow; use the same
@@ -38,6 +46,10 @@ The installer prints `Installed dashboard plugin` or `Dashboard plugin already
 installed` on success. The actual version and checksum are defined in
 `run_support/install_dashboard_plugin.sh`; if they change, use the matching
 checkout and reinstall rather than copying an older plugin directory.
+
+The bundled installer uses the prebuilt plugin. For development, see the
+[plugin source guide](https://github.com/pinellolab/CRISPR_Pipeline/blob/v1.1.0/plugins/nf-crispr-dashboard/README.md)
+for `./gradlew installPlugin`.
 
 ## Enable it for a run
 
@@ -84,7 +96,7 @@ every launch or resume**, check its return status, and add
 storage files, and run wrapper as provenance artifacts. A remote SLURM or
 cloud site needs its own accessible storage paths; do not copy Pinello paths.
 
-The opt-in config enables local HTML generation and attempts W&B upload with
+The release config enables local HTML generation and attempts W&B upload with
 the token environment variable `WB_IGVF`. Do not put a token in a config or
 command line. Without a working W&B token, keep or set `upload: false` in a
 run-specific config override; local HTML still works. The final self-contained
@@ -92,10 +104,23 @@ file is `results/pipeline_dashboard/execution_dashboard.html`. See the
 [live dashboard guide](live_wandb_execution_dashboard.md) for optional local
 HTTP serving, port forwarding, authentication, and update behavior.
 
-The plugin is **not yet assumed available from the Nextflow Plugin Registry**.
-Do not remove this installation step or enable the plugin by default until a
-clean machine can resolve the published version. The source and publishing
+The release uses the bundled plugin archive for installation. The source and publishing
 instructions are in `plugins/nf-crispr-dashboard/README.md`.
+
+## Slurm renderer troubleshooting
+
+The observer starts its renderer on the Nextflow launcher host. Its default
+renderer command uses Apptainer. If `pipeline_dashboard/.live/` exists but
+`execution_dashboard.html` is missing, read
+`pipeline_dashboard/.live/monitor.log` and verify the launcher can invoke the
+renderer and access the output and work directories.
+
+For a local image, use an absolute path such as
+`params.DASHBOARD_PLUGIN.image = '/shared/images/crispr-base.sif'`. The
+observer handles absolute image paths directly. A site with only Singularity
+can set `params.DASHBOARD_PLUGIN.rendererCommand` to a command prefix that
+runs Python in the compatible image and binds the required paths. See the
+[dashboard guide](live_wandb_execution_dashboard.md) for renderer settings.
 
 ## Clean-install verification
 

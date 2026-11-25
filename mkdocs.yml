@@ -3,31 +3,37 @@ site_description: Reproducible mapping, QC, guide assignment, and perturbation i
 site_url: https://pinellolab.github.io/CRISPR_Pipeline/
 repo_url: https://github.com/pinellolab/CRISPR_Pipeline
 repo_name: pinellolab/CRISPR_Pipeline
+edit_uri: ""
+extra_css:
+  - stylesheets/site.css
 docs_dir: build/docs-site
 site_dir: build/site
 theme:
   name: readthedocs
 nav:
   - Home: index.md
-  - Temporary benchmark dashboards: temporary-benchmarks.md
-  - Start here: usage.md
-  - Install live dashboard plugin: plugin-installation.md
-  - Inputs:
+  - Set up:
+      - Start here: usage.md
+      - Install the dashboard plugin: plugin-installation.md
+      - Example configs and datasets: examples.md
       - Samplesheet: samplesheet.md
       - SeqSpec: seqspec.md
       - Guide and HTO metadata: guide-metadata.md
       - Covariates: samplesheet_covariates.md
-  - Run recipes: run-recipes.md
-  - Pause, edit, continue: preinference_checkpoint_user_guide.md
+  - Run and monitor:
+      - Run recipes and Slurm: run-recipes.md
+      - Pause, edit, continue: preinference_checkpoint_user_guide.md
+      - Execution dashboard: live_wandb_execution_dashboard.md
+      - Optional telemetry and troubleshooting: telemetry.md
   - Analysis:
       - QC and filtering: filtering_workflow.md
-      - Post-concatenation QC: postconcat_embedding_qc.md
+      - Post Concatenation QC: postconcat_embedding_qc.md
       - Inference and calibration: inference.md
-      - Live dashboard: live_wandb_execution_dashboard.md
       - Tools and modules: tool-and-module-map.md
   - Outputs:
       - Output files: output.md
       - Real result examples: output-gallery.md
+      - Temporary benchmark review: temporary-benchmarks.md
       - MuData fields: mudata_schema.md
       - Flat QC fields: qc_outputs.md
   - Reference:
@@ -35,7 +41,6 @@ nav:
       - Target-aware gene filter: target_aware_gene_filter.md
       - Guide-mapping QC: guide_mapping_overlap_qc.md
       - Clone and saturation QC: clone_and_saturation_qc.md
-      - Example files: examples.md
 markdown_extensions:
   - tables
   - fenced_code

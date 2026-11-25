@@ -4,12 +4,12 @@ CRISPR Pipeline maps RNA, guide, and optional HTO reads; performs quality contro
 
 ## Prerequisites
 
-- Nextflow and an Apptainer/Singularity or Docker runtime appropriate for your machine.
+- Nextflow **26.04.6** with `NXF_SYNTAX_PARSER=v1`, and a container runtime appropriate for your site. The integrated dashboard uses Apptainer by default. See [plugin setup](plugin-installation.md) for a Singularity-only launcher.
 - A clean, pinned pipeline checkout and persistent work directory. Use absolute input paths; for SLURM, every compute node must see the same work and input paths.
 - A complete samplesheet, RNA and guide SeqSpec YAMLs, guide metadata, barcode onlist, and a compatible GTF/genome build. HTO assays also need an HTO SeqSpec and metadata.
 - Enough space for references, container images, mapping, and inference. On the Pinello server, follow the [local storage policy](https://github.com/pinellolab/CRISPR_Pipeline/blob/dev/AGENTS.md) and the preparation preflight; other hosts need their own storage paths.
 
-The example input files in this repository explain the format but have historical cloud URLs; replace those with paths accessible to your executor. Check guide sequences, read orientation, barcode chemistry, and coordinate build against **your** assay.
+The [current examples](examples.md) include complete study samplesheets, metadata, and SeqSpecs. Resolve their paths to files accessible to each execution node. For new assays, check guide sequences, read orientation, barcode chemistry, and reference build.
 
 ## Choose the run mode
 

@@ -1,0 +1,130 @@
+!Assay
+seqspec_version: '0.3.0'
+assay_id: GASPERINI_10XV2_GUIDE
+name: Gasperini at-scale 10x 3-prime v2 guide
+doi: https://doi.org/10.1016/j.cell.2019.05.022
+date: 13 June 2019
+description: Observed 23-nt constant prefix followed by the 20-nt guide in R2
+modalities:
+- crispr
+lib_struct: ''
+sequence_protocol: Custom
+sequence_kit: Custom
+library_protocol:
+- !LibProtocol {protocol_id: gasperini_enriched_guide, name: separately enriched guide library, modality: crispr}
+library_kit: not-specified
+sequence_spec:
+- !Read
+  read_id: guide_R1.fastq.gz
+  name: Read 1
+  modality: crispr
+  primer_id: r1_primer
+  min_len: 26
+  max_len: 26
+  strand: pos
+  files: [!File {file_id: guide_R1.fastq.gz, filename: guide_R1.fastq.gz, filetype: fastq.gz, filesize: 0, url: '', urltype: local, md5: '00000000000000000000000000000000'}]
+- !Read
+  read_id: guide_R2.fastq.gz
+  name: Read 2
+  modality: crispr
+  primer_id: r2_primer
+  min_len: 91
+  max_len: 91
+  strand: pos
+  files: [!File {file_id: guide_R2.fastq.gz, filename: guide_R2.fastq.gz, filetype: fastq.gz, filesize: 0, url: '', urltype: local, md5: '00000000000000000000000000000000'}]
+library_spec:
+- !Region
+  parent_id: null
+  region_id: crispr
+  region_type: crispr
+  name: crispr
+  sequence_type: joined
+  sequence: ''
+  min_len: 117
+  max_len: 117
+  onlist: null
+  regions:
+  - !Region
+    parent_id: crispr
+    region_id: r1_primer
+    region_type: custom_primer
+    name: r1_primer
+    sequence_type: fixed
+    sequence: ''
+    min_len: 0
+    max_len: 0
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: crispr
+    region_id: barcode
+    region_type: barcode
+    name: barcode
+    sequence_type: onlist
+    sequence: NNNNNNNNNNNNNNNN
+    min_len: 16
+    max_len: 16
+    onlist: !Onlist
+      file_id: 737K-august-2016.txt
+      filename: 737K-august-2016.txt
+      filetype: txt
+      filesize: 12533760
+      url: ''
+      urltype: local
+      md5: f62a276e262fdd85262a889d0f48556b
+    regions: null
+  - !Region
+    parent_id: crispr
+    region_id: umi
+    region_type: umi
+    name: umi
+    sequence_type: random
+    sequence: XXXXXXXXXX
+    min_len: 10
+    max_len: 10
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: crispr
+    region_id: r2_primer
+    region_type: custom_primer
+    name: r2_primer
+    sequence_type: fixed
+    sequence: ''
+    min_len: 0
+    max_len: 0
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: crispr
+    region_id: guide_constant_prefix
+    region_type: linker
+    name: guide_constant_prefix
+    sequence_type: fixed
+    sequence: CTTGTGGAAAGGACGAAACACCG
+    min_len: 23
+    max_len: 23
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: crispr
+    region_id: sgrna_target
+    region_type: sgrna_target
+    name: guide_spacer
+    sequence_type: random
+    sequence: XXXXXXXXXXXXXXXXXXXX
+    min_len: 20
+    max_len: 20
+    onlist: null
+    regions: null
+  - !Region
+    parent_id: crispr
+    region_id: guide_trailing
+    region_type: linker
+    name: guide_trailing
+    sequence_type: random
+    sequence: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+    min_len: 48
+    max_len: 48
+    onlist: null
+    regions: null

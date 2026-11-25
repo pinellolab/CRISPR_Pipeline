@@ -15,9 +15,11 @@ work and cache paths, and scheduler partitions.
 ```bash
 git clone --branch v1.1.0 https://github.com/pinellolab/CRISPR_Pipeline.git
 cd CRISPR_Pipeline
+export NXF_VER=26.04.6
 export NXF_PLUGINS_DIR=/shared/nextflow-plugins
 export NXF_SYNTAX_PARSER=v1
 bash run_support/install_dashboard_plugin.sh
+nextflow -version
 export YANG_SLURM_QUEUE=your_cpu_partition
 export YANG_SIF_CACHE=/shared/singularity-cache
 nextflow -c conf/simplified_pipeline/nextflow_yang.dev.config run main.nf \
@@ -25,6 +27,12 @@ nextflow -c conf/simplified_pipeline/nextflow_yang.dev.config run main.nf \
   --input /shared/inputs/samplesheet.csv --outdir /shared/results/yang_qc \
   --ANALYSIS_mode checkpoint
 ```
+
+Run these exports in the environment that starts Nextflow, including inside
+your launcher `sbatch` script if you use one. For a non-Yang study, use the
+[matching assay overlay](examples.md) with a separate site config. For example,
+set the CPU queue using `profiles { slurm { process.queue = 'your_cpu_partition' } }`
+in a site config and supply it as another `-c` file.
 
 Use `checkpoint` to finish dashboard Step 7 and write the post-QC MuData.
 For a GPU-enabled full run, set the optional GPU partition and any required
@@ -46,6 +54,28 @@ nextflow run /path/CRISPR_Pipeline/main.nf \
 ```
 
 Use a pinned, compatible PerTurbo image from the current pipeline config. `INFERENCE_method=default` runs local SCEPTRE plus local/global PerTurbo. The global result format defaults to Parquet, which needs the pinned image's Parquet support. Check the resolved config and container provenance in `pipeline_info`.
+
+## Google Batch
+
+The `google` profile uses Google Batch. Set `google_project`, `google_region`
+and `google_bucket` for your deployment, and authenticate the Nextflow launcher
+with credentials for your project. The Batch workers need access to the input
+objects, container images and work bucket. Use the same [dataset config](examples.md)
+and run mode with `-profile google`. Use site-specific container and
+compute overrides for workloads such as GPU PerTurbo. [Nextflow Google Batch documentation](https://docs.seqera.io/nextflow/google)
+
+## Validate and size your configuration
+
+Use `nextflow -c /path/site.config config . -profile slurm -flat` to review
+the effective executor, queue, container settings and assay parameters. The
+same command with `-profile local` checks a workstation configuration.
+
+Treat `max_cpus` and `max_memory` as per-task limits used by resource
+selectors. A Slurm partition must accommodate each task's actual request.
+Use a small measurement set and inspect the trace before setting limits for
+a full screen. Large RNA mapping, concatenation and global inference often
+have different bottlenecks. For run-specific task settings and work
+directories, see [outputs and provenance](output.md).
 
 ## A small mapping/QC preflight
 

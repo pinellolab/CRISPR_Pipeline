@@ -1,26 +1,41 @@
-# CRISPR Pipeline documentation
+# CRISPR Pipeline
 
-From raw RNA/guide/HTO reads to auditable perturbation results.
+The CRISPR Pipeline turns RNA, guide and optional hashtag reads from
+single-cell perturbation screens into quality-controlled count matrices and
+perturbation results. It records what changed at each stage, from SeqSpec
+validation and mapping through guide assignment and inference.
 
-This website documents the current `dev` pipeline: modality-aware input preparation, per-measurement-set QC, guide calling, checkpoint and external-MuData continuation, SCEPTRE/PerTurbo inference, non-targeting calibration, final MuData, and the live execution dashboard.
+The current documented release is **v1.1.0**. Pin that tag for reproducible
+runs and report the source commit recorded in `pipeline_info/` when sharing
+results. [Release source](https://github.com/pinellolab/CRISPR_Pipeline/tree/v1.1.0)
 
-## Temporary benchmark dashboards
+## Start running
 
-[Open the five completed benchmark dashboards](temporary-benchmarks.md).
-These October 23, 2026 snapshots are temporarily public for review and are not
-a permanent benchmark release. The HTV2 and gemX v3 links use the MAD-off reruns.
+- [Install and prepare inputs](usage.md), including the
+  [samplesheet](samplesheet.md), [SeqSpec](seqspec.md), and [guide/HTO metadata](guide-metadata.md).
+- [Run on Slurm](run-recipes.md#slurm-configuration) with Nextflow 26.04.6 and
+  the [bundled execution dashboard plugin](plugin-installation.md).
+- [Download current configs and study examples](examples.md), including
+  CC-Perturb-seq, TAP-seq, Gasperini, Replogle, and the Gary Hon TF benchmark.
+- [Stop at Post Concatenation QC and continue later](preinference_checkpoint_user_guide.md).
+  The default checkpoint publishes the QC report and a MuData handoff.
 
-| If you want to… | Start with… |
-|---|---|
-| Prepare a new experiment | [Samplesheet](samplesheet.md), [SeqSpec](seqspec.md), [guide metadata](guide-metadata.md) |
-| Run end-to-end | [Start here](usage.md) and [run recipes](run-recipes.md) |
-| Enable the integrated live dashboard | [Install the bundled plugin](plugin-installation.md) |
-| Stop before inference, filter cells, add covariates | [Pause, edit, continue](preinference_checkpoint_user_guide.md) |
-| Understand filters or method choices | [QC order](filtering_workflow.md), [covariates](samplesheet_covariates.md), [inference](inference.md) |
-| Interpret the outputs | [Output files](output.md), [all MuData fields](mudata_schema.md), [all parameters](parameters.md) |
-| See real plots and a completed dashboard | [Results gallery](output-gallery.md) and [Gary Hon dashboard package](https://www.synapse.org/Synapse:syn78349990) |
-| Understand the tools behind each stage | [Tools and modules](tool-and-module-map.md) |
+## Understand results
 
-The source is [pinellolab/CRISPR_Pipeline](https://github.com/pinellolab/CRISPR_Pipeline/tree/dev). Documentation changes on `dev` are built and deployed by GitHub Actions. The field and parameter references are generated from the checked-in catalog and schema, so changes can be reviewed alongside code. Cite the exact commit recorded in each run's `pipeline_info` when reporting results.
+- [QC and filtering](filtering_workflow.md) and
+  [Post Concatenation QC](postconcat_embedding_qc.md) explain when cells enter and leave each stage.
+- [Inference and calibration](inference.md) cover local SCEPTRE/PerTurbo tests,
+  transcriptome-wide PerTurbo tests, and the non-targeting-control diagnostic.
+- [Outputs](output.md), [MuData fields](mudata_schema.md), and the
+  [parameter reference](parameters.md) describe what the run publishes.
+- [Results gallery](output-gallery.md) shows real figures and dashboards.
+  [Temporary benchmark review](temporary-benchmarks.md)
 
-**Plugin note:** a fresh clone does not by itself install the optional live-dashboard Nextflow plugin. Follow the [plugin installation guide](plugin-installation.md) before enabling it. The scientific workflow still runs without online W&B upload.
+## Project and support
+
+[Source and changelog](https://github.com/pinellolab/CRISPR_Pipeline) ·
+[Report an issue](https://github.com/pinellolab/CRISPR_Pipeline/issues) ·
+[Tool and method citations](https://github.com/pinellolab/CRISPR_Pipeline/blob/main/CITATIONS.md)
+
+The site is built from the pipeline's `main` branch. Parameter and MuData
+references are generated from the checked-in schema and field catalog.

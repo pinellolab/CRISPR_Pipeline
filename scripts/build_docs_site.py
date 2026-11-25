@@ -8,6 +8,7 @@ import csv
 import json
 import shutil
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +24,7 @@ PAGES = (
     "guide-metadata.md",
     "samplesheet_covariates.md",
     "run-recipes.md",
+    "telemetry.md",
     "preinference_checkpoint_user_guide.md",
     "filtering_workflow.md",
     "postconcat_embedding_qc.md",
@@ -38,6 +40,25 @@ PAGES = (
     "clone_and_saturation_qc.md",
     "examples.md",
 )
+
+
+DATASET_EXAMPLES = (
+    "gasperini_at_scale",
+    "replogle_k562_essential",
+    "gary_hon_tf_benchmark",
+)
+
+
+def publish_dataset_examples(destination):
+    for name in DATASET_EXAMPLES:
+        source = ROOT / "examples/datasets" / name
+        target = destination / name
+        shutil.copytree(source, target, dirs_exist_ok=True)
+        shutil.copyfile(ROOT / "examples/prepare_samplesheet.py", target / "prepare_samplesheet.py")
+        with ZipFile(destination / f"{name}.zip", "w", compression=ZIP_DEFLATED, strict_timestamps=False) as archive:
+            for path in sorted(target.rglob("*")):
+                if path.is_file():
+                    archive.write(path, path.relative_to(destination))
 
 
 def flatten_properties(node, prefix=""):
@@ -83,6 +104,9 @@ def main():
     for name in PAGES:
         shutil.copyfile(DOCS / name, DEST / name)
     shutil.copyfile(DOCS / "website" / "index.md", DEST / "index.md")
+    styles = DEST / "stylesheets"
+    styles.mkdir(exist_ok=True)
+    shutil.copyfile(DOCS / "website" / "site.css", styles / "site.css")
     shutil.copytree(DOCS / "images" / "result_examples", DEST / "images" / "result_examples", dirs_exist_ok=True)
     shutil.copyfile(DOCS / "mudata_schema_catalog.tsv", DEST / "mudata_schema_catalog.tsv")
     (DEST / "parameters.md").write_text(render_parameters())
@@ -90,6 +114,8 @@ def main():
     examples = DEST / "downloadable-examples"
     examples.mkdir(exist_ok=True)
     for source, target in (
+        ("nextflow_cc.config", "nextflow_cc.config"),
+        ("nextflow_tapseq.config", "nextflow_tapseq.config"),
         ("conf/simplified_pipeline/nextflow_yang.dev.config", "nextflow_yang.dev.config"),
         ("conf/simplified_pipeline/nextflow_slurm_all_options.config", "nextflow_slurm_all_options.config"),
         ("docs/examples/minimal_samplesheet.csv", "samplesheet.csv"),
@@ -101,6 +127,7 @@ def main():
         ("example_data/yaml_files/hash_seqspec.yml", "hash_seqspec.yml"),
     ):
         shutil.copyfile(ROOT / source, examples / target)
+    publish_dataset_examples(examples)
     # Validate that the authoritative field catalog is parseable and has no
     # duplicate path/field entries before publishing its rendered page.
     with (DOCS / "mudata_schema_catalog.tsv").open(newline="") as handle:

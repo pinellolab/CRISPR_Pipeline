@@ -40,33 +40,26 @@ report snapshots at build time; original server and Drive copies are unchanged.
 For figures from actual QC, inference, and calibration results and a link to
 a completed interactive dashboard, see the [result gallery](output-gallery.md).
 
-The bundled `plugins/nf-crispr-dashboard` Nextflow observer starts the renderer
-inside Nextflow, updates it as processes finish, and can serve the HTML on a
-configurable local HTTP port. Enable it with `-c conf/dashboard_plugin.config`
-after installing the bundled versioned archive into a shared
-`NXF_PLUGINS_DIR` using `bash run_support/install_dashboard_plugin.sh`.
-It remains opt-in until the same version is published and verified from a clean
-Nextflow Plugin Registry cache; a fresh clone alone does not install it. See
-the [plugin installation guide](plugin-installation.md) for exact commands,
-site-specific storage requirements, and verification steps.
+## Start the execution dashboard
 
-The advanced CRISPR Pipeline execution dashboard is the canonical dashboard
-both locally and in W&B. `bin/run_with_wandb.sh` renders the same self-contained
-HTML continuously to `pipeline_dashboard/execution_dashboard.html`. On a
-completed run, it also becomes `pipeline_dashboard/dashboard.html`; the older
-scientific report is retained as `pipeline_dashboard/legacy_dashboard.html`
-only as an input source for final tables and figures. Do not link the legacy
-report as the supported dashboard.
+CRISPR Pipeline v1.1.0 loads the bundled `nf-crispr-dashboard@0.1.2` observer
+from its default config. Install it once into the launcher's writable
+`NXF_PLUGINS_DIR` and run with Nextflow 26.04.6 and `NXF_SYNTAX_PARSER=v1`.
+See the [plugin setup](plugin-installation.md) for Slurm and local renderer
+requirements.
 
-The wrapper remains an alternative when the plugin is not installed. It always renders the local dashboard, even without credentials.
-With `WANDB_ENABLED=true` (default), `WB_IGVF` and a working W&B Python
-environment additionally publish the live view online. If either is missing,
-the pipeline and local HTML still work. Set `WANDB_ENABLED=false` for an
-explicit local-HTML-only run. The direct `nextflow run` entry point remains
-usable. With the observer config it produces the live dashboard without a wrapper;
-without either observer or wrapper, only the static report is available.
+The observer writes `pipeline_dashboard/execution_dashboard.html` throughout
+the run. On a completed run it also publishes `pipeline_dashboard/dashboard.html`.
+The older scientific page can appear as `pipeline_dashboard/legacy_dashboard.html`
+and supplies tables and figures to the execution dashboard.
 
-## Required default behavior
+Weights & Biases upload is optional. Set `params.DASHBOARD_PLUGIN.upload = false`
+to write the HTML locally. The separate `bin/run_with_wandb.sh` wrapper is
+available for custom deployments that omit the bundled observer. It uses
+`WANDB_ENABLED` to control upload and reads `WB_IGVF` for authentication.
+Both routes keep the local execution report available.
+
+## W&B wrapper defaults
 
 Runs launched with `bin/run_with_wandb.sh` use these defaults:
 

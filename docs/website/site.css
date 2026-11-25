@@ -1,0 +1,5 @@
+/* Keep the config and example download links visible on narrow screens. */
+[role="main"]:has(h1#example-configs-and-datasets) .wy-table-responsive :is(td, th) {
+    white-space: normal;
+    vertical-align: top;
+}

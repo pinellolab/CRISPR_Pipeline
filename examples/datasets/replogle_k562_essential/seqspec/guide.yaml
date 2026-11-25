@@ -1,0 +1,50 @@
+!Assay
+seqspec_version: '0.3.0'
+assay_id: replogle_k562_day6_essential_guide
+name: Replogle K562 day-6 essential direct-capture guides
+doi: https://doi.org/10.1016/j.cell.2022.05.013
+date: 9 June 2022
+description: Descriptive 10x 3-prime v3 dual-guide capture architecture. R2 is retained as one 98 nt feature interval; this SeqSpec is not authorized as a CRISPR_Pipeline guide-mapping configuration.
+modalities: [crispr]
+lib_struct: ''
+library_protocol:
+- !LibProtocol {protocol_id: 10x_3pv3_direct_guide_capture, name: Chromium 3-prime v3 direct sgRNA capture, modality: crispr}
+library_kit: 10x Genomics PN-1000075, PN-1000153, PN-1000079
+sequence_protocol: Illumina
+sequence_kit: not specified
+sequence_spec:
+- !Read
+  read_id: replogle_guide_R1.fastq.gz
+  name: replogle_guide_R1.fastq.gz
+  modality: crispr
+  primer_id: r1_primer
+  min_len: 28
+  max_len: 28
+  strand: pos
+  files: [!File {file_id: replogle_guide_R1.fastq.gz, filename: replogle_guide_R1.fastq.gz, filetype: fastq.gz, filesize: 0, url: '', urltype: local, md5: '00000000000000000000000000000000'}]
+- !Read
+  read_id: replogle_guide_R2.fastq.gz
+  name: replogle_guide_R2.fastq.gz
+  modality: crispr
+  primer_id: r2_primer
+  min_len: 98
+  max_len: 98
+  strand: pos
+  files: [!File {file_id: replogle_guide_R2.fastq.gz, filename: replogle_guide_R2.fastq.gz, filetype: fastq.gz, filesize: 0, url: '', urltype: local, md5: '00000000000000000000000000000000'}]
+library_spec:
+- !Region
+  parent_id: null
+  region_id: crispr
+  region_type: crispr
+  name: crispr
+  sequence_type: joined
+  sequence: ''
+  min_len: 126
+  max_len: 126
+  onlist: null
+  regions:
+  - !Region {parent_id: crispr, region_id: r1_primer, region_type: custom_primer, name: r1_primer, sequence_type: fixed, sequence: '', min_len: 0, max_len: 0, onlist: null, regions: null}
+  - !Region {parent_id: crispr, region_id: barcode, region_type: barcode, name: cell_barcode, sequence_type: onlist, sequence: XXXXXXXXXXXXXXXX, min_len: 16, max_len: 16, onlist: !Onlist {location: local, filename: ../reference/3M-february-2018.txt, md5: 3d36d0a4021fd292b265e2b5e72aaaf3}, regions: null}
+  - !Region {parent_id: crispr, region_id: umi, region_type: umi, name: umi, sequence_type: random, sequence: XXXXXXXXXXXX, min_len: 12, max_len: 12, onlist: null, regions: null}
+  - !Region {parent_id: crispr, region_id: r2_primer, region_type: custom_primer, name: r2_primer, sequence_type: fixed, sequence: '', min_len: 0, max_len: 0, onlist: null, regions: null}
+  - !Region {parent_id: crispr, region_id: guide_read, region_type: sgrna_target, name: full_dual_guide_capture_read, sequence_type: random, sequence: X98, min_len: 98, max_len: 98, onlist: null, regions: null}
