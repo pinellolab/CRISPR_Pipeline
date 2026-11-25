@@ -9,6 +9,7 @@ google-crc32c==1.7.1
 google-resumable-media==2.7.2
 googleapis-common-protos==1.70.0
 idna==3.10
+igvf-utils==3.1.1
 numpy==2.2.6
 pandas==2.3.1
 proto-plus==1.26.1
@@ -19,7 +20,7 @@ python-dateutil==2.9.0.post0
 pytz==2025.2
 PyYAML==6.0.2
 requests==2.32.4
-rsa==4.9.1
+rsa==4.7.2
 six==1.17.0
 tqdm==4.67.1
 tzdata==2025.2
