@@ -10,6 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "conf/simplified_pipeline/nextflow_slurm_all_options.config"
 ASSIGNMENT = re.compile(r"^\s*(\w+)\s*=\s*(.*?)\s*$")
+PARAM_BLOCK = re.compile(r"^params \{\n(.*?)^\}", re.M | re.S)
+CONTAINER_BLOCK = re.compile(r"^    containers \{\n(.*?)^    \}", re.M | re.S)
 
 
 def assignments(source):
@@ -27,11 +29,10 @@ def render():
     manifest = (ROOT / "conf/provenance.config").read_text()
     version = re.search(r"^\s*version = '([^']+)'", manifest, re.M).group(1)
     schema = json.loads((ROOT / "nextflow_schema.json").read_text())
-    blocks = re.findall(r"^params \{\n(.*?)^\}", config, re.M | re.S)
-    container_pattern = r"^    containers \{\n(.*?)^    \}"
+    blocks = PARAM_BLOCK.findall(config)
     all_blocks = "\n".join(blocks)
-    containers = dict(assignments(re.search(container_pattern, all_blocks, re.M | re.S).group(1)))
-    defaults = dict(assignments(re.sub(container_pattern, "", all_blocks, flags=re.M | re.S)))
+    containers = dict(assignments(CONTAINER_BLOCK.search(all_blocks).group(1)))
+    defaults = dict(assignments(CONTAINER_BLOCK.sub("", all_blocks)))
     specs = {name: spec for group in schema["$defs"].values()
              for name, spec in group.get("properties", {}).items()}
     required = {name for group in schema["$defs"].values() for name in group.get("required", [])}

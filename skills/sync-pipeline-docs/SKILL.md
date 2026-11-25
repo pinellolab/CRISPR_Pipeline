@@ -1,6 +1,6 @@
 ---
 name: sync-pipeline-docs
-description: Keep CRISPR Pipeline source, parameter and MuData contracts, plugin installation guidance, and the GitHub Pages documentation synchronized when changing pipeline behavior, public inputs or outputs, dashboards, or documentation.
+description: Keep CRISPR Pipeline source, Nextflow configs, parameter and MuData contracts, plugin guidance, and the GitHub Pages documentation synchronized. Use when changing pipeline settings, public inputs or outputs, dashboards, or documentation.
 ---
 
 # Sync pipeline and documentation
@@ -22,17 +22,25 @@ that prose is automatically correct.
    resume implications, and assay-specific exceptions. Keep the website and
    repository README linked to the canonical page; avoid copy-pasted competing
    instructions.
-3. For plugin changes, verify version and ZIP digest against the installer and
+3. For any change to a config option, default, or layout, review the root config,
+   schema, CC-Perturb-seq and TAP-seq overlays, Yang Slurm overlay, and study
+   configs together. Update affected overrides and inherited-value comments in
+   the same change. Preserve intentional study overrides. Regenerate the full
+   Slurm template with `python scripts/render_slurm_config.py`. Keep all config
+   downloads and the generated one-row-per-parameter reference on
+   `docs/configuration.md`. Its Basic and Advanced tables follow the sections
+   in `nextflow.config`. Describe release-specific defaults where they differ.
+4. For plugin changes, verify version and ZIP digest against the installer and
    config. Keep `docs/plugin-installation.md` accurate. Do not say a fresh
    clone installs the plugin or that registry publication exists without
    testing those claims. Do not embed secrets or user-specific paths.
-4. Run `python scripts/check_docs_sync.py`,
+5. Run `python scripts/check_docs_sync.py`,
    `python scripts/build_docs_site.py`, and `mkdocs build --strict` (in an
    environment with MkDocs installed). Run focused tests, including
    `tests/test_docs_site.py` and `tests/test_docs_sync.py`. Review the rendered
    page and links. If changing the MuData catalog, regenerate its rendered
    reference with `bin/render_mudata_schema_docs.py` and inspect the diff.
-5. Before a commit or PR, review code, schema, docs, site, tests, and plugin
+6. Before a commit or PR, review code, schema, docs, site, tests, and plugin
    installation instructions together. CI catches mechanical drift; explicitly
    report any semantic behavior that still needs a manual or end-to-end check.
    Do not push, publish, or alter a live run unless the user requested it.

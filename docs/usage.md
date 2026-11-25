@@ -36,7 +36,7 @@ The `-profile` value and resource config are site-specific. The `local` profile 
 
 Before paying for a full run, verify that the SeqSpecs extract the intended cell barcode, UMI, cDNA and guide sequence; that guide metadata has unique IDs, exact captured spacer sequences and the correct coordinate build; and that RNA and guide mapping recover overlapping barcodes. `DEMO_MODE=true` selects one complete measurement set for a small pre-run check, but its outputs are **not** full-dataset results.
 
-After launch, inspect the live [execution dashboard](live_wandb_execution_dashboard.md). Each measurement set has its own mapping and preprocessing QC. The final [MuData dictionary](mudata_schema.md), [output guide](output.md) and [parameter reference](parameters.md) explain the resulting data.
+After launch, inspect the live [execution dashboard](live_wandb_execution_dashboard.md). Each measurement set has its own mapping and preprocessing QC. The final [MuData dictionary](mudata_schema.md), [output guide](output.md) and [configuration guide](configuration.md) explain the resulting data.
 
 For an integrated live dashboard in a direct Nextflow run, first follow the
 [bundled plugin installation guide](plugin-installation.md). The plugin is

@@ -6,17 +6,8 @@ plugin, pin Nextflow 26.04.6, and use the v1 parser as described in
 
 ## Configuration downloads
 
-Pass one assay overlay with `-c` on top of the pipeline defaults. Supply
-the samplesheet, output directory, and site settings from your run.
-Start with the essential settings at the top of each config. The
-[configuration guide](configuration.md) explains when to use each option.
-
-| Config | Use |
-|---|---|
-| [nextflow_cc.config](downloadable-examples/nextflow_cc.config) | CC-Perturb-seq, including barcode replacement. Check the barcode asset location and reference annotation. |
-| [nextflow_tapseq.config](downloadable-examples/nextflow_tapseq.config) | Targeted TAP-seq. Supply the panel GTF via `--REFERENCE_gtf_local_path`. |
-| [nextflow_yang.dev.config](downloadable-examples/nextflow_yang.dev.config) | Compact Yang assay and Slurm overlay. Defaults to a full run. |
-| [nextflow_slurm_all_options.config](downloadable-examples/nextflow_slurm_all_options.config) | Commented engine defaults and optional settings grouped by topic. Uncomment only the intended overrides. |
+Choose an assay overlay or Slurm template from the [configuration downloads](configuration.md#config-downloads).
+The same page explains its basic and advanced parameters.
 
 ## Study inputs
 

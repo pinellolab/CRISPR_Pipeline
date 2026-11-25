@@ -6,6 +6,7 @@ repo_name: pinellolab/CRISPR_Pipeline
 edit_uri: ""
 extra_css:
   - stylesheets/site.css
+not_in_nav: /parameters.md
 docs_dir: build/docs-site
 site_dir: build/site
 theme:
@@ -38,7 +39,6 @@ nav:
       - MuData fields: mudata_schema.md
       - Flat QC fields: qc_outputs.md
   - Reference:
-      - All parameters: parameters.md
       - Target-aware gene filter: target_aware_gene_filter.md
       - Guide-mapping QC: guide_mapping_overlap_qc.md
       - Clone and saturation QC: clone_and_saturation_qc.md

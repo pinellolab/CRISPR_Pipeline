@@ -3,6 +3,7 @@
 import csv
 from collections import Counter
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -30,9 +31,17 @@ def test_site_sources_and_schema_reference():
     assert (site / "downloadable-examples/hashing_samplesheet.csv").is_file()
     schema = json.loads((ROOT / "nextflow_schema.json").read_text())
     expected = {name for section in schema["$defs"].values() for name in section.get("properties", {})}
-    reference = (site / "parameters.md").read_text()
+    reference = (site / "configuration.md").read_text()
     assert len(expected) >= 100
-    assert all(f"| `{name}` |" in reference for name in expected)
+    documented = Counter(re.findall(r"^\| `([^`]+)` \|", reference, re.M))
+    assert all(documented[name] == 1 for name in expected)
+    basic, advanced = reference.split("\n## Advanced settings\n", 1)
+    assert "| `QC_barcode_filter` | `'knee'` |" in basic
+    assert "| `max_cpus` | `128` |" in basic
+    assert "| `input` | `null` |" in advanced
+    assert "| `DASHBOARD_PLUGIN.server.port` | `8787` |" in advanced
+    assert "| `input` |" not in basic
+    assert "(configuration.md)" in (site / "parameters.md").read_text()
 
 
 def test_examples_follow_current_samplesheet_header():

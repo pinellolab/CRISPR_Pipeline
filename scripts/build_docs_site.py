@@ -6,9 +6,13 @@ No pipeline environment or network connection is needed for this step.
 
 import csv
 import json
+import re
 import shutil
+from html import escape
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
+
+from render_slurm_config import CONTAINER_BLOCK, PARAM_BLOCK, assignments
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +53,48 @@ DATASET_EXAMPLES = (
     "gary_hon_tf_benchmark",
 )
 
+ENGINE_DESCRIPTIONS = {
+    "max_cpus": "Upper CPU limit used by the pipeline's task resource selectors.",
+    "max_memory": "Upper memory limit used by the pipeline's task resource selectors.",
+    "INFERENCE_SCEPTRE_formula_object": "Legacy SCEPTRE setting. Use the shared inference covariate options for the current model.",
+    "INFERENCE_SCEPTRE_WRITE_MUDATA": "Write intermediate MuData containing SCEPTRE results.",
+    "INFERENCE_PERTURBO_RESULT_BATCH_ROWS": "Rows per batch during global PerTurbo result conversion.",
+    "INFERENCE_PERTURBO_MAX_BH_WORKING_BYTES": "Host memory budget in bytes for Benjamini–Hochberg correction.",
+    "INFERENCE_PERTURBO_COMPACT_RESULT_FLOATS": "Use compact floating-point columns when converting PerTurbo results.",
+    "publish_dir_mode": "Nextflow publication mode for output files.",
+    "css": "Dashboard stylesheet asset directory.",
+    "js": "Dashboard JavaScript asset directory.",
+    "svg": "Dashboard SVG asset directory.",
+    "DEBUG_VAR": "Enable diagnostic logging.",
+    "google_bucket": "Google Cloud Storage bucket used by the Google Batch profile.",
+    "google_project": "Google Cloud project for Google Batch execution.",
+    "google_region": "Region for Google Batch execution.",
+    "email": "Email address for run completion notifications.",
+    "email_on_fail": "Email address for failure notifications.",
+    "plaintext_email": "Send run notification emails in plain text.",
+    "monochrome_logs": "Disable colored pipeline log messages.",
+    "hook_url": "Optional webhook URL for run notifications.",
+    "validate_params": "Enable pipeline parameter validation.",
+    "version": "Print the pipeline version.",
+    "pipelines_testdata_base_path": "Base URL for pipeline test data.",
+    "config_profile_name": "Profile name shown in run metadata.",
+    "config_profile_description": "Profile description shown in run metadata.",
+    "custom_config_version": "Revision used to construct the nf-core config URL.",
+    "custom_config_base": "Base URL for nf-core config files.",
+    "config_profile_contact": "Contact shown in profile metadata.",
+    "config_profile_url": "Website shown in profile metadata.",
+    "DASHBOARD_PLUGIN.enabled": "Enable the execution dashboard observer.",
+    "DASHBOARD_PLUGIN.upload": "Enable optional Weights & Biases upload.",
+    "DASHBOARD_PLUGIN.project": "Weights & Biases project for uploaded runs.",
+    "DASHBOARD_PLUGIN.tokenEnv": "Name of the environment variable for the upload token.",
+    "DASHBOARD_PLUGIN.pollSeconds": "Observer polling interval in seconds.",
+    "DASHBOARD_PLUGIN.server.enabled": "Serve the live dashboard over HTTP.",
+    "DASHBOARD_PLUGIN.server.host": "Dashboard server bind address.",
+    "DASHBOARD_PLUGIN.server.port": "Dashboard server port.",
+    "DASHBOARD_PLUGIN.server.refreshSeconds": "Dashboard refresh interval in seconds.",
+    "DASHBOARD_PLUGIN.server.tokenEnv": "Name of the environment variable for the dashboard server token.",
+}
+
 
 def publish_dataset_examples(destination):
     for name in DATASET_EXAMPLES:
@@ -71,46 +117,96 @@ def flatten_properties(node, prefix=""):
             yield name, value
 
 
-def render_parameters():
-    schema = json.loads((ROOT / "nextflow_schema.json").read_text())
+def render_parameter_table(rows, specs):
     lines = [
-        "# Parameter reference",
-        "",
-        "Generated from `nextflow_schema.json` by `scripts/build_docs_site.py`.",
-        "Values can also be supplied in a Nextflow config or a JSON/YAML params file.",
-        "Dataset-specific values must be reviewed before launch.",
-        "",
-        "| Parameter | Type | Schema default | Description |",
-        "|---|---|---|---|",
+        "| Parameter | Default on `main` | Description |",
+        "|---|---|---|",
     ]
-    parameters = {}
-    for section in schema.get("$defs", {}).values():
-        for name, spec in flatten_properties(section):
-            parameters.setdefault(name, spec)
-    if not parameters:
-        raise ValueError("No parameters found in nextflow_schema.json")
-    for name, spec in parameters.items():
-        value = spec.get("default", "—")
-        default = json.dumps(value, ensure_ascii=False) if value != "—" else "—"
-        description = spec.get("description", "").replace("|", "\\|").replace("\n", " ")
-        help_text = spec.get("help_text", "").replace("|", "\\|").replace("\n", " ")
-        desc = description + (f" {help_text}" if help_text else "")
-        lines.append(f"| `{name}` | `{spec.get('type', '—')}` | `{default}` | {desc} |")
-    lines.insert(5, f"This index contains **{len(parameters)}** schema parameters. ")
-    return "\n".join(lines) + "\n"
+    for name, value in rows:
+        spec = specs.get(name, {})
+        description = spec.get("description") or ENGINE_DESCRIPTIONS.get(name)
+        if name.startswith("containers."):
+            description = f"Container image for {name.removeprefix('containers.')} tasks."
+        if not description:
+            raise ValueError(f"Missing configuration description for {name}")
+        if options := spec.get("enum"):
+            description += " Allowed values are " + ", ".join(f"`{option}`" for option in options) + "."
+        if spec:
+            types = spec.get("type", "unspecified")
+            type_text = " or ".join(types) if isinstance(types, list) else types
+            details = f"Schema type is {type_text}. {spec.get('help_text', '')}".strip()
+            description += f" <details><summary>Details</summary>{escape(details)}</details>"
+        description = " ".join(description.split()).replace("|", "&#124;")
+        default = f"`{value.replace('|', '&#124;')}`" if value is not None else "—"
+        lines.append(f"| `{name}` | {default} | {description} |")
+    return "\n".join(lines)
+
+
+def parameter_groups(block):
+    for paragraph in re.split(r"\n\s*\n", block.strip("\n")):
+        rows = list(assignments(paragraph))
+        if rows:
+            heading = paragraph.splitlines()[0].strip().removeprefix("// ")
+            yield heading, rows
+
+
+def dashboard_defaults(config):
+    block = config.split("params.DASHBOARD_PLUGIN = [\n", 1)[1].split("\n]", 1)[0]
+    path = ["DASHBOARD_PLUGIN"]
+    for line in block.splitlines():
+        line = line.strip().removesuffix(",")
+        if line == "]":
+            path.pop()
+        elif ": " in line and not line.startswith("//"):
+            name, value = line.split(": ", 1)
+            if value == "[":
+                path.append(name)
+            else:
+                yield ".".join([*path, name]), value
+
+
+def render_configuration():
+    schema = json.loads((ROOT / "nextflow_schema.json").read_text())
+    specs = {name: spec for section in schema["$defs"].values() for name, spec in flatten_properties(section)}
+    basic, *advanced = PARAM_BLOCK.findall((ROOT / "nextflow.config").read_text())
+    advanced = "\n\n".join(advanced)
+    containers = CONTAINER_BLOCK.search(advanced).group(1)
+    dashboard = (ROOT / "conf/dashboard_plugin.config").read_text()
+    basic_groups = list(parameter_groups(basic))
+    advanced_groups = [
+        *parameter_groups(CONTAINER_BLOCK.sub("", advanced)),
+        ("Runtime images", [(f"containers.{key}", value) for key, value in assignments(containers)]),
+        ("Dashboard observer", list(dashboard_defaults(dashboard))),
+    ]
+    configured = {name for _, rows in basic_groups + advanced_groups for name, _ in rows}
+    if schema_only := [name for name in specs if name not in configured]:
+        advanced_groups.append(("Schema-only parameters", [(name, None) for name in schema_only]))
+
+    page = (DOCS / "configuration.md").read_text()
+    for label, groups in (("BASIC", basic_groups), ("ADVANCED", advanced_groups)):
+        marker = f"<!-- {label}_PARAMETERS -->"
+        if page.count(marker) != 1:
+            raise ValueError(f"Expected one {marker} in configuration.md")
+        tables = "\n\n".join(f"### {title}\n\n{render_parameter_table(rows, specs)}" for title, rows in groups)
+        page = page.replace(marker, tables)
+    return page
 
 
 def main():
     DEST.mkdir(parents=True, exist_ok=True)
     for name in PAGES:
-        shutil.copyfile(DOCS / name, DEST / name)
+        if name != "configuration.md":
+            shutil.copyfile(DOCS / name, DEST / name)
+    (DEST / "configuration.md").write_text(render_configuration())
     shutil.copyfile(DOCS / "website" / "index.md", DEST / "index.md")
     styles = DEST / "stylesheets"
     styles.mkdir(exist_ok=True)
     shutil.copyfile(DOCS / "website" / "site.css", styles / "site.css")
     shutil.copytree(DOCS / "images" / "result_examples", DEST / "images" / "result_examples", dirs_exist_ok=True)
     shutil.copyfile(DOCS / "mudata_schema_catalog.tsv", DEST / "mudata_schema_catalog.tsv")
-    (DEST / "parameters.md").write_text(render_parameters())
+    (DEST / "parameters.md").write_text(
+        "# Parameter reference\n\nSee [Basic and advanced configuration](configuration.md) for every parameter.\n"
+    )
 
     examples = DEST / "downloadable-examples"
     examples.mkdir(exist_ok=True)

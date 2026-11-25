@@ -8,3 +8,21 @@
     white-space: normal;
     overflow-wrap: anywhere;
 }
+
+[role="main"]:has(h1#configure-a-run) .wy-table-responsive table {
+    width: 100%;
+}
+
+@media (min-width: 640px) {
+    [role="main"]:has(h1#configure-a-run) table:has(th:nth-child(3)) {
+        table-layout: fixed;
+    }
+
+    [role="main"]:has(h1#configure-a-run) table:has(th:nth-child(3)) th:first-child {
+        width: 34%;
+    }
+
+    [role="main"]:has(h1#configure-a-run) table:has(th:nth-child(3)) th:nth-child(2) {
+        width: 23%;
+    }
+}

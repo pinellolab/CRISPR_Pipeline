@@ -117,4 +117,4 @@ Put assay-specific settings in a reviewed dataset config or params file rather t
 | Low MOI | `Multiplicity_of_infection='low'`; verify non-targeting controls exist for the default control-anchored contrast. |
 | Guide calling | `GUIDE_ASSIGNMENT_method='sceptre'` or `'cleanser'`; for CLEANSER choose the actual capture method (`crop-seq` or `direct-capture`). |
 
-All options and defaults are in the [generated parameter reference](parameters.md). Scientific and computational choices should be recorded in the run's resolved configuration; run-specific parameters are not interchangeable across assays.
+All options and defaults are in the [configuration guide](configuration.md). Record scientific and computational choices in the run's resolved configuration.

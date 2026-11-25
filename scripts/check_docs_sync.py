@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 
-from build_docs_site import DOCS, PAGES, ROOT, render_parameters
+from build_docs_site import DOCS, PAGES, ROOT, render_configuration
 from render_slurm_config import OUTPUT, render as render_slurm_config
 
 
@@ -24,10 +24,10 @@ def capture(pattern, source, label):
 def main():
     nav = (ROOT / "mkdocs.yml").read_text()
     listed = set(re.findall(r"(?<![\w/-])([\w-]+\.md)\s*$", nav, re.MULTILINE))
-    expected = set(PAGES) | {"index.md", "parameters.md"}
+    expected = set(PAGES) | {"index.md"}
     require(listed == expected, f"Site navigation differs from copied pages: missing={expected-listed}, extra={listed-expected}")
     require(all((DOCS / name).is_file() for name in PAGES), "A site source page is missing")
-    require("| `ANALYSIS_mode` |" in render_parameters(), "Generated parameter reference lacks ANALYSIS_mode")
+    configuration = render_configuration()
     config_text = (ROOT / "nextflow.config").read_text()
     gate = "GUIDE_MAPPING_QC_min_overlap_to_rna_fraction"
     configured = capture(rf"^\s*{gate}\s*=\s*([0-9.]+)$", config_text, "guide overlap default")
@@ -43,7 +43,8 @@ def main():
         values = [spec["default"] for section in schema["$defs"].values()
                   for key, spec in section.get("properties", {}).items() if key == name]
         require(len(values) == 1 and configured_value == values[0], f"{name} default differs from schema")
-        require(configured_value in (DOCS / page).read_text(), f"{page} does not mention {name} default")
+        content = configuration if page == "configuration.md" else (DOCS / page).read_text()
+        require(configured_value in content, f"{page} does not mention {name} default")
 
     installer = (ROOT / "run_support/install_dashboard_plugin.sh").read_text()
     config = (ROOT / "conf/dashboard_plugin.config").read_text()

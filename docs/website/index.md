@@ -28,7 +28,7 @@ results. [Release source](https://github.com/pinellolab/CRISPR_Pipeline/tree/v1.
 - [Inference and calibration](inference.md) cover local SCEPTRE/PerTurbo tests,
   transcriptome-wide PerTurbo tests, and the non-targeting-control diagnostic.
 - [Outputs](output.md), [MuData fields](mudata_schema.md), and the
-  [parameter reference](parameters.md) describe what the run publishes.
+  [configuration guide](configuration.md) describe the outputs and the settings that affect them.
 - [Results gallery](output-gallery.md) shows real figures and dashboards.
   [Temporary benchmark review](temporary-benchmarks.md)
 
