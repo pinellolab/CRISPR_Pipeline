@@ -1,5 +1,10 @@
-/* Keep the config and example download links visible on narrow screens. */
-[role="main"]:has(h1#example-configs-and-datasets) .wy-table-responsive :is(td, th) {
+/* Wrap the configuration guidance and download tables on narrow screens. */
+[role="main"]:has(h1:is(#configure-a-run, #example-configs-and-datasets)) .wy-table-responsive :is(td, th) {
     white-space: normal;
     vertical-align: top;
+}
+
+[role="main"]:has(h1#configure-a-run) .wy-table-responsive code {
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
