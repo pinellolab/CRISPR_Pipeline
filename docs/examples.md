@@ -8,6 +8,8 @@ plugin, pin Nextflow 26.04.6, and use the v1 parser as described in
 
 Pass one assay overlay with `-c` on top of the pipeline defaults. Supply
 the samplesheet, output directory, and site settings from your run.
+Start with the essential settings at the top of each config. The
+[configuration guide](configuration.md) explains when to use each option.
 
 | Config | Use |
 |---|---|

@@ -19,6 +19,7 @@ PAGES = (
     "temporary-benchmarks.md",
     "usage.md",
     "plugin-installation.md",
+    "configuration.md",
     "samplesheet.md",
     "seqspec.md",
     "guide-metadata.md",

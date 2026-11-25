@@ -11,6 +11,9 @@ CRISPR Pipeline maps RNA, guide, and optional HTO reads; performs quality contro
 
 The [current examples](examples.md) include complete study samplesheets, metadata, and SeqSpecs. Resolve their paths to files accessible to each execution node. For new assays, check guide sequences, read orientation, barcode chemistry, and reference build.
 
+Review the [basic and advanced configuration guide](configuration.md) for the
+run, assay, and QC settings to check before launch.
+
 ## Choose the run mode
 
 `ANALYSIS_mode` defaults to `checkpoint` in the `v1.1.0` release. It completes mapping, QC, and guide assignment, then publishes a pre-inference MuData without running inference. Use `full` for an unattended end-to-end analysis, or `continue` to validate an edited checkpoint and run inference. These are distinct Nextflow invocations. `-resume` only retries cached tasks in an invocation; it does not convert a checkpoint into a continuation.

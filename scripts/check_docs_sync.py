@@ -37,6 +37,7 @@ def main():
     require(len(schema_defaults) == 1 and float(configured) == schema_defaults[0], "Guide overlap default differs from schema")
     require(f"defaults to {configured}" in (DOCS / "guide_mapping_overlap_qc.md").read_text(), "Guide overlap guide has stale default")
     for name, page in (("ANALYSIS_mode", "usage.md"),
+                       ("QC_barcode_filter", "configuration.md"),
                        ("INFERENCE_PERTURBO_GLOBAL_RESULTS_FORMAT", "output.md")):
         configured_value = capture(rf"^\s*{name}\s*=\s*'([^']+)'$", config_text, f"{name} default")
         values = [spec["default"] for section in schema["$defs"].values()

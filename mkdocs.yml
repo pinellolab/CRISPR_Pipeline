@@ -15,6 +15,7 @@ nav:
   - Set up:
       - Start here: usage.md
       - Install the dashboard plugin: plugin-installation.md
+      - Basic and advanced configuration: configuration.md
       - Example configs and datasets: examples.md
       - Samplesheet: samplesheet.md
       - SeqSpec: seqspec.md

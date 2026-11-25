@@ -15,6 +15,7 @@ results. [Release source](https://github.com/pinellolab/CRISPR_Pipeline/tree/v1.
   [samplesheet](samplesheet.md), [SeqSpec](seqspec.md), and [guide/HTO metadata](guide-metadata.md).
 - [Run on Slurm](run-recipes.md#slurm-configuration) with Nextflow 26.04.6 and
   the [bundled execution dashboard plugin](plugin-installation.md).
+- [Choose basic and advanced settings](configuration.md) for your assay, QC, and inference.
 - [Download current configs and study examples](examples.md), including
   CC-Perturb-seq, TAP-seq, Gasperini, Replogle, and the Gary Hon TF benchmark.
 - [Stop at Post Concatenation QC and continue later](preinference_checkpoint_user_guide.md).

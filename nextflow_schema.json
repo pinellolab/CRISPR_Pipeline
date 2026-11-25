@@ -159,7 +159,7 @@
                 },
                 "is_10x3v3": {
                     "type": "boolean",
-                    "default": true,
+                    "default": false,
                     "description": "Use 10x Genomics 3' v3 feature-barcode chemistry for guide or hashing mapping, depending on whether hashing is enabled.",
                     "help_text": "This parameter only changes feature-barcode modalities; RNA mapping always derives chemistry from the RNA seqspec. Case 1: when ENABLE_DATA_HASHING = false and is_10x3v3 = true, mappingGuide uses CHEM=10XV3 with kb --workflow kite:10xFB instead of deriving guide chemistry from the guide seqspec. Case 2: when ENABLE_DATA_HASHING = true and is_10x3v3 = true, mappingGuide remains seqspec-driven, mappingscRNA remains seqspec-driven, and mappingHashing uses CHEM=10XV3 with kb --workflow kite:10xFB. This second case matches the PR #78 hashing/HTO special case for 10x 3' v3 HTO datasets where barcode replacement/translation may be needed so hashing, RNA, and guide barcodes match downstream. When is_10x3v3 = false, guide and hash mapping both derive chemistry from their seqspecs."
                 },
@@ -289,7 +289,7 @@
                 "REFERENCE_gtf_download_path": {
                     "type": "string",
                     "format": "uri",
-                    "default": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_43/gencode.v43.annotation.gtf.gz",
+                    "default": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_46/gencode.v46.annotation.gtf.gz",
                     "description": "URL for the GTF annotation downloaded when REFERENCE_gtf_local_path does not exist.",
                     "help_text": "Ignored for reference selection when use_igvf_reference = true. The GTF is still used by preprocessing and cis-pair construction; if REFERENCE_gtf_local_path exists it takes priority over this URL."
                 },
@@ -299,6 +299,11 @@
                     "default": "/path/to/gencode_gtf.gtf.gz",
                     "description": "Local GTF annotation path.",
                     "help_text": "Ignored for RNA reference selection when use_igvf_reference = true, but still checked by preprocessing/inference for gene annotation and cis-pair construction. If this file exists at runtime, it is used instead of downloading REFERENCE_gtf_download_path."
+                },
+                "REFERENCE_restrict_genes_to_gtf": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Restrict the RNA modality to genes in the resolved GTF during MuData assembly. Supply the panel GTF for targeted assays."
                 }
             }
         },
@@ -359,8 +364,8 @@
                 "TAPSEQ_QC_MODE": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Deprecated compatibility parameter; gene retention is controlled by QC_min_cells_per_gene.",
-                    "help_text": "No absolute 10-cell preprocessing floor remains. Use a small QC_min_cells_per_gene fraction when a targeted assay should retain every observed panel gene."
+                    "description": "Use targeted TAP-seq QC behavior for cell-cycle scoring.",
+                    "help_text": "Skips automatic cell-cycle scoring in Post Concatenation QC. Use REFERENCE_restrict_genes_to_gtf with a panel GTF to restrict genes and QC_min_cells_per_gene to set the gene-prevalence cutoff."
                 },
                 "QC_pct_mito": {
                     "type": "number",
@@ -394,14 +399,14 @@
                 },
                 "QC_barcode_filter": {
                     "type": "string",
-                    "default": "knee",
+                    "default": "knee2",
                     "enum": [
                         "none",
                         "knee",
                         "knee2"
                     ],
                     "description": "Per-measurement-set RNA barcode filtering based on total cell RNA UMI depth.",
-                    "help_text": "Each measurement set is processed before concatenation and gets its own barcode-rank plot and thresholds. 'knee' uses the first/basic knee; 'knee2' searches the high-UMI segment for a stricter second knee. The fixed RNA-UMI minimum and two-sided MAD rules follow cell calling. 'none' remains available for compatibility but does not activate a fixed detected-gene filter."
+                    "help_text": "RNA preprocessing always generates a barcode-rank plot for each measurement set. 'knee' uses the first automatic knee and 'knee2' searches its high-UMI segment for a second knee. If the selected knee is unavailable, the knee filter is skipped. 'none' skips knee filtering and still generates the plot. The configured RNA-UMI floor and two-sided MAD filters still apply."
                 },
                 "ENABLE_CLONE_REMOVAL": {
                     "type": "boolean",

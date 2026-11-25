@@ -32,6 +32,9 @@ def render():
     all_blocks = "\n".join(blocks)
     containers = dict(assignments(re.search(container_pattern, all_blocks, re.M | re.S).group(1)))
     defaults = dict(assignments(re.sub(container_pattern, "", all_blocks, flags=re.M | re.S)))
+    specs = {name: spec for group in schema["$defs"].values()
+             for name, spec in group.get("properties", {}).items()}
+    required = {name for group in schema["$defs"].values() for name in group.get("required", [])}
     seen = set()
 
     lines = [
@@ -67,9 +70,17 @@ def render():
         lines.append(f"    // {name} = {value}")
         seen.add(name)
 
+    section("1. Essential run settings")
+    for name, _ in assignments(blocks[0]):
+        parameter(name, specs.get(name), name in required)
+
+    section("2. Advanced options")
     for key, group in schema["$defs"].items():
+        remaining = [(name, spec) for name, spec in group.get("properties", {}).items() if name not in seen]
+        if not remaining:
+            continue
         section(group["title"])
-        for name, spec in group.get("properties", {}).items():
+        for name, spec in remaining:
             if key == "inference_options" and name == "INFERENCE_SCEPTRE_control_group":
                 lines.extend(["", "    // SCEPTRE-specific inference controls"])
             if key == "inference_options" and name == "INFERENCE_PERTURBO_DEVICE":
@@ -90,7 +101,7 @@ def render():
     lines.extend([
         "",
         "// ----------------------------------------------------------------------",
-        "// Slurm site settings · set shared absolute paths and your scheduler partitions",
+        "// 3. Slurm site settings · set shared absolute paths and your scheduler partitions",
         "// ----------------------------------------------------------------------",
         "// profiles {",
         "//     slurm {",

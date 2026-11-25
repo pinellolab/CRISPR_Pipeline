@@ -6,6 +6,11 @@
 > fresh MT/embedding QC after clones → raw-count gene-support filter → inference.
 > Do not use the older diagrams below to infer the current MT/HTO order.
 
+RNA preprocessing generates a barcode-rank plot per measurement set. The
+default `knee2` mode applies the second estimated knee when available. Set
+`QC_barcode_filter = 'none'` to keep the plot and skip the knee cutoff. See
+[knee filtering and the RNA QC settings](configuration.md#how-knee-filtering-works).
+
 The Gary Hon samplesheet contains three measurement-set batches:
 `IGVFDS6244NAXC`, `IGVFDS8721BKRO`, and `IGVFDS9613DDRB`. Its `lane` column is
 empty, so `measurement_sets` is the key that pairs RNA, guide, and hashing data.

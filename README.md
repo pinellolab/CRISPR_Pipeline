@@ -21,7 +21,7 @@ optional hashtag oligo (HTO) libraries.
 | Task | Guide |
 | --- | --- |
 | Install and run | [Quick start](https://pinellolab.github.io/CRISPR_Pipeline/usage/) · [Slurm setup](https://pinellolab.github.io/CRISPR_Pipeline/run-recipes/#slurm-configuration) |
-| Prepare inputs | [Dataset examples and configs](https://pinellolab.github.io/CRISPR_Pipeline/examples/) · [Parameters](https://pinellolab.github.io/CRISPR_Pipeline/parameters/) |
+| Prepare inputs | [Dataset examples](https://pinellolab.github.io/CRISPR_Pipeline/examples/) · [Basic and advanced configuration](https://pinellolab.github.io/CRISPR_Pipeline/configuration/) |
 | Review results | [Dashboard](https://pinellolab.github.io/CRISPR_Pipeline/live_wandb_execution_dashboard/) · [Output files](https://pinellolab.github.io/CRISPR_Pipeline/output/) |
 
 [GitHub Issues](https://github.com/pinellolab/CRISPR_Pipeline/issues) · [Citations](CITATIONS.md)
