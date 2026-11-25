@@ -32,8 +32,19 @@ def process_table(guide_table, rev_comp, spacer):
         print ('spacer tag added to the guide sequence', 'spacer tag:', spacer  )
         guide_metadata['spacer'] = guide_metadata['spacer'].apply(lambda x : spacer + x )
 
-    guide_metadata[['spacer', 'guide_id']].to_csv('guide_features.txt',
-                                                           sep='\t', header=None, index=None)
+    # kb ref refuses duplicate feature barcodes, and it is right to: two
+    # guides with the same spacer cannot be told apart in the reads. Keep the
+    # first and say which guide_ids lost their row.
+    features = guide_metadata[['spacer', 'guide_id']]
+    duplicated = features['spacer'].duplicated(keep='first')
+    if duplicated.any():
+        dropped = features.loc[duplicated]
+        print(f'{len(dropped)} guides share a spacer with an earlier guide and '
+              'are not separate features:')
+        for _, row in dropped.iterrows():
+            print(f"  {row['guide_id']}\t{row['spacer']}")
+        features = features.loc[~duplicated]
+    features.to_csv('guide_features.txt', sep='\t', header=None, index=None)
     
     read_guide_features = pd.read_csv('guide_features.txt', sep="\t", header=None)
     print (read_guide_features.head())

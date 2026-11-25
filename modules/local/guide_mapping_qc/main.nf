@@ -18,7 +18,7 @@ process guide_mapping_qc {
         """
         export MPLCONFIGDIR="./tmp/mplconfigdir"
         mkdir -p \${MPLCONFIGDIR}
-        python ${projectDir}/bin/guide_mapping_qc.py \
+        guide_mapping_qc.py \
             --rna ${adata_rna} \
             --guide ${adata_guide} \
             --mudata ${mudata_input} \

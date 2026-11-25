@@ -1,0 +1,20 @@
+# Environment for running and testing the pipeline locally.
+# Nextflow and seqspec are what the pipeline itself needs; the containers
+# carry everything else.
+[workspace]
+channels = ["conda-forge", "bioconda"]
+platforms = ["osx-arm64", "osx-64", "linux-64"]
+name = "crispr-pipeline"
+version = "0.1.0"
+
+[dependencies]
+nextflow = ">=24.04"
+openjdk = ">=17"
+python = "3.12.*"
+
+[pypi-dependencies]
+seqspec = ">=0.3.1"
+
+[tasks]
+version = "nextflow -version"
+lint = "nextflow config . -profile test"

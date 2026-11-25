@@ -15,7 +15,7 @@ process filter_guide_assignment_qc {
         export MPLCONFIGDIR="./tmp/mplconfigdir"
         mkdir -p \${MPLCONFIGDIR}
 
-        python ${projectDir}/bin/filter_guide_assignment_qc.py \
+        filter_guide_assignment_qc.py \
             ${mudata_input} \
             guide_assignment_filtered_mudata.h5mu \
             --outdir guide_assignment_qc \

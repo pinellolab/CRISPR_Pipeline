@@ -25,7 +25,7 @@ process PreprocessAnnData {
     script:
         def batch = mapping_dir.getBaseName().replaceFirst(/_ks_transcripts_out$/, '')
         def safeBatch = batch.replaceAll(/[^A-Za-z0-9_.-]+/, '_')
-        def bcArg = params.replace_barcodes ? '--bc-replacement' : ''
+        def bcArg = params.rna_replace_barcodes ? '--bc-replacement' : ''
         def mmArg = params.use_multimapping ? '--use-multimapping' : ''
         def scrubletArg = enable_scrublet ? '--enable-scrublet' : ''
         def scrubletFallbackArg = scrublet_adaptive_pca_fallback ? '--scrublet-adaptive-pca-fallback' : ''

@@ -15,7 +15,7 @@ process remove_clonal_cells {
         export MPLCONFIGDIR="./tmp/mplconfigdir"
         mkdir -p \${MPLCONFIGDIR}
 
-        python ${projectDir}/bin/remove_clonal_cells.py \
+        remove_clonal_cells.py \
             ${mudata_input} \
             clone_filtered_mudata.h5mu \
             --outdir clone_qc \
