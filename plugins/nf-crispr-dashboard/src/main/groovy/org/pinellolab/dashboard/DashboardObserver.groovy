@@ -25,7 +25,7 @@ class DashboardObserver implements TraceObserver {
     private static final List<String> FIELDS = [
         'task_id', 'hash', 'process', 'name', 'status', 'exit', 'attempt',
         'submit', 'start', 'complete', 'duration', 'realtime', 'peak_rss',
-        'container', 'tag', 'workdir'
+        'container', 'tag', 'workdir', 'source_run_id'
     ]
 
     private Session session
@@ -36,6 +36,7 @@ class DashboardObserver implements TraceObserver {
     private Path statusFile
     private Path eventLog
     private Path htmlFile
+    private String launchId
     private Process monitor
     private HttpServer server
     private ScheduledExecutorService scheduler
@@ -58,6 +59,14 @@ class DashboardObserver implements TraceObserver {
             eventLog = stateDir.resolve('events.log')
             htmlFile = outdir.resolve('pipeline_dashboard/execution_dashboard.html')
             Files.createDirectories(stateDir)
+            launchId = "${current.uniqueId}-${current.runName}-${System.currentTimeMillis()}"
+            // Preserve the last observer state even if the renderer died or
+            // the previous launcher was interrupted before its final render.
+            if (Files.isRegularFile(traceFile)) {
+                Path history = stateDir.resolve('trace_history')
+                Files.createDirectories(history)
+                Files.copy(traceFile, history.resolve("${System.currentTimeMillis()}.tsv"))
+            }
             putStatus('running', 0)
             flushTrace()
             scheduler = Executors.newSingleThreadScheduledExecutor({ Runnable action ->
@@ -86,7 +95,7 @@ class DashboardObserver implements TraceObserver {
     @Override
     void onProcessComplete(TaskHandler handler, TraceRecord record) {
         String status = String.valueOf(record?.get('status') ?: '')
-        recordTask(handler, record, status.equalsIgnoreCase('FAILED') ? 'FAILED' : 'COMPLETED')
+        recordTask(handler, record, status ? status.toUpperCase() : 'COMPLETED')
     }
 
     @Override
@@ -118,25 +127,32 @@ class DashboardObserver implements TraceObserver {
     }
 
     private void recordTask(TaskHandler handler, TraceRecord record, String status) {
-        if (stateDir == null || handler == null) return
+        if (stateDir == null || (handler == null && record == null)) return
         try {
-            String id = String.valueOf(record?.get('task_id') ?: handler.task?.id ?: handler.hashCode())
-            Map<String, String> previous = tasks.get(id) ?: [:]
+            String id = String.valueOf(record?.get('task_id') ?: handler?.task?.id ?: handler?.hashCode())
+            String attempt = String.valueOf(record?.get('attempt') ?: '1')
+            String key = "${id}:${attempt}"
+            Map<String, String> previous = tasks.get(key) ?: [:]
             Map<String, String> row = new LinkedHashMap<>(previous)
             FIELDS.each { String field ->
-                Object value = record?.get(field)
+                Object value = field == 'source_run_id' ? launchId : record?.get(field)
                 if (value != null && field in ['duration', 'realtime', 'peak_rss']) {
                     value = record.getFmtStr(field)
                 }
                 if (value != null && String.valueOf(value)) row.put(field, String.valueOf(value))
             }
             row.put('task_id', id)
+            row.put('source_run_id', launchId ?: 'observer-test')
+            row.put('attempt', attempt)
             row.put('status', status)
-            if (!row.get('name')) row.put('name', String.valueOf(handler.task?.name ?: 'unknown'))
+            if (!row.get('name')) row.put('name', String.valueOf(handler?.task?.name ?: 'unknown'))
             if (!row.get('process')) row.put('process', row.get('name'))
-            tasks.put(id, row)
+            if (!row.get('workdir') && handler?.task?.workDir != null) {
+                row.put('workdir', handler.task.workDir.toString())
+            }
+            tasks.put(key, row)
             dirty.set(true)
-            Files.writeString(eventLog, "TaskHandler[id: ${id}; name: ${row.get('name')}; status: ${status}]\n",
+            Files.writeString(eventLog, "TaskHandler[id: ${id}; name: ${row.get('name')}; status: ${status}; exit: ${row.get('exit') ?: '-'}; error: -; workDir: ${row.get('workdir') ?: ''}]\n",
                 StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.CREATE,
                 java.nio.file.StandardOpenOption.APPEND)
         }
@@ -152,7 +168,10 @@ class DashboardObserver implements TraceObserver {
     private synchronized void flushTrace() {
         if (traceFile == null) return
         List<String> lines = [FIELDS.join('\t')]
-        tasks.values().sort { a, b -> (a.get('task_id') ?: '') <=> (b.get('task_id') ?: '') }.each { row ->
+        tasks.values().sort { a, b ->
+            ((a.get('task_id') ?: '0') as long) <=> ((b.get('task_id') ?: '0') as long) ?:
+                ((a.get('attempt') ?: '1') as int) <=> ((b.get('attempt') ?: '1') as int)
+        }.each { row ->
             lines.add(FIELDS.collect { field -> clean(row.get(field)) }.join('\t'))
         }
         atomicWrite(traceFile, lines.join('\n') + '\n')
@@ -190,7 +209,8 @@ class DashboardObserver implements TraceObserver {
             if (!image) throw new IllegalArgumentException('set DASHBOARD_PLUGIN.image or params.containers.base')
             String imageArgument = cachedImageOrUri(image)
             command = ['apptainer', 'exec', '--bind', "${session.baseDir}:${session.baseDir}",
-                '--bind', "${outdir}:${outdir}", imageArgument, 'python'].collect { String.valueOf(it) }
+                '--bind', "${outdir}:${outdir}", '--bind', "${session.workDir}:${session.workDir}",
+                imageArgument, 'python'].collect { String.valueOf(it) }
         }
         command.addAll([
             session.baseDir.resolve('bin/wandb_html_monitor.py').toString(),
@@ -198,7 +218,7 @@ class DashboardObserver implements TraceObserver {
             '--entity', String.valueOf(config.get('entity') ?: ''),
             '--token-env', String.valueOf(config.get('tokenEnv') ?: 'WB_IGVF'),
             '--run-name', String.valueOf(session.runName ?: session.uniqueId),
-            '--source-run-id', String.valueOf(session.uniqueId),
+            '--source-run-id', launchId,
             '--wandb-run-id', String.valueOf(session.uniqueId).replace('-', '').take(20),
             '--replace-run', 'true', '--publish-live-html', 'true',
             '--upload', String.valueOf(enabled(config.get('upload'), true)),
@@ -214,6 +234,12 @@ class DashboardObserver implements TraceObserver {
     }
 
     private String cachedImageOrUri(String image) {
+        Path localImage = Paths.get(image)
+        if (localImage.isAbsolute()) {
+            if (!Files.isRegularFile(localImage)) throw new IllegalArgumentException("dashboard image not found: ${image}")
+            return localImage.toString()
+        }
+        if (image.startsWith('docker://')) image = image.substring('docker://'.length())
         String name = image.replaceAll(/[\/:]/, '-') + '.img'
         Object preferred = config.get('imageLibraryDir')
         if (preferred) {
@@ -221,7 +247,7 @@ class DashboardObserver implements TraceObserver {
             if (Files.isRegularFile(candidate)) return candidate.toString()
         }
         for (String engine : ['apptainer', 'singularity']) {
-            Object settings = session.config.get(engine)
+            Object settings = session?.config?.get(engine)
             Object library = settings instanceof Map ? ((Map) settings).get('libraryDir') : null
             if (library) {
                 Path candidate = Paths.get(String.valueOf(library)).resolve(name)

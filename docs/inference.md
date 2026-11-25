@@ -68,3 +68,37 @@ concatenation that precedes the parent's final QC.
 A single-guide cohort can have zero control-only cells. If the resolved CRT
 pool is all-cells and no control guides are assigned, PerTurbo fits its
 baseline on all analysed cells without loading a separate control matrix.
+
+## Balanced raw-count reruns
+
+The optional `BALANCED_source_mudata` route supports explicit cell/RNA-count
+subsampling without weakening checkpoint continuation's raw-count immutability
+checks. Set `ANALYSIS_mode=full`, default inference/pairing, and provide
+`BALANCED_parent_inference`, `BALANCED_dataset`, positive `BALANCED_cells` and
+`BALANCED_rna_umis`, and `BALANCED_seed`. The source contains the full-transcriptome
+raw RNA and assigned guides; the parent inference object defines eligible cells
+and the frozen analysis gene universe. Guide counts and calls must match.
+
+Cells are selected deterministically without replacement; RNA is thinned with a
+seeded joint multivariate hypergeometric draw before restricting genes. Guides
+are unchanged. Both inference backends, calibration, evaluation, visualization-only
+normalization, TF benchmarking and dashboards are recomputed. No old p-values
+are reused. Targets must be attainable from retained cells and raw counts; a
+stricter initial UMI floor may require a smaller common target. The UMI floor is
+`QC_min_counts_per_cell` and applies before this optional thinning. It is not
+reapplied to the downsampled counts. Inherited HTO/doublet eligibility is recorded;
+subsampling does not recall doublets or guide assignment.
+
+A single-chunk SCEPTRE handoff is copied through a temporary file, SHA-256 checked,
+and atomically published. Optional additional-QC inputs have distinct staging
+names, so inherited/skipped stages can safely use the same empty placeholder.
+These compatibility changes preserve raw counts, assignments and tested pairs.
+
+IGVF packaging captures the requested output mode at workflow initialization
+and checks the workflow status in the module binding at completion.
+
+When the configured cell filter retains genuine zero-guide cells, both inference
+backends use `log(max(total_guide_umis, 1))` for guide-depth adjustment. Negative
+or non-finite guide counts remain errors; RNA depth and detected-gene counts
+must be positive. This does not assign a guide to a zero-guide cell or relax
+perturbation eligibility. Raw counts and assignment layers remain unchanged.

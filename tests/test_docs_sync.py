@@ -20,4 +20,4 @@ def test_bundled_plugin_installs_idempotently(tmp_path):
     second = subprocess.run(["bash", str(installer)], cwd=ROOT, env=env, capture_output=True, text=True, check=True)
     assert "Installed dashboard plugin" in first.stdout
     assert "already installed" in second.stdout
-    assert (tmp_path / "nextflow-plugins/nf-crispr-dashboard-0.1.0/.archive.sha256").is_file()
+    assert (tmp_path / "nextflow-plugins/nf-crispr-dashboard-0.1.2/.archive.sha256").is_file()

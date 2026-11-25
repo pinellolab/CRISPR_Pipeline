@@ -9,8 +9,9 @@ pairs_to_test by chunk genes when available.
 
 import argparse
 import copy
+import hashlib
 import os
-import shutil
+import tempfile
 from math import ceil
 
 import mudata as md
@@ -37,6 +38,38 @@ def _copy_global_metadata(source, target):
         target.obs = source.obs.copy()
 
 
+def _file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(8 * 1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _verified_stream_copy(source, target):
+    """Publish identical bytes, avoiding unverified filesystem fast-copy paths."""
+    temporary = None
+    try:
+        expected = hashlib.sha256()
+        with open(source, "rb") as src, tempfile.NamedTemporaryFile(
+            dir=os.path.dirname(os.path.abspath(target)), prefix=".chunk-copy-", delete=False
+        ) as dst:
+            temporary = dst.name
+            for block in iter(lambda: src.read(8 * 1024 * 1024), b""):
+                expected.update(block)
+                dst.write(block)
+            dst.flush()
+            os.fsync(dst.fileno())
+        if _file_sha256(temporary) != expected.hexdigest():
+            raise OSError("MuData chunk copy checksum mismatch; output was not published")
+        os.replace(temporary, target)
+        temporary = None
+        print(f"Verified single-chunk SHA256: {expected.hexdigest()}", flush=True)
+    finally:
+        if temporary is not None and os.path.exists(temporary):
+            os.unlink(temporary)
+
+
 def _write_single_chunk_passthrough(mdata, mudata_file, output_dir, output_prefix):
     os.makedirs(output_dir, exist_ok=True)
     chunk_path = os.path.join(output_dir, f"{output_prefix}.000.h5mu")
@@ -45,13 +78,7 @@ def _write_single_chunk_passthrough(mdata, mudata_file, output_dir, output_prefi
 
     # Materialize a real file instead of a symlink so downstream tasks can
     # always stage/open it reliably across execution backends (e.g. GCS).
-    if os.path.lexists(chunk_path):
-        os.remove(chunk_path)
-
-    try:
-        shutil.copy2(src_abs, chunk_path)
-    except OSError:
-        mdata.write(chunk_path)
+    _verified_stream_copy(src_abs, chunk_path)
 
     return [chunk_path], [(0, 0, mdata["gene"].n_vars - 1, mdata["gene"].n_vars, "single")]
 

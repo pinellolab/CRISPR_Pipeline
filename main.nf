@@ -26,6 +26,7 @@ include { remove_clonal_cells } from './modules/local/remove_clonal_cells'
 include { stage_checkpoint_dashboard; render_continuation_dashboard } from './modules/local/checkpoint_dashboard'
 include { prepare_external_mudata } from './modules/local/prepare_external_mudata'
 include { evaluation_pipeline } from './subworkflows/local/evaluation_pipeline'
+include { BALANCED_BENCHMARK } from './workflows/balanced_benchmark'
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     NAMED WORKFLOWS FOR PIPELINE
@@ -194,7 +195,20 @@ workflow {
     }
     // A supplied MuData bypasses FASTQ mapping and guide assignment, allowing
     // reproducible inference recovery from an already validated dataset.
-    if (params.ANALYSIS_mode == 'continue') {
+    if (params.BALANCED_source_mudata) {
+        if (params.ANALYSIS_mode != 'full' || params.INFERENCE_input_mudata || params.INFERENCE_method != 'default' || params.INFERENCE_target_guide_pairing_strategy != 'default') {
+            error 'Balanced benchmarks require ANALYSIS_mode=full, default inference/pairing, and no INFERENCE_input_mudata.'
+        }
+        if (!params.BALANCED_parent_inference || !params.BALANCED_dataset || params.BALANCED_cells <= 0 || params.BALANCED_rna_umis <= 0) {
+            error 'Balanced benchmarks require parent inference, dataset label, positive cell and RNA UMI targets.'
+        }
+        PIPELINE_INITIALISATION(
+            params.version, params.validate_params, params.monochrome_logs, args,
+            params.outdir, params.input, params.DEMO_MODE, params.ENABLE_DATA_HASHING
+        )
+        BALANCED_BENCHMARK()
+    }
+    else if (params.ANALYSIS_mode == 'continue') {
         CONTINUE_FROM_CHECKPOINT()
     }
     else if (params.INFERENCE_input_mudata) {

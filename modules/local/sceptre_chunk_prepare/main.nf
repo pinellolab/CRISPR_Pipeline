@@ -11,6 +11,7 @@ process sceptre_chunk_prepare {
     script:
     def force_chunk_flag = params.INFERENCE_SCEPTRE_FORCE_CHUNK ? '--force-chunk' : ''
     """
+    echo 'SCEPTRE chunk handoff: streamed-sha256-v1'
     chunk_mudata_sceptre.py \
         ${mudata_fp} \
         chunks \

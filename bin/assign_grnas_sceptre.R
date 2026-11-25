@@ -11,6 +11,9 @@ assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n
   # set analysis parameters
   sceptre_object <- sceptre_object |>
     sceptre::set_analysis_parameters(
+      # Assignment has no effect tests. Avoid requiring inference-only NTC
+      # target-label normalization while fitting/exporting guide presence.
+      control_group = "complement",
       discovery_pairs = data.frame(
         grna_target = character(0),
         response_id = character(0)
@@ -18,13 +21,15 @@ assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n
     )
 
   # assign gRNAs
-  assign_grnas_args <- list(sceptre_object, method = "mixture")
+  assignment_method <- if (isTRUE(sceptre_object@low_moi)) "maximum" else "mixture"
+  message("SCEPTRE guide assignment method: ", assignment_method)
+  assign_grnas_args <- list(sceptre_object, method = assignment_method)
   
   # Add optional parameters if they are not "default"
-  if (probability_threshold != "default") {
+  if (assignment_method == "mixture" && probability_threshold != "default") {
     assign_grnas_args$probability_threshold <- as.numeric(probability_threshold)
   }
-  if (n_em_rep != "default") {
+  if (assignment_method == "mixture" && n_em_rep != "default") {
     assign_grnas_args$n_em_rep <- as.integer(n_em_rep)
   }
   # Parallelization controls inferred from n_processors
@@ -36,9 +41,7 @@ assign_grnas_sceptre_v1 <- function(mudata, probability_threshold = "default", n
   sceptre_object <- do.call(sceptre::assign_grnas, assign_grnas_args)
 
   # extract sparse logical matrix of gRNA assignments
-  grna_assignment_matrix <- sceptre_object |>
-    sceptre::get_grna_assignments() |>
-    methods::as("dsparseMatrix")
+  grna_assignment_matrix <- pipeline_grna_assignments(sceptre_object)
   colnames(grna_assignment_matrix) <- colnames(MultiAssayExperiment::assay(mudata[['guide']]))
 
   # add gRNA assignment matrix to MuData
@@ -133,6 +136,21 @@ convert_mudata_to_sceptre_object_v1 <- function(mudata, remove_collinear_covaria
 )
   # return sceptre object
   return(sceptre_object)
+}
+
+# SCEPTRE maximum calling records invalid cells separately from its initial
+# assignment matrix. Preserve all columns, but remove their assignments before
+# exporting back to MuData; the pipeline then applies its assigned-guide filter.
+pipeline_grna_assignments <- function(sceptre_object) {
+  assignments <- sceptre::get_grna_assignments(sceptre_object) |>
+    methods::as("dsparseMatrix")
+  if (isTRUE(sceptre_object@low_moi)) {
+    excluded <- sceptre_object@cells_w_zero_or_twoplus_grnas
+    if (length(excluded) > 0L) assignments[, excluded] <- 0
+    assignments <- Matrix::drop0(assignments)
+    message("Low-MOI guide QC: ", length(excluded), " ambiguous/low-count cells left unassigned")
+  }
+  assignments
 }
 
 # Run Command (only execute when script is run directly, not when sourced)

@@ -3,9 +3,9 @@
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION=0.1.0
+VERSION=0.1.2
 ARCHIVE="$ROOT/plugins/nf-crispr-dashboard/dist/nf-crispr-dashboard-$VERSION.zip"
-EXPECTED_SHA256=6fb2b20f5012d65b2ed1e1e14c026d49f1f4a779faee1d20a2fbac870b9919b0
+EXPECTED_SHA256=02a1eba42b8f30dc29952a603a36c485a089dfa5ea18d7104e415040ec902bbf
 
 [[ -n "${NXF_PLUGINS_DIR:-}" && "$NXF_PLUGINS_DIR" = /* ]] || {
     echo 'Set NXF_PLUGINS_DIR to an absolute, writable shared plugin-cache path.' >&2
