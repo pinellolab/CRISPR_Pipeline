@@ -7,8 +7,8 @@
 > Do not use the older diagrams below to infer the current MT/HTO order.
 
 RNA preprocessing generates a barcode-rank plot per measurement set. The
-default `knee2` mode applies the second estimated knee when available. Set
-`QC_barcode_filter = 'none'` to keep the plot and skip the knee cutoff. See
+default on `main`, `knee`, applies the first estimated knee when available.
+`knee2` applies the second knee, and `none` keeps the plot and skips the cutoff. See
 [knee filtering and the RNA QC settings](configuration.md#how-knee-filtering-works).
 
 The Gary Hon samplesheet contains three measurement-set batches:

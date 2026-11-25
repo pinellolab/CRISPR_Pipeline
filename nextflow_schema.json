@@ -46,8 +46,8 @@
                     "format": "file-path",
                     "mimetype": "text/csv",
                     "pattern": "^\\S+\\.(csv|tsv)$",
-                    "description": "Path to the pipeline samplesheet.",
-                    "help_text": "The samplesheet provides modality-specific FASTQ paths and metadata. Optional cov_* columns (for example cov_day, cov_replicate, cov_pool) are measurement-set covariates shared across rows of a set; unrelated extra columns are accepted but not modeled."
+                    "description": "Path to the modality-aware samplesheet. Pass --input at launch or set params.input in a run-specific config.",
+                    "help_text": "The base config leaves the path unset. The samplesheet provides modality-specific FASTQ paths and metadata. Optional cov_* columns (for example cov_day, cov_replicate, cov_pool) are measurement-set covariates shared across rows of a set; unrelated extra columns are accepted but not modeled."
                 },
                 "outdir": {
                     "type": "string",
@@ -399,7 +399,7 @@
                 },
                 "QC_barcode_filter": {
                     "type": "string",
-                    "default": "knee2",
+                    "default": "knee",
                     "enum": [
                         "none",
                         "knee",

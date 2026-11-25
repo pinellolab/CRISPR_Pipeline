@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Quality control and dashboards
 
+- Default to the first automatic barcode-rank knee (`knee`). The Gasperini, Replogle essential-gene, and TAP-seq examples explicitly select `knee2` to preserve their source settings.
 - Integrate per-measurement-set knee calling, RNA UMI floors, two-sided MAD filtering, and optional Scrublet with the current inference workflow.
 - Restore guide-mapping/orientation audits, assigned-guide and HTO support filters, temporary pooled PCA/UMAP, cell-cycle and Leiden diagnostics, and measurement-set dashboard cards.
 - Defer the global gene-prevalence filter until final pooled cell QC when the embedding workflow is enabled, retaining the canonical intended-target rescue rule and the shared assigned-guide cell population.

@@ -102,7 +102,7 @@ dimensions and whether fallback occurred are saved in
 ## Standard caller and experimental comparisons
 
 This branch keeps the IGVF barcode selectors `none`, `knee` and `knee2`.
-The configured default remains `QC_barcode_filter = 'knee2'`; RNA UMI,
+On `main`, the configured default is `QC_barcode_filter = 'knee'`. RNA UMI,
 MAD, mitochondrial, hashing and guide-assignment filters retain their existing
 independent controls. No Cell Ranger native-barcode import, OrdMag,
 chemistry-specific ambient rank windows, or EmptyDrops removal mode is wired

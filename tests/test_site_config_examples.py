@@ -89,10 +89,8 @@ _ASSIGN = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\S.*)$")
 def _params(path):
     """Top-level assignments in every `params { }` block, last one winning.
 
-    nextflow.config carries three params blocks (the Pipeline Configurator
-    appends two), and Nextflow applies them in order, so the effective default
-    is the last assignment -- QC_barcode_filter's real default is the injected
-    'knee', not the value in the first block.
+    Nextflow applies multiple params blocks in order, so the last assignment
+    supplies the effective default.
     """
     values = {}
     depth = 0
@@ -125,7 +123,7 @@ def test_the_parser_sees_the_defaults_it_is_asked_about():
     assert defaults["SCRUBLET_n_prin_comps"] == 30
     assert defaults["SCRUBLET_adaptive_pca_fallback"] is True
     assert defaults["QC_min_cells_per_gene"] == 0.05
-    assert defaults["QC_barcode_filter"] == "knee2"  # from the last params block
+    assert defaults["QC_barcode_filter"] == "knee"
     assert defaults["GUIDE_ASSIGNMENT_capture_method"] == "CROP-seq"
     assert defaults["spacer_tag"] == ""
     assert defaults["reverse_complement_guides"] is False
@@ -232,14 +230,7 @@ def test_the_tapseq_example_records_the_single_lane_lesson():
 
 
 def test_the_tapseq_example_marks_the_library_chemistry_as_dataset_specific():
-    """These four worked for chr8; copying them unverified is the failure mode.
-
-    Asserted on the EFFECTIVE configuration, not on the example's own lines. Three
-    of the four match nextflow.config's defaults, so the example must not restate
-    them (test_a_site_config_states_only_deltas enforces that) -- but launching
-    with `-c nextflow_tapseq.config` must still yield chr8's chemistry, and the
-    file must still tell the reader to check their own.
-    """
+    """The overlay pins chr8's capture and caller. Check SeqSpec per assay."""
     effective = _params(BASE_CONFIG)
     effective.update(_params(REPO_ROOT / "nextflow_tapseq.config"))
     text = (REPO_ROOT / "nextflow_tapseq.config").read_text()
@@ -252,3 +243,9 @@ def test_the_tapseq_example_marks_the_library_chemistry_as_dataset_specific():
     # The alternatives stay visible, commented, so nobody has to rediscover them.
     for alternative in ("spacer_tag", "reverse_complement_guides", "QC_barcode_filter"):
         assert alternative in text, alternative
+
+
+@pytest.mark.parametrize("study", ("gasperini_at_scale", "replogle_k562_essential"))
+def test_study_examples_preserve_their_second_knee(study):
+    config = REPO_ROOT / "examples" / "datasets" / study / "nextflow.config"
+    assert _params(config)["QC_barcode_filter"] == "knee2"
